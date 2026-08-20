@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>dash — tasks that understand you</title>
+<meta name="description" content="A todo list and calendar that reads plain English. Type it the way you'd say it." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/src/landing.css" />
+</head>
+<body>
+  <div class="grain" aria-hidden="true"></div>
+
+  <header class="masthead">
+    <span class="wordmark">dash<span class="dot">.</span></span>
+    <a class="signin" href="/app">Open dashboard <span aria-hidden="true">→</span></a>
+  </header>
+
+  <main>
+    <section class="hero">
+      <p class="eyebrow">Todo list &amp; calendar</p>
+      <h1>
+        Type it the way<br />
+        you'd <em>say</em> it.
+      </h1>
+      <p class="lede">
+        No date pickers. No dropdowns. No six-click ritual to schedule a
+        haircut. Write the sentence — dash reads the rest.
+      </p>
+      <a class="cta" href="/app">
+        Open dashboard
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <path d="M4 10h12m0 0-4.5-4.5M16 10l-4.5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </a>
+      <p class="access-note">Protected by Cloudflare Access</p>
+    </section>
+
+    <section class="demo" aria-label="Example of parsed input">
+      <div class="demo-card">
+        <div class="demo-bar">
+          <span class="demo-plus" aria-hidden="true">+</span>
+          <p class="demo-input">
+            <span class="tok-text">Design review</span>
+            <span class="tok tok-project">#Work</span>
+            <span class="tok tok-label">@deep</span>
+            <span class="tok tok-priority">p1</span>
+            <span class="tok tok-date">every other tuesday</span>
+            <span class="tok tok-time">at 3pm</span>
+            <span class="tok tok-duration">for 90m</span>
+          </p>
+        </div>
+        <div class="demo-out">
+          <span class="demo-arrow" aria-hidden="true">↳</span>
+          <div class="demo-task">
+            <span class="flag" data-p="1" aria-hidden="true"></span>
+            <div>
+              <p class="demo-title">Design review</p>
+              <p class="demo-meta">
+                <span>Tue 11 Aug, 3:00–4:30pm</span>
+                <span class="sep" aria-hidden="true">·</span>
+                <span>repeats fortnightly</span>
+                <span class="sep" aria-hidden="true">·</span>
+                <span class="chip">Work</span>
+                <span class="chip">deep</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="syntax" aria-label="Supported syntax">
+      <h2>The whole grammar</h2>
+      <ul class="syntax-grid">
+        <li><code>tomorrow at 5pm</code><span>Dates and times, however you phrase them</span></li>
+        <li><code>every! 3 days</code><span>Recurring — <em>!</em> counts from when you finish</span></li>
+        <li><code>next thursday</code><span>Weekdays, relative or absolute</span></li>
+        <li><code>#Project</code><span>Files it — creating the project if it's new</span></li>
+        <li><code>@label</code><span>Tag it, as many as you like</span></li>
+        <li><code>p1</code><span>Priority, one through four</span></li>
+        <li><code>3pm-4:30pm</code><span>A range sets the time and the duration</span></li>
+        <li><code>{apr 15}</code><span>A hard deadline, kept apart from the due date</span></li>
+      </ul>
+    </section>
+
+    <section class="cal" aria-label="Calendar">
+      <div class="cal-copy">
+        <h2>Your calendar,<br />already in it.</h2>
+        <p>
+          Connect Google in settings and your real meetings sit alongside
+          scheduled tasks. Read-only — dash never writes to your calendar.
+        </p>
+      </div>
+      <div class="cal-viz" aria-hidden="true">
+        <div class="cal-col">
+          <span class="cal-day">MON</span>
+          <div class="ev ev-gcal" style="--top: 10%; --h: 14%"><span>Standup</span></div>
+          <div class="ev ev-task" style="--top: 34%; --h: 22%"><span>Design review</span></div>
+          <div class="ev ev-gcal" style="--top: 68%; --h: 12%"><span>1:1</span></div>
+        </div>
+        <div class="cal-col">
+          <span class="cal-day">TUE</span>
+          <div class="ev ev-gcal" style="--top: 10%; --h: 14%"><span>Standup</span></div>
+          <div class="ev ev-task" style="--top: 46%; --h: 18%"><span>Write specs</span></div>
+        </div>
+        <div class="cal-col">
+          <span class="cal-day">WED</span>
+          <div class="ev ev-gcal" style="--top: 10%; --h: 14%"><span>Standup</span></div>
+          <div class="ev ev-gcal" style="--top: 30%; --h: 30%"><span>Offsite</span></div>
+          <div class="ev ev-task" style="--top: 74%; --h: 12%"><span>Ship it</span></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span class="wordmark small">dash<span class="dot">.</span></span>
+    <span class="colophon">Cloudflare Workers · Durable Objects · read-only Google Calendar</span>
+  </footer>
+</body>
+</html>

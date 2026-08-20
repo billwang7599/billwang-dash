@@ -141,3 +141,14 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Local secrets
+.dev.vars
+
+# Emitted TypeScript declarations (source lives in .ts)
+shared/*.d.ts
+worker/*.d.ts
+src/*.d.ts
+
+# Wrangler local state
+.wrangler/

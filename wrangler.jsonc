@@ -1,0 +1,75 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "billwang-dash",
+  "main": "worker/index.ts",
+  "compatibility_date": "2025-07-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "observability": {
+    "enabled": true
+  },
+
+  // "none" rather than "single-page-application": the root is a public landing
+  // page and /app is the SPA, so a blanket fallback to /index.html would serve
+  // the landing page for deep links like /app/today. worker/index.ts picks the
+  // right document instead.
+  "assets": {
+    "directory": "./dist/client",
+    "not_found_handling": "none",
+    "binding": "ASSETS",
+    // Static assets are normally served before the Worker ever runs, which
+    // meant /app/ was answered straight from the bundle and skipped the
+    // identity check in worker/index.ts. These paths go to the Worker first;
+    // everything else (/, /assets/*) still comes off the asset server.
+    // "/" included so the Worker can redirect a signed-in visitor to /app
+    // before the asset router serves the landing page directly.
+    "run_worker_first": ["/", "/app", "/app/*", "/api/*"]
+  },
+
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "USER_DO",
+        "class_name": "UserDO"
+      }
+    ]
+  },
+
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["UserDO"]
+    }
+  ],
+
+  "vars": {
+    // Public origin used to build the Google OAuth redirect URI.
+    "APP_ORIGIN": "https://dash.billwang.dev",
+    // Access team domain and the application's AUD tag. The team domain is
+    // account-level and stable; the AUD tag belongs to one specific Access
+    // Application and changes if you delete/recreate it — check Zero Trust ->
+    // Access -> Applications -> Overview if auth starts failing after any
+    // change to the Access setup. worker/auth.ts verifies the
+    // Cf-Access-Jwt-Assertion header against both.
+    "ACCESS_TEAM_DOMAIN": "https://wangzetao.cloudflareaccess.com",
+    "ACCESS_AUD": "c3dbedfacb4f021b2f96c5f0a51d05a488a52b8b22a61d5c5677ae429922ce87",
+    // Comma-separated. Either grants admin; see isAdmin() in worker/auth.ts.
+    "ADMIN_EMAILS": "billwang7599@gmail.com",
+    "ADMIN_GROUPS": ""
+  }
+
+  // Identity comes from the Cf-Access-Jwt-Assertion header that Access injects,
+  // verified in worker/auth.ts against ACCESS_TEAM_DOMAIN's JWKS endpoint.
+  //
+  // Deliberately not `ctx.access`: that API is documented as unavailable to
+  // Workers using Static Assets, because they run behind an internal router
+  // Worker that does not forward it. This Worker serves dist/client, so
+  // ctx.access is always undefined here. Same JWT either way.
+  //
+  // DEV_USER lives in `.dev.vars` so it is never deployed. It only applies
+  // when ACCESS_TEAM_DOMAIN is unset, i.e. local dev and tests.
+  //
+  // Secrets (set via `wrangler secret put <NAME>`):
+  //   GOOGLE_CLIENT_ID
+  //   GOOGLE_CLIENT_SECRET
+}

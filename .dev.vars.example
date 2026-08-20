@@ -1,0 +1,11 @@
+# Copy to `.dev.vars` for local development.
+#
+# `.dev.vars` is never uploaded by `wrangler deploy`, which is exactly why
+# DEV_USER lives here: in production `ctx.access` supplies the identity, and if
+# Access were ever missing there is no DEV_USER to fall back to, so the Worker
+# rejects the request instead of handing everyone the same account.
+DEV_USER=dev@localhost
+
+# From your Google Cloud project (APIs & Services -> Credentials).
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=

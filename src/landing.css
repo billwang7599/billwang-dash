@@ -1,0 +1,399 @@
+@import "./tokens.css";
+
+/* ---- Chrome ------------------------------------------------------------ */
+
+.masthead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.75rem clamp(1.25rem, 5vw, 4.5rem);
+  max-width: 84rem;
+  margin: 0 auto;
+}
+
+.wordmark {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 1.4rem;
+  letter-spacing: -0.02em;
+  font-variation-settings: "SOFT" 30, "WONK" 1;
+}
+.wordmark .dot {
+  color: var(--accent);
+}
+.wordmark.small {
+  font-size: 1.1rem;
+}
+
+.signin {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--ink-2);
+  text-decoration: none;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--rule-2);
+  border-radius: 100px;
+  transition: all 0.25s var(--ease);
+}
+.signin:hover {
+  color: var(--paper);
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+main {
+  max-width: 84rem;
+  margin: 0 auto;
+  padding: 0 clamp(1.25rem, 5vw, 4.5rem);
+}
+
+/* ---- Hero -------------------------------------------------------------- */
+
+.hero {
+  padding: clamp(3rem, 9vw, 7rem) 0 clamp(2rem, 5vw, 3.5rem);
+  max-width: 46rem;
+}
+
+/* Staggered reveal on load — one orchestrated moment, not scattered fidgets. */
+.hero > * {
+  opacity: 0;
+  animation: rise 0.85s var(--ease) forwards;
+}
+.hero > *:nth-child(1) { animation-delay: 0.05s; }
+.hero > *:nth-child(2) { animation-delay: 0.14s; }
+.hero > *:nth-child(3) { animation-delay: 0.26s; }
+.hero > *:nth-child(4) { animation-delay: 0.36s; }
+.hero > *:nth-child(5) { animation-delay: 0.44s; }
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin: 0 0 1.5rem;
+}
+
+h1 {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(2.9rem, 8.5vw, 5.6rem);
+  line-height: 0.95;
+  letter-spacing: -0.035em;
+  margin: 0 0 1.6rem;
+  font-variation-settings: "SOFT" 20, "WONK" 1;
+}
+h1 em {
+  font-style: italic;
+  color: var(--accent);
+  font-variation-settings: "SOFT" 60, "WONK" 1;
+}
+
+.lede {
+  font-size: clamp(1.05rem, 1.9vw, 1.3rem);
+  line-height: 1.55;
+  color: var(--ink-2);
+  max-width: 34rem;
+  margin: 0 0 2.4rem;
+  text-wrap: pretty;
+}
+
+.cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--ink);
+  color: var(--paper);
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 1rem;
+  padding: 0.85rem 1.5rem;
+  border-radius: 100px;
+  box-shadow: var(--shadow-md);
+  transition: transform 0.25s var(--ease), box-shadow 0.25s var(--ease), background 0.25s var(--ease);
+}
+.cta:hover {
+  background: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+.cta svg {
+  transition: transform 0.3s var(--ease);
+}
+.cta:hover svg {
+  transform: translateX(4px);
+}
+
+.access-note {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--ink-3);
+  margin: 1rem 0 0;
+  letter-spacing: 0.02em;
+}
+
+/* ---- Parsed-input demo -------------------------------------------------- */
+
+.demo {
+  padding-bottom: clamp(3rem, 8vw, 6rem);
+}
+
+.demo-card {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  max-width: 58rem;
+  /* Nudged off the text column so the page doesn't read as a single stack. */
+  margin-left: auto;
+}
+
+.demo-bar {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.8rem;
+  padding: 1.4rem 1.6rem;
+  border-bottom: 1px dashed var(--rule);
+}
+
+.demo-plus {
+  font-size: 1.3rem;
+  color: var(--accent);
+  line-height: 1.4;
+  font-weight: 300;
+}
+
+.demo-input {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: clamp(0.85rem, 1.5vw, 1rem);
+  line-height: 1.9;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.tok {
+  padding: 0.1em 0.45em;
+  border-radius: var(--r-sm);
+  font-weight: 500;
+}
+.tok-project  { background: var(--sage-soft);   color: var(--sage); }
+.tok-label    { background: var(--indigo-soft); color: var(--indigo); }
+.tok-priority { background: var(--accent-soft); color: var(--accent); }
+.tok-date,
+.tok-time     { background: var(--amber-soft);  color: var(--amber); }
+.tok-duration { background: var(--paper-3);     color: var(--ink-2); }
+
+.demo-out {
+  display: flex;
+  gap: 0.9rem;
+  padding: 1.4rem 1.6rem;
+  background: linear-gradient(180deg, var(--card), var(--paper-2));
+}
+.demo-arrow {
+  color: var(--ink-3);
+  font-size: 1.1rem;
+}
+.demo-task {
+  display: flex;
+  gap: 0.8rem;
+  align-items: flex-start;
+}
+.flag {
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+  border: 2px solid var(--p1);
+  margin-top: 0.2rem;
+  flex: none;
+}
+.demo-title {
+  margin: 0 0 0.35rem;
+  font-weight: 500;
+  font-size: 1.02rem;
+}
+.demo-meta {
+  margin: 0;
+  font-size: 0.84rem;
+  color: var(--ink-2);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+.sep { color: var(--rule-2); }
+.chip {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  padding: 0.15em 0.5em;
+  border: 1px solid var(--rule-2);
+  border-radius: 100px;
+  color: var(--ink-3);
+}
+
+/* ---- Syntax ------------------------------------------------------------- */
+
+.syntax {
+  padding: clamp(2.5rem, 6vw, 4.5rem) 0;
+  border-top: 1px solid var(--rule);
+}
+
+h2 {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(1.9rem, 4.2vw, 3rem);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  margin: 0 0 2.2rem;
+  font-variation-settings: "SOFT" 20, "WONK" 1;
+}
+
+.syntax-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  gap: 1px;
+  background: var(--rule);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.syntax-grid li {
+  background: var(--paper);
+  padding: 1.15rem 1.3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  transition: background 0.2s var(--ease);
+}
+.syntax-grid li:hover {
+  background: var(--card);
+}
+.syntax-grid code {
+  font-family: var(--mono);
+  font-size: 0.86rem;
+  color: var(--accent);
+  font-weight: 500;
+}
+.syntax-grid span {
+  font-size: 0.86rem;
+  color: var(--ink-2);
+  line-height: 1.45;
+}
+.syntax-grid em {
+  font-family: var(--mono);
+  font-style: normal;
+  color: var(--accent);
+}
+
+/* ---- Calendar ----------------------------------------------------------- */
+
+.cal {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: clamp(1.5rem, 5vw, 4rem);
+  align-items: center;
+  padding: clamp(2.5rem, 6vw, 4.5rem) 0;
+  border-top: 1px solid var(--rule);
+}
+@media (max-width: 800px) {
+  .cal { grid-template-columns: 1fr; }
+}
+.cal-copy p {
+  font-size: 1.02rem;
+  line-height: 1.6;
+  color: var(--ink-2);
+  max-width: 26rem;
+  text-wrap: pretty;
+}
+
+.cal-viz {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.6rem;
+  height: 21rem;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-lg);
+  padding: 0.9rem;
+  box-shadow: var(--shadow-md);
+}
+.cal-col {
+  position: relative;
+  border-radius: var(--r-sm);
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0 calc(100% / 8 - 1px),
+    var(--paper-2) calc(100% / 8 - 1px) calc(100% / 8)
+  );
+}
+.cal-day {
+  position: absolute;
+  top: -0.1rem;
+  left: 0;
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  color: var(--ink-3);
+}
+.ev {
+  position: absolute;
+  top: var(--top);
+  height: var(--h);
+  left: 0;
+  right: 0;
+  border-radius: 5px;
+  padding: 0.3rem 0.45rem;
+  font-size: 0.68rem;
+  line-height: 1.2;
+  overflow: hidden;
+  animation: fade 0.7s var(--ease) backwards;
+}
+.cal-col:nth-child(2) .ev { animation-delay: 0.1s; }
+.cal-col:nth-child(3) .ev { animation-delay: 0.2s; }
+
+@keyframes fade {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Google events read as filled blocks; tasks as outlined ones, so the two
+   sources stay tellable apart at a glance. */
+.ev-gcal {
+  background: var(--indigo-soft);
+  color: var(--indigo);
+  border-left: 2px solid var(--indigo);
+}
+.ev-task {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-left: 2px solid var(--accent);
+}
+
+/* ---- Footer ------------------------------------------------------------- */
+
+footer {
+  max-width: 84rem;
+  margin: 0 auto;
+  padding: 2rem clamp(1.25rem, 5vw, 4.5rem) 3rem;
+  border-top: 1px solid var(--rule);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  align-items: center;
+  justify-content: space-between;
+}
+.colophon {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--ink-3);
+}
