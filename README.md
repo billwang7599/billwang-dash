@@ -28,7 +28,9 @@ unset and `DEV_USER` from `.dev.vars` stands in as the signed-in user.
 
 | Piece | Where | Why |
 |---|---|---|
-| Router + auth | `worker/index.ts`, `worker/auth.ts` | Identity resolved at the edge and passed down |
+| Routes | `worker/index.ts` | Thin: route table, auth middleware, error mapping |
+| API logic | `worker/service.ts` | HTTP-free; takes a DO stub, so it is callable in tests |
+| Identity | `worker/auth.ts` | Verifies the Access JWT at the edge, passes the user down |
 | Per-user data | `worker/user-do.ts` | One DO per user; all reads are local SQLite |
 | Quick-add grammar | `shared/parser.ts` | Pure module, imported by both Worker and UI |
 | Date math | `shared/civil.ts` | Wall-clock dates, not instants |
@@ -186,7 +188,7 @@ day-first in Settings, or change the `dateFormat` default in the same file.
 npm test
 ```
 
-103 tests via `@cloudflare/vitest-pool-workers`, running in the real Workers
+116 tests via `@cloudflare/vitest-pool-workers`, running in the real Workers
 runtime rather than a mock: the parser grammar, DO storage and recurrence
 rollover, the public/protected split, and calendar timezone placement.
 

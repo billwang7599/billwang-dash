@@ -17,12 +17,6 @@ export interface AppState {
   user: { id: string; email: string; name: string | null; isAdmin: boolean };
 }
 
-class ApiError extends Error {
-  constructor(readonly status: number, message: string) {
-    super(message);
-  }
-}
-
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     ...init,
@@ -38,7 +32,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       .json()
       .then((b) => (b as { error?: string }).error)
       .catch(() => null);
-    throw new ApiError(res.status, detail ?? `Request failed (${res.status})`);
+    throw new Error(detail ?? `Request failed (${res.status})`);
   }
   return (await res.json()) as T;
 }
