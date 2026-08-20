@@ -5,17 +5,11 @@ import type { UserDO } from "./user-do.ts";
 import type { AuthedUser } from "./auth.ts";
 import type { CalendarItem, ParsedQuickAdd, Project, Task } from "../shared/types.ts";
 
-/**
- * Everything the API does, independent of HTTP. Routes in index.ts stay thin
- * enough to read as a table of contents; the work happens here.
- *
- * These take a DO stub rather than a Hono context so they can be called and
- * tested without constructing a request.
- */
+/** API logic, independent of HTTP. Takes a DO stub, not a Hono context. */
 
 type Stub = DurableObjectStub<UserDO>;
 
-/** Thrown for expected failures; index.ts maps it to a response once. */
+/** index.ts maps this onto a response in app.onError. */
 export class ServiceError extends Error {
   constructor(
     readonly status: 400 | 403 | 404 | 503,
@@ -42,16 +36,12 @@ export async function loadState(
     stub.listProjects(),
     stub.listTasks({ includeCompleted }),
     stub.getPreferences(),
-    // Keeps the stored profile in step with Access; parallel, so it costs nothing.
     stub.syncProfile(user.email, user.name),
   ]);
   return { projects, tasks, preferences, user };
 }
 
-/**
- * The client parses as you type for the preview, but we re-parse the raw text
- * here so what gets stored can never disagree with what was shown.
- */
+/** Re-parses server-side so what is stored cannot disagree with the preview. */
 export async function quickAddTask(
   stub: Stub,
   text: string | undefined,
@@ -125,11 +115,8 @@ export async function beginGoogleAuth(stub: Stub, env: Env): Promise<string> {
 }
 
 /**
- * Completes the OAuth round trip. Returns a short status word for the
- * /app/settings query string rather than throwing, since every outcome here —
- * success or failure — ends as a redirect back to the settings page.
- *
- * `state` is CSRF defence only; Access already established who this is.
+ * Returns a status word for the /app/settings query string rather than
+ * throwing, since every outcome ends as a redirect. `state` is CSRF defence.
  */
 export async function completeGoogleAuth(
   stub: Stub,

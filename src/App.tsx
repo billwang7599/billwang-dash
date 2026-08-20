@@ -28,6 +28,7 @@ function viewFromPath(pathname: string): View {
 export function App() {
   const [state, setState] = useState<AppState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [view, setView] = useState<View>(() => viewFromPath(window.location.pathname));
   // Calendar data lives server-side; bump this to make it refetch after edits.
   const [revision, setRevision] = useState(0);
@@ -47,6 +48,19 @@ export function App() {
     setView(viewFromPath(path));
   }, []);
 
+  /**
+   * Wraps a mutation so a failure surfaces instead of becoming an unhandled
+   * rejection. Without this a failed complete/delete silently does nothing and
+   * the row just appears unresponsive.
+   */
+  const run = useCallback(
+    (fn: () => Promise<void>) => () =>
+      fn()
+        .then(() => setNotice(null))
+        .catch((e: Error) => setNotice(e.message)),
+    [],
+  );
+
   const addTask = useCallback(
     async (text: string) => {
       if (!state) return;
@@ -59,29 +73,37 @@ export function App() {
     [state],
   );
 
-  const completeTask = useCallback(async (id: string) => {
-    const { task } = await api.completeTask(id);
-    setState((prev) =>
-      prev
-        ? {
-            ...prev,
-            // A recurring task comes back rescheduled rather than completed.
-            tasks: task.completed
-              ? prev.tasks.filter((t) => t.id !== id)
-              : prev.tasks.map((t) => (t.id === id ? task : t)),
-          }
-        : prev,
-    );
-    setRevision((r) => r + 1);
-  }, []);
+  const completeTask = useCallback(
+    (id: string) =>
+      run(async () => {
+        const { task } = await api.completeTask(id);
+        setState((prev) =>
+          prev
+            ? {
+                ...prev,
+                // A recurring task comes back rescheduled, not completed.
+                tasks: task.completed
+                  ? prev.tasks.filter((t) => t.id !== id)
+                  : prev.tasks.map((t) => (t.id === id ? task : t)),
+              }
+            : prev,
+        );
+        setRevision((r) => r + 1);
+      })(),
+    [run],
+  );
 
-  const deleteTask = useCallback(async (id: string) => {
-    await api.deleteTask(id);
-    setState((prev) =>
-      prev ? { ...prev, tasks: prev.tasks.filter((t) => t.id !== id) } : prev,
-    );
-    setRevision((r) => r + 1);
-  }, []);
+  const deleteTask = useCallback(
+    (id: string) =>
+      run(async () => {
+        await api.deleteTask(id);
+        setState((prev) =>
+          prev ? { ...prev, tasks: prev.tasks.filter((t) => t.id !== id) } : prev,
+        );
+        setRevision((r) => r + 1);
+      })(),
+    [run],
+  );
 
   const setPreferences = useCallback((preferences: Preferences) => {
     setState((prev) => (prev ? { ...prev, preferences } : prev));
@@ -191,6 +213,12 @@ export function App() {
       </aside>
 
       <main className="main">
+        {notice && (
+          <p className="banner banner-bad" role="alert" onClick={() => setNotice(null)}>
+            {notice}
+          </p>
+        )}
+
         {view.name !== "settings" && view.name !== "calendar" && (
           <QuickAdd preferences={state.preferences} onSubmit={addTask} />
         )}

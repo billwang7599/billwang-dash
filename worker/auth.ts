@@ -1,13 +1,6 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
 
-/**
- * Access authenticates at the edge and injects a signed JWT as the
- * Cf-Access-Jwt-Assertion header; we verify it against Access's public keys.
- *
- * Not `ctx.access` — that is documented as unavailable to Workers using Static
- * Assets, because they run behind an internal router that does not forward it.
- * Same JWT either way. See README.
- */
+/** Verifies the Access JWT that the edge injects on protected routes. */
 
 export interface AuthedUser {
   /** Stable per-user key, used verbatim as the Durable Object name. */
@@ -17,7 +10,6 @@ export interface AuthedUser {
   isAdmin: boolean;
 }
 
-/** Access rotates signing keys; the set caches and refetches on unknown kid. */
 const jwksCache = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
 
 function getJwks(issuer: string) {
@@ -29,13 +21,7 @@ function getJwks(issuer: string) {
   return jwks;
 }
 
-/**
- * Returns the authenticated user, or null. Fails closed.
- *
- * DEV_USER applies only when ACCESS_TEAM_DOMAIN is unset (local dev, tests).
- * It lives in .dev.vars, which `wrangler deploy` never uploads, so production
- * has no fallback identity.
- */
+/** DEV_USER applies only when ACCESS_TEAM_DOMAIN is unset (local dev, tests). */
 export async function getUser(request: Request, env: Env): Promise<AuthedUser | null> {
   const teamDomain = env.ACCESS_TEAM_DOMAIN?.trim();
 
@@ -50,8 +36,7 @@ export async function getUser(request: Request, env: Env): Promise<AuthedUser | 
     };
   }
 
-  // The header is always set by Access; the cookie is the fallback for paths
-  // Access does not cover, like "/".
+  // The cookie is the fallback for paths Access does not cover, like "/".
   const token =
     request.headers.get("cf-access-jwt-assertion") ??
     getCookie(request, "CF_Authorization");
@@ -77,7 +62,7 @@ export async function getUser(request: Request, env: Env): Promise<AuthedUser | 
   }
 
   const email = typeof payload.email === "string" ? payload.email : null;
-  // `sub` is stable; email can change at the IdP and would orphan the user's DO.
+  // `sub` is stable; email can change at the IdP and would orphan the DO.
   const id = (typeof payload.sub === "string" && payload.sub) || email;
   if (!id || !email) {
     console.warn("auth: token verified but missing sub/email", Object.keys(payload));
@@ -96,7 +81,6 @@ export async function getUser(request: Request, env: Env): Promise<AuthedUser | 
   };
 }
 
-/** In code rather than a second Access app, so the rule is reviewable here. */
 function isAdmin(env: Env, email: string, groups: string[]): boolean {
   const list = (raw: string | undefined) =>
     (raw ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);

@@ -597,6 +597,7 @@
   font-size: 0.86rem;
   margin: 0 0 1rem;
 }
+.main > .banner { cursor: pointer; }
 .banner-ok  { background: var(--sage-soft);   color: var(--sage); }
 .banner-bad { background: var(--accent-soft); color: var(--accent); }
 

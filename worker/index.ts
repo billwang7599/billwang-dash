@@ -15,7 +15,6 @@ const stub = (c: Context<Ctx>) => c.env.USER_DO.getByName(c.get("user").id);
 const settings = (c: Context<Ctx>, msg: string) =>
   c.redirect(`/app/settings?google=${encodeURIComponent(msg)}`);
 
-/** Expected failures are raised as ServiceError; map them to responses once. */
 app.onError((err, c) => {
   if (err instanceof ServiceError) return c.json({ error: err.message }, err.status);
   console.error("unhandled", err);
@@ -24,7 +23,6 @@ app.onError((err, c) => {
 
 // ---- API -----------------------------------------------------------------
 
-/** Reaching a handler without a user means Access isn't covering this path. */
 app.use("/api/*", async (c, next) => {
   const user = await getUser(c.req.raw, c.env);
   if (!user) return c.json({ error: "unauthorized" }, 401);
@@ -107,7 +105,6 @@ app.patch("/api/google/calendars/:id", async (c) => {
   return c.json(await s.getGoogleStatus());
 });
 
-/** In code rather than a second Access app, so the rule lives with the routes. */
 app.use("/api/admin/*", async (c, next) => {
   if (!c.get("user").isAdmin) return c.json({ error: "forbidden" }, 403);
   await next();
@@ -126,23 +123,17 @@ async function serveApp(c: Context<Ctx>) {
   return c.env.ASSETS.fetch(new Request(url, { headers: c.req.raw.headers }));
 }
 
-// Both forms: bare "/app" would otherwise hit the assets binding's own
-// directory redirect and skip the check above.
+// Bare "/app" would otherwise hit the assets binding's directory redirect.
 app.get("/app", serveApp);
 app.get("/app/*", serveApp);
 
-/** Access owns the session, so signing out means clearing its cookie. */
 app.get("/logout", (c) =>
   c.env.ACCESS_TEAM_DOMAIN?.trim()
     ? c.redirect("/cdn-cgi/access/logout")
     : c.text("No Access session to clear (dev mode).", 200),
 );
 
-/**
- * Access only injects Cf-Access-Jwt-Assertion on paths it covers (/app*,
- * /api*), so a signed-in visitor arriving at "/" carries only the cookie.
- * Check for either, or this never fires.
- */
+// A signed-in visitor arriving at "/" carries only the cookie, not the header.
 app.get("/", async (c, next) => {
   const headers = c.req.raw.headers;
   const signedIn =
