@@ -75,3 +75,41 @@ describe("ServiceError maps to HTTP status", () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe("project reorder validation", () => {
+  it("rejects a non-array body", async () => {
+    await expect(service.reorderProjects(stub("r1"), "nope")).rejects.toMatchObject({
+      status: 400,
+    });
+  });
+
+  it("rejects non-string ids", async () => {
+    await expect(service.reorderProjects(stub("r2"), [1, 2])).rejects.toMatchObject({
+      status: 400,
+    });
+  });
+
+  it("reorders over HTTP", async () => {
+    const create = async (name: string) => {
+      const res = await SELF.fetch("https://example.com/api/projects", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      return (await res.json<{ project: { id: string; name: string } }>()).project;
+    };
+    const a = await create("One");
+    const b = await create("Two");
+
+    const res = await SELF.fetch("https://example.com/api/projects/order", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ids: [b.id, a.id] }),
+    });
+    expect(res.status).toBe(204);
+
+    const state = await SELF.fetch("https://example.com/api/state");
+    const { projects } = await state.json<{ projects: { name: string; isInbox: boolean }[] }>();
+    expect(projects.filter((p) => !p.isInbox).map((p) => p.name)).toEqual(["Two", "One"]);
+  });
+});

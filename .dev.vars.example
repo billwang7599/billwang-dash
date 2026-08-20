@@ -4,6 +4,9 @@
 # DEV_USER lives here. It only applies when ACCESS_TEAM_DOMAIN is unset, so a
 # deploy that forgets to configure Access has no fallback identity and rejects
 # every request rather than handing everyone the same account.
+# Blank overrides wrangler.jsonc so local dev uses DEV_USER rather than trying
+# to verify an Access token that no local request carries.
+ACCESS_TEAM_DOMAIN=
 DEV_USER=dev@localhost
 
 # From your Google Cloud project (APIs & Services -> Credentials).

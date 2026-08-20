@@ -4,6 +4,7 @@ import { api, type AppState, type Preferences } from "./api.ts";
 import { QuickAdd } from "./components/QuickAdd.tsx";
 import { Settings } from "./components/Settings.tsx";
 import { TaskList } from "./components/TaskList.tsx";
+import { TaskModal } from "./components/TaskModal.tsx";
 import { WeekCalendar } from "./components/WeekCalendar.tsx";
 import { todayKey } from "./format.ts";
 
@@ -29,6 +30,8 @@ export function App() {
   const [state, setState] = useState<AppState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Task | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
   const [view, setView] = useState<View>(() => viewFromPath(window.location.pathname));
   // Calendar data lives server-side; bump this to make it refetch after edits.
   const [revision, setRevision] = useState(0);
@@ -103,6 +106,44 @@ export function App() {
         setRevision((r) => r + 1);
       })(),
     [run],
+  );
+
+  const saveTask = useCallback(
+    async (patch: Record<string, unknown>) => {
+      if (!editing) return;
+      const { task } = await api.updateTask(editing.id, patch);
+      setState((prev) =>
+        prev ? { ...prev, tasks: prev.tasks.map((t) => (t.id === task.id ? task : t)) } : prev,
+      );
+      setRevision((r) => r + 1);
+    },
+    [editing],
+  );
+
+  /** Optimistic: the sidebar reorders immediately, the write follows. */
+  const dropProject = useCallback(
+    (targetId: string) =>
+      run(async () => {
+        if (!dragId || dragId === targetId) return;
+        let ids: string[] = [];
+        setState((prev) => {
+          if (!prev) return prev;
+          const others = prev.projects.filter((p) => !p.isInbox);
+          const from = others.findIndex((p) => p.id === dragId);
+          const to = others.findIndex((p) => p.id === targetId);
+          if (from === -1 || to === -1) return prev;
+
+          const next = [...others];
+          next.splice(to, 0, ...next.splice(from, 1));
+          ids = next.map((p) => p.id);
+
+          const inbox = prev.projects.filter((p) => p.isInbox);
+          return { ...prev, projects: [...inbox, ...next] };
+        });
+        setDragId(null);
+        if (ids.length) await api.reorderProjects(ids);
+      })(),
+    [dragId, run],
   );
 
   const setPreferences = useCallback((preferences: Preferences) => {
@@ -191,6 +232,11 @@ export function App() {
                     count={state.tasks.filter((t) => t.projectId === project.id).length}
                     active={view.name === "project" && view.id === project.id}
                     onClick={() => navigate(`/app/project/${project.id}`)}
+                    draggable
+                    dragging={dragId === project.id}
+                    onDragStart={() => setDragId(project.id)}
+                    onDragEnd={() => setDragId(null)}
+                    onDrop={() => dropProject(project.id)}
                   />
                 ))}
             </nav>
@@ -242,10 +288,21 @@ export function App() {
               emptyMessage={emptyFor(view)}
               onComplete={completeTask}
               onDelete={deleteTask}
+              onOpen={setEditing}
             />
           </>
         )}
       </main>
+
+      {editing && state && (
+        <TaskModal
+          task={editing}
+          projects={state.projects}
+          timeZone={state.preferences.timeZone}
+          onSave={saveTask}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </div>
   );
 }
@@ -256,15 +313,41 @@ function NavItem({
   urgent,
   active,
   onClick,
+  draggable,
+  dragging,
+  onDragStart,
+  onDragEnd,
+  onDrop,
 }: {
   label: string;
   count?: number;
   urgent?: boolean;
   active: boolean;
   onClick: () => void;
+  draggable?: boolean;
+  dragging?: boolean;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
+  onDrop?: () => void;
 }) {
   return (
-    <button className={`nav-item${active ? " is-active" : ""}`} onClick={onClick}>
+    <button
+      className={`nav-item${active ? " is-active" : ""}${dragging ? " is-dragging" : ""}`}
+      onClick={onClick}
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      // Without preventDefault the drop event never fires.
+      onDragOver={draggable ? (e) => e.preventDefault() : undefined}
+      onDrop={
+        onDrop
+          ? (e) => {
+              e.preventDefault();
+              onDrop();
+            }
+          : undefined
+      }
+    >
       <span>{label}</span>
       {count !== undefined && count > 0 && (
         <span className={`nav-count${urgent ? " is-urgent" : ""}`}>{count}</span>
