@@ -25,6 +25,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (res.status === 204) return undefined as T;
 
+  // The Access session expired mid-visit. A fresh top-level request is what
+  // re-triggers the login flow; the SPA cannot do it from a fetch.
+  if (res.status === 401) {
+    window.location.reload();
+    throw new Error("Session expired — signing you back in.");
+  }
+
   if (!res.ok) {
     // Error bodies are best-effort: a failure from the edge rather than the
     // Worker may not be JSON at all.

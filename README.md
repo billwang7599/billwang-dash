@@ -86,28 +86,6 @@ Then set the two values from the Worker's **Access tab → Application values**:
 | `/app*` | covered | Login screen, then the SPA |
 | `/api*` | covered | JSON API |
 
-### Why not `ctx.access`?
-
-`ctx.access` is the nicer API — the runtime verifies the token for you — but it
-is **unavailable to Workers that use Static Assets**. Per Cloudflare's docs:
-
-> Workers with Static Assets execute behind an internal router Worker. Access
-> still protects the application and its assets. However, the router does not
-> pass `ctx.access` to the user Worker.
-
-This Worker serves the landing page and SPA from `dist/client`, so `ctx.access`
-is permanently `undefined` here no matter how Access is configured — confirmed
-empirically with a raw pre-Hono `fetch` handler, on both `/app` and `/api`
-paths. Note the docs also warn that `@cloudflare/vite-plugin` can add `assets`
-even when your config omits it, so removing the binding is not a reliable fix.
-
-Security is identical either way: it is the same Access-issued JWT, read from
-the header rather than handed over by the runtime.
-
-The alternative, if you ever want `ctx.access` back, is splitting into two
-Workers — an API Worker with no assets (gets `ctx.access`) and a frontend
-Worker that serves the assets and needs no identity.
-
 ### Admin routes
 
 `ADMIN_EMAILS` and `ADMIN_GROUPS` (comma-separated) feed `isAdmin()` in
