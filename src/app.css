@@ -675,3 +675,137 @@
 .field input:focus,
 .field select:focus { outline: none; border-color: var(--ink-3); }
 .field small { font-size: 0.75rem; color: var(--ink-3); }
+
+/* ---- Task modal --------------------------------------------------------- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgb(26 24 21 / 0.35);
+  backdrop-filter: blur(3px);
+  display: grid;
+  place-items: start center;
+  padding: clamp(1rem, 8vh, 6rem) 1rem 2rem;
+  overflow-y: auto;
+  animation: fade-in 0.15s var(--ease);
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.modal {
+  width: min(38rem, 100%);
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 1.3rem 1.4rem 1.1rem;
+  animation: modal-rise 0.2s var(--ease);
+}
+@keyframes modal-rise {
+  from { opacity: 0; transform: translateY(10px) scale(0.99); }
+  to   { opacity: 1; transform: none; }
+}
+
+.modal-title {
+  width: 100%;
+  border: 0;
+  background: none;
+  font-family: var(--display);
+  font-size: 1.4rem;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  padding: 0 0 0.3rem;
+  outline: none;
+  font-variation-settings: "SOFT" 20, "WONK" 1;
+}
+
+.modal-desc {
+  width: 100%;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+  font: inherit;
+  font-size: 0.88rem;
+  color: var(--ink-2);
+  padding: 0.5rem 0.6rem;
+  margin-bottom: 1rem;
+  resize: vertical;
+  outline: none;
+}
+.modal-desc:focus { border-color: var(--ink-3); }
+
+.modal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.7rem 0.9rem;
+}
+.modal-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+.modal-grid label > span {
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.modal-grid input,
+.modal-grid select {
+  font: inherit;
+  font-size: 0.88rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--rule-2);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+  color: var(--ink);
+  min-width: 0;
+}
+.modal-grid input:focus,
+.modal-grid select:focus { outline: none; border-color: var(--ink-3); }
+.modal-grid input:disabled,
+.modal-grid select:disabled { opacity: 0.45; cursor: not-allowed; }
+.modal-wide { grid-column: 1 / -1; }
+
+.modal-note {
+  font-size: 0.78rem;
+  color: var(--ink-3);
+  margin: 0.9rem 0 0;
+}
+.modal-error {
+  font-size: 0.82rem;
+  color: var(--accent);
+  margin: 0.9rem 0 0;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1.2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--rule);
+}
+
+/* Task rows open the modal, so the body is a button rather than a div. */
+.task-body {
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+}
+
+/* ---- Sidebar drag ------------------------------------------------------- */
+
+.nav-item[draggable="true"] { cursor: grab; }
+.nav-item.is-dragging { opacity: 0.4; cursor: grabbing; }
+.nav-item[draggable="true"]:active { cursor: grabbing; }

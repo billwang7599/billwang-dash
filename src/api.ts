@@ -77,6 +77,12 @@ export const api = {
   deleteProject: (id: string) =>
     request<void>(`/api/projects/${id}`, { method: "DELETE" }),
 
+  reorderProjects: (ids: string[]) =>
+    request<void>("/api/projects/order", {
+      method: "PATCH",
+      body: JSON.stringify({ ids }),
+    }),
+
   setPreferences: (prefs: Partial<Preferences>) =>
     request<{ preferences: Preferences }>("/api/preferences", {
       method: "PATCH",

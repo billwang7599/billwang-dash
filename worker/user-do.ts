@@ -228,6 +228,14 @@ export class UserDO extends DurableObject<Env> {
       .map(toProject);
   }
 
+  /** Positions follow the given order; the Inbox is pinned and skipped. */
+  async reorderProjects(ids: string[]): Promise<void> {
+    ids.forEach((id, i) => {
+      if (id === INBOX_ID) return;
+      this.sql.exec("UPDATE projects SET sort_order = ? WHERE id = ?", i + 1, id);
+    });
+  }
+
   async createProject(name: string, color = "slate"): Promise<Project> {
     const existing = this.findProjectByName(name);
     if (existing) return existing;

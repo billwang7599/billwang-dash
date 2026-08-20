@@ -153,3 +153,38 @@ describe("quick add over HTTP", () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe("project ordering", () => {
+  it("reorders projects and persists the new positions", async () => {
+    const s = stub("order1");
+    const a = await s.createProject("Alpha");
+    const b = await s.createProject("Beta");
+    const c = await s.createProject("Gamma");
+
+    expect((await s.listProjects()).filter((p) => !p.isInbox).map((p) => p.name)).toEqual([
+      "Alpha", "Beta", "Gamma",
+    ]);
+
+    await s.reorderProjects([c.id, a.id, b.id]);
+
+    expect((await s.listProjects()).filter((p) => !p.isInbox).map((p) => p.name)).toEqual([
+      "Gamma", "Alpha", "Beta",
+    ]);
+  });
+
+  it("keeps the Inbox pinned first regardless of the order given", async () => {
+    const s = stub("order2");
+    const a = await s.createProject("Alpha");
+    await s.reorderProjects(["inbox", a.id]);
+
+    const projects = await s.listProjects();
+    expect(projects[0].isInbox).toBe(true);
+  });
+
+  it("ignores ids that do not exist", async () => {
+    const s = stub("order3");
+    const a = await s.createProject("Alpha");
+    await s.reorderProjects(["ghost", a.id]);
+    expect((await s.listProjects()).filter((p) => !p.isInbox)).toHaveLength(1);
+  });
+});

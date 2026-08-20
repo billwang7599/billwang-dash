@@ -51,7 +51,7 @@ function formatTime(time: string): string {
   return `${hour}${m === 0 ? "" : `:${String(m).padStart(2, "0")}`}${h < 12 ? "am" : "pm"}`;
 }
 
-function formatRecurrence(r: Recurrence): string {
+export function formatRecurrence(r: Recurrence): string {
   const every = r.fromCompletion ? "every!" : "every";
 
   if (r.freq === "weekly" && r.weekdays.length > 0) {

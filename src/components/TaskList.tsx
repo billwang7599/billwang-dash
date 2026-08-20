@@ -10,6 +10,7 @@ interface Props {
   emptyMessage: string;
   onComplete: (id: string) => void;
   onDelete: (id: string) => void;
+  onOpen: (task: Task) => void;
 }
 
 export function TaskList({
@@ -20,6 +21,7 @@ export function TaskList({
   emptyMessage,
   onComplete,
   onDelete,
+  onOpen,
 }: Props) {
   if (tasks.length === 0) {
     return (
@@ -43,6 +45,7 @@ export function TaskList({
             timeZone={timeZone}
             onComplete={onComplete}
             onDelete={onDelete}
+            onOpen={onOpen}
           />
         ))}
       </ul>
@@ -69,6 +72,7 @@ export function TaskList({
                 hideDate
                 onComplete={onComplete}
                 onDelete={onDelete}
+                onOpen={onOpen}
               />
             ))}
           </ul>
@@ -85,6 +89,7 @@ function TaskRow({
   hideDate,
   onComplete,
   onDelete,
+  onOpen,
 }: {
   task: Task;
   project: Project | null;
@@ -92,6 +97,7 @@ function TaskRow({
   hideDate?: boolean;
   onComplete: (id: string) => void;
   onDelete: (id: string) => void;
+  onOpen: (task: Task) => void;
 }) {
   return (
     <li className={`task${task.completed ? " is-done" : ""}`}>
@@ -114,7 +120,7 @@ function TaskRow({
         </svg>
       </button>
 
-      <div className="task-body">
+      <button className="task-body" onClick={() => onOpen(task)} aria-label={`Edit ${task.content}`}>
         <p className="task-title">{task.content}</p>
         <div className="task-meta">
           {task.due && !hideDate && (
@@ -133,7 +139,7 @@ function TaskRow({
             </span>
           ))}
         </div>
-      </div>
+      </button>
 
       <button
         className="task-delete"
