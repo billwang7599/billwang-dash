@@ -18,7 +18,8 @@
     "hono": "^4.9.4",
     "jose": "^6.2.9",
     "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "react-dom": "^19.1.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.13.5",
