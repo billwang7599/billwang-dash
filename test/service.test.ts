@@ -77,16 +77,23 @@ describe("ServiceError maps to HTTP status", () => {
 });
 
 describe("project reorder validation", () => {
-  it("rejects a non-array body", async () => {
-    await expect(service.reorderProjects(stub("r1"), "nope")).rejects.toMatchObject({
-      status: 400,
+  const patchOrder = (body: string) =>
+    SELF.fetch("https://example.com/api/projects/order", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body,
     });
+
+  it("rejects a non-array ids field", async () => {
+    expect((await patchOrder(JSON.stringify({ ids: "nope" }))).status).toBe(400);
   });
 
   it("rejects non-string ids", async () => {
-    await expect(service.reorderProjects(stub("r2"), [1, 2])).rejects.toMatchObject({
-      status: 400,
-    });
+    expect((await patchOrder(JSON.stringify({ ids: [1, 2] }))).status).toBe(400);
+  });
+
+  it("rejects a body that is not JSON at all", async () => {
+    expect((await patchOrder("not json")).status).toBe(400);
   });
 
   it("reorders over HTTP", async () => {
@@ -111,5 +118,34 @@ describe("project reorder validation", () => {
     const state = await SELF.fetch("https://example.com/api/state");
     const { projects } = await state.json<{ projects: { name: string; isInbox: boolean }[] }>();
     expect(projects.filter((p) => !p.isInbox).map((p) => p.name)).toEqual(["Two", "One"]);
+  });
+});
+
+describe("preferences validation", () => {
+  const patchPrefs = (body: unknown) =>
+    SELF.fetch("https://example.com/api/preferences", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  // This route used to hand the raw body to setPreferences, so a non-array
+  // navOrder reached a for..of and 500ed.
+  it("rejects a navOrder that is not an array of nav keys", async () => {
+    for (const navOrder of [7, "today", {}, ["nope"], [1]]) {
+      expect((await patchPrefs({ navOrder })).status).toBe(400);
+    }
+  });
+
+  it("rejects an unknown dateFormat", async () => {
+    expect((await patchPrefs({ dateFormat: "YMD" })).status).toBe(400);
+  });
+
+  it("still accepts a valid partial update", async () => {
+    const res = await patchPrefs({ navOrder: ["calendar", "today"] });
+    expect(res.status).toBe(200);
+    const { preferences } = await res.json<{ preferences: { navOrder: string[] } }>();
+    // Resolved on the way in, so the two absent keys come back appended.
+    expect(preferences.navOrder).toEqual(["calendar", "today", "upcoming", "inbox"]);
   });
 });
