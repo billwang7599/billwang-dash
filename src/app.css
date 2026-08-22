@@ -6,9 +6,12 @@
   display: grid;
   grid-template-columns: 15.5rem minmax(0, 1fr);
   min-height: 100vh;
+  transition: grid-template-columns 0.18s var(--ease);
 }
+.shell.is-collapsed { grid-template-columns: 3.75rem minmax(0, 1fr); }
 @media (max-width: 780px) {
-  .shell { grid-template-columns: 1fr; }
+  .shell,
+  .shell.is-collapsed { grid-template-columns: 1fr; }
   .sidebar { position: static !important; height: auto !important; }
 }
 
@@ -43,6 +46,20 @@
   background: var(--paper-2);
   border-right: 1px solid var(--rule);
 }
+.sidebar.is-collapsed { padding-inline: 0.5rem; overflow: hidden; }
+
+.sidebar-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.4rem;
+  margin-bottom: 1.4rem;
+}
+.sidebar.is-collapsed .sidebar-top {
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+}
 
 .sidebar .wordmark {
   font-family: var(--display);
@@ -52,10 +69,25 @@
   color: var(--ink);
   text-decoration: none;
   padding: 0 0.6rem;
-  margin-bottom: 1.4rem;
   font-variation-settings: "SOFT" 30, "WONK" 1;
 }
+.sidebar.is-collapsed .wordmark { padding: 0; }
+.sidebar.is-collapsed .wordmark-tail { display: none; }
 .sidebar .dot { color: var(--accent); }
+
+.sidebar-toggle {
+  border: 0;
+  background: none;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  line-height: 1;
+  color: var(--ink-3);
+  padding: 0.3rem 0.4rem;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: background 0.16s var(--ease), color 0.16s var(--ease);
+}
+.sidebar-toggle:hover { background: var(--paper-3); color: var(--ink); }
 
 .nav-head {
   font-family: var(--mono);
@@ -102,6 +134,34 @@
 .nav-item.is-active .nav-count { background: rgb(255 255 255 / 0.18); color: var(--paper); }
 .nav-count.is-urgent { background: var(--accent); color: var(--paper); }
 
+.nav-item.is-collapsed {
+  justify-content: center;
+  padding-inline: 0;
+  position: relative;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+}
+
+/* Stands in for the count badge, which has no room on a collapsed row. */
+.nav-pip {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  width: 0.3rem;
+  height: 0.3rem;
+  border-radius: 50%;
+  background: var(--ink-3);
+}
+.nav-item.is-active .nav-pip { background: var(--paper); }
+.nav-pip.is-urgent { background: var(--accent); }
+
+/* Collapsed hides the "Projects" heading, so the rule carries the break. */
+.nav-divided {
+  margin-top: 0.7rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--rule);
+}
+
 .sidebar-foot { margin-top: auto; }
 .whoami {
   font-family: var(--mono);
@@ -120,6 +180,23 @@
   padding: 0.35rem 0.65rem 0.2rem;
 }
 .signout:hover { color: var(--accent); text-decoration: underline; }
+
+/* Stacked on narrow screens there is no column to narrow, so "collapsed"
+   means hiding the menu outright and leaving just the wordmark and toggle. */
+@media (max-width: 780px) {
+  /* Rows stretch to fill the shell by default, which would leave the hidden
+     menu behind as an empty band of sidebar background. */
+  .shell.is-collapsed { align-content: start; }
+  .sidebar.is-collapsed { padding-inline: 1rem; }
+  .sidebar.is-collapsed .wordmark-tail { display: inline; }
+  .sidebar.is-collapsed .sidebar-top {
+    flex-direction: row;
+    align-items: baseline;
+    margin-bottom: 0;
+  }
+  .sidebar.is-collapsed nav,
+  .sidebar.is-collapsed .sidebar-foot { display: none; }
+}
 
 /* ---- Main --------------------------------------------------------------- */
 

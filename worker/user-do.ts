@@ -12,11 +12,14 @@ import {
   refreshAccessToken,
   type GoogleTokens,
 } from "./google.ts";
+import { NAV_KEYS } from "../shared/types.ts";
 import type {
   CalendarItem,
   DueDate,
   GoogleAccountStatus,
   GoogleCalendarSummary,
+  NavKey,
+  Preferences,
   Priority,
   Project,
   Recurrence,
@@ -65,6 +68,32 @@ const toProject = (r: ProjectRow): Project => ({
   isInbox: r.is_inbox === 1,
   order: r.sort_order,
 });
+
+/** The stored column is JSON, or '' until the user first reorders. */
+function parseStoredNavOrder(raw: string): string[] {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((k): k is string => typeof k === "string");
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Resolves a stored or client-supplied order into exactly one of every NAV_KEYS
+ * entry.
+ * Unknown and duplicate keys are dropped and missing ones appended, so a nav
+ * item added in a later release still shows up for existing users.
+ */
+export function resolveNavOrder(input: readonly string[]): NavKey[] {
+  const known = new Set<string>(NAV_KEYS);
+  const kept: NavKey[] = [];
+  for (const key of input) {
+    if (known.has(key) && !kept.includes(key as NavKey)) kept.push(key as NavKey);
+  }
+  return [...kept, ...NAV_KEYS.filter((k) => !kept.includes(k))];
+}
 
 export interface TaskInput {
   content: string;
@@ -190,6 +219,16 @@ export class UserDO extends DurableObject<Env> {
         INSERT INTO _migrations (id) VALUES (2);
       `);
     }
+
+    if (version < 3) {
+      // nav_order is a JSON array of NavKey; '' means "never customised", which
+      // resolveNavOrder turns back into the default order.
+      sql.exec(`
+        ALTER TABLE profile ADD COLUMN nav_order TEXT NOT NULL DEFAULT '';
+
+        INSERT INTO _migrations (id) VALUES (3);
+      `);
+    }
   }
 
   // ---- Profile -----------------------------------------------------------
@@ -198,24 +237,36 @@ export class UserDO extends DurableObject<Env> {
     this.sql.exec("UPDATE profile SET email = ?, name = ? WHERE id = 1", email, name);
   }
 
-  async setPreferences(prefs: { timeZone?: string; dateFormat?: "MDY" | "DMY" }): Promise<void> {
+  async setPreferences(prefs: Partial<Preferences>): Promise<void> {
     if (prefs.timeZone) {
       this.sql.exec("UPDATE profile SET time_zone = ? WHERE id = 1", prefs.timeZone);
     }
     if (prefs.dateFormat) {
       this.sql.exec("UPDATE profile SET date_format = ? WHERE id = 1", prefs.dateFormat);
     }
+    if (prefs.navOrder !== undefined) {
+      // Callers reach this straight from a request body, so the declared
+      // NavKey[] is a claim, not a guarantee — a non-array would not iterate.
+      const order = Array.isArray(prefs.navOrder) ? prefs.navOrder : [];
+      this.sql.exec(
+        "UPDATE profile SET nav_order = ? WHERE id = 1",
+        JSON.stringify(resolveNavOrder(order)),
+      );
+    }
   }
 
-  async getPreferences(): Promise<{ timeZone: string; dateFormat: "MDY" | "DMY" }> {
+  async getPreferences(): Promise<Preferences> {
     const row = this.sql
-      .exec<{ time_zone: string; date_format: string }>(
-        "SELECT time_zone, date_format FROM profile WHERE id = 1",
-      )
+      .exec<{
+        time_zone: string;
+        date_format: string;
+        nav_order: string;
+      }>("SELECT time_zone, date_format, nav_order FROM profile WHERE id = 1")
       .one();
     return {
       timeZone: row.time_zone,
       dateFormat: row.date_format === "DMY" ? "DMY" : "MDY",
+      navOrder: resolveNavOrder(parseStoredNavOrder(row.nav_order)),
     };
   }
 

@@ -125,3 +125,15 @@ export interface GoogleCalendarSummary {
   primary: boolean;
   enabled: boolean;
 }
+
+/** The fixed views in the sidebar, in the order a new user sees them. */
+export const NAV_KEYS = ["today", "upcoming", "inbox", "calendar"] as const;
+
+export type NavKey = (typeof NAV_KEYS)[number];
+
+export interface Preferences {
+  timeZone: string;
+  dateFormat: "MDY" | "DMY";
+  /** Sidebar view order, always a permutation of NAV_KEYS. */
+  navOrder: NavKey[];
+}

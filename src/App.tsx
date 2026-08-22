@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Task } from "../shared/types.ts";
+import type { NavKey, Task } from "../shared/types.ts";
 import { api, type AppState, type Preferences } from "./api.ts";
 import { QuickAdd } from "./components/QuickAdd.tsx";
 import { Settings } from "./components/Settings.tsx";
@@ -9,12 +9,35 @@ import { WeekCalendar } from "./components/WeekCalendar.tsx";
 import { todayKey } from "./format.ts";
 
 type View =
-  | { name: "today" }
-  | { name: "upcoming" }
-  | { name: "inbox" }
-  | { name: "calendar" }
+  | { name: NavKey }
   | { name: "settings" }
   | { name: "project"; id: string };
+
+/** Label and route for each reorderable nav item. */
+const NAV_VIEWS: Record<NavKey, { label: string; path: string }> = {
+  today: { label: "Today", path: "/app" },
+  upcoming: { label: "Upcoming", path: "/app/upcoming" },
+  inbox: { label: "Inbox", path: "/app/inbox" },
+  calendar: { label: "Calendar", path: "/app/calendar" },
+};
+
+/** What a sidebar row is being dragged out of; the two lists reorder apart. */
+type Drag = { kind: "nav" | "project"; id: string };
+
+/** Moves the matched item to the matched target's slot. Null if either is gone. */
+function reorder<T>(
+  items: readonly T[],
+  isMoving: (item: T) => boolean,
+  isTarget: (item: T) => boolean,
+): T[] | null {
+  const from = items.findIndex(isMoving);
+  const to = items.findIndex(isTarget);
+  if (from === -1 || to === -1) return null;
+
+  const next = [...items];
+  next.splice(to, 0, ...next.splice(from, 1));
+  return next;
+}
 
 function viewFromPath(pathname: string): View {
   const rest = pathname.replace(/^\/app\/?/, "").replace(/\/$/, "");
@@ -31,7 +54,9 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [editing, setEditing] = useState<Task | null>(null);
-  const [dragId, setDragId] = useState<string | null>(null);
+  const [drag, setDrag] = useState<Drag | null>(null);
+  // Not persisted: collapsing is a session-only UI preference, not a saved one.
+  const [collapsed, setCollapsed] = useState(false);
   const [view, setView] = useState<View>(() => viewFromPath(window.location.pathname));
   // Calendar data lives server-side; bump this to make it refetch after edits.
   const [revision, setRevision] = useState(0);
@@ -120,30 +145,51 @@ export function App() {
     [editing],
   );
 
-  /** Optimistic: the sidebar reorders immediately, the write follows. */
+  /**
+   * Optimistic: the sidebar reorders immediately, the write follows. The order
+   * is computed before setState rather than inside the updater — an updater has
+   * not necessarily run by the next line, so reading the result back out of one
+   * would leave the write with nothing to send.
+   */
   const dropProject = useCallback(
     (targetId: string) =>
       run(async () => {
-        if (!dragId || dragId === targetId) return;
-        let ids: string[] = [];
-        setState((prev) => {
-          if (!prev) return prev;
-          const others = prev.projects.filter((p) => !p.isInbox);
-          const from = others.findIndex((p) => p.id === dragId);
-          const to = others.findIndex((p) => p.id === targetId);
-          if (from === -1 || to === -1) return prev;
+        if (drag?.kind !== "project" || drag.id === targetId) return;
+        setDrag(null);
+        if (!state) return;
 
-          const next = [...others];
-          next.splice(to, 0, ...next.splice(from, 1));
-          ids = next.map((p) => p.id);
+        const others = state.projects.filter((p) => !p.isInbox);
+        const next = reorder(others, (p) => p.id === drag.id, (p) => p.id === targetId);
+        if (!next) return;
 
-          const inbox = prev.projects.filter((p) => p.isInbox);
-          return { ...prev, projects: [...inbox, ...next] };
-        });
-        setDragId(null);
-        if (ids.length) await api.reorderProjects(ids);
+        const inbox = state.projects.filter((p) => p.isInbox);
+        setState((prev) => (prev ? { ...prev, projects: [...inbox, ...next] } : prev));
+        await api.reorderProjects(next.map((p) => p.id));
       })(),
-    [dragId, run],
+    [drag, state, run],
+  );
+
+  /** Same optimistic reorder, over the fixed views instead of the projects. */
+  const dropNav = useCallback(
+    (targetKey: NavKey) =>
+      run(async () => {
+        if (drag?.kind !== "nav" || drag.id === targetKey) return;
+        setDrag(null);
+        if (!state) return;
+
+        const navOrder = reorder(
+          state.preferences.navOrder,
+          (k) => k === drag.id,
+          (k) => k === targetKey,
+        );
+        if (!navOrder) return;
+
+        setState((prev) =>
+          prev ? { ...prev, preferences: { ...prev.preferences, navOrder } } : prev,
+        );
+        await api.setPreferences({ navOrder });
+      })(),
+    [drag, state, run],
   );
 
   const setPreferences = useCallback((preferences: Preferences) => {
@@ -186,43 +232,51 @@ export function App() {
   const todayCount = state.tasks.filter((t) => t.due && t.due.date <= today).length;
 
   return (
-    <div className="shell">
+    <div className={`shell${collapsed ? " is-collapsed" : ""}`}>
       <div className="grain" aria-hidden="true" />
 
-      <aside className="sidebar">
-        <a className="wordmark" href="/">
-          dash<span className="dot">.</span>
-        </a>
+      <aside className={`sidebar${collapsed ? " is-collapsed" : ""}`}>
+        <div className="sidebar-top">
+          {/* The tail is dropped by CSS, not here: the narrow-screen layout
+              keeps the full wordmark even while the menu is collapsed. */}
+          <a className="wordmark" href="/">
+            d<span className="wordmark-tail">ash</span>
+            <span className="dot">.</span>
+          </a>
+          <button
+            className="sidebar-toggle"
+            onClick={() => setCollapsed(!collapsed)}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-expanded={!collapsed}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {collapsed ? "»" : "«"}
+          </button>
+        </div>
 
         <nav>
-          <NavItem
-            label="Today"
-            count={todayCount}
-            urgent={overdueCount > 0}
-            active={view.name === "today"}
-            onClick={() => navigate("/app")}
-          />
-          <NavItem
-            label="Upcoming"
-            active={view.name === "upcoming"}
-            onClick={() => navigate("/app/upcoming")}
-          />
-          <NavItem
-            label="Inbox"
-            active={view.name === "inbox"}
-            onClick={() => navigate("/app/inbox")}
-          />
-          <NavItem
-            label="Calendar"
-            active={view.name === "calendar"}
-            onClick={() => navigate("/app/calendar")}
-          />
+          {state.preferences.navOrder.map((key) => (
+            <NavItem
+              key={key}
+              label={NAV_VIEWS[key].label}
+              count={key === "today" ? todayCount : undefined}
+              urgent={key === "today" && overdueCount > 0}
+              active={view.name === key}
+              collapsed={collapsed}
+              onClick={() => navigate(NAV_VIEWS[key].path)}
+              draggable
+              dragging={drag?.kind === "nav" && drag.id === key}
+              onDragStart={() => setDrag({ kind: "nav", id: key })}
+              onDragEnd={() => setDrag(null)}
+              onDrop={() => dropNav(key)}
+            />
+          ))}
         </nav>
 
         {state.projects.filter((p) => !p.isInbox).length > 0 && (
           <>
-            <p className="nav-head">Projects</p>
-            <nav>
+            {!collapsed && <p className="nav-head">Projects</p>}
+            <nav className={collapsed ? "nav-divided" : undefined}>
               {state.projects
                 .filter((p) => !p.isInbox)
                 .map((project) => (
@@ -231,11 +285,12 @@ export function App() {
                     label={project.name}
                     count={state.tasks.filter((t) => t.projectId === project.id).length}
                     active={view.name === "project" && view.id === project.id}
+                    collapsed={collapsed}
                     onClick={() => navigate(`/app/project/${project.id}`)}
                     draggable
-                    dragging={dragId === project.id}
-                    onDragStart={() => setDragId(project.id)}
-                    onDragEnd={() => setDragId(null)}
+                    dragging={drag?.kind === "project" && drag.id === project.id}
+                    onDragStart={() => setDrag({ kind: "project", id: project.id })}
+                    onDragEnd={() => setDrag(null)}
                     onDrop={() => dropProject(project.id)}
                   />
                 ))}
@@ -247,14 +302,19 @@ export function App() {
           <NavItem
             label="Settings"
             active={view.name === "settings"}
+            collapsed={collapsed}
             onClick={() => navigate("/app/settings")}
           />
-          <p className="whoami">{state.user.email}</p>
-          {/* A plain link, not fetch(): signing out is a full navigation to
-              Cloudflare Access, and the in-memory app state must not survive it. */}
-          <a className="signout" href="/logout">
-            Sign out
-          </a>
+          {!collapsed && (
+            <>
+              <p className="whoami">{state.user.email}</p>
+              {/* A plain link, not fetch(): signing out is a full navigation to
+                  Cloudflare Access, and the in-memory app state must not survive it. */}
+              <a className="signout" href="/logout">
+                Sign out
+              </a>
+            </>
+          )}
         </div>
       </aside>
 
@@ -312,6 +372,7 @@ function NavItem({
   count,
   urgent,
   active,
+  collapsed,
   onClick,
   draggable,
   dragging,
@@ -323,6 +384,7 @@ function NavItem({
   count?: number;
   urgent?: boolean;
   active: boolean;
+  collapsed?: boolean;
   onClick: () => void;
   draggable?: boolean;
   dragging?: boolean;
@@ -330,10 +392,16 @@ function NavItem({
   onDragEnd?: () => void;
   onDrop?: () => void;
 }) {
+  const hasCount = count !== undefined && count > 0;
   return (
     <button
-      className={`nav-item${active ? " is-active" : ""}${dragging ? " is-dragging" : ""}`}
+      className={`nav-item${active ? " is-active" : ""}${dragging ? " is-dragging" : ""}${
+        collapsed ? " is-collapsed" : ""
+      }`}
       onClick={onClick}
+      // Collapsed rows are down to an initial, so the name lives in the tooltip.
+      title={collapsed ? label : undefined}
+      aria-label={collapsed ? label : undefined}
       draggable={draggable}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
@@ -348,9 +416,14 @@ function NavItem({
           : undefined
       }
     >
-      <span>{label}</span>
-      {count !== undefined && count > 0 && (
+      <span aria-hidden={collapsed || undefined}>
+        {collapsed ? label.slice(0, 1).toUpperCase() : label}
+      </span>
+      {hasCount && !collapsed && (
         <span className={`nav-count${urgent ? " is-urgent" : ""}`}>{count}</span>
+      )}
+      {hasCount && collapsed && (
+        <span className={`nav-pip${urgent ? " is-urgent" : ""}`} aria-hidden="true" />
       )}
     </button>
   );
