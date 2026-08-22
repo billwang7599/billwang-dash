@@ -3,7 +3,13 @@ import { parseQuickAdd } from "../shared/parser.ts";
 import { exchangeCode } from "./google.ts";
 import type { UserDO } from "./user-do.ts";
 import type { AuthedUser } from "./auth.ts";
-import type { CalendarItem, ParsedQuickAdd, Project, Task } from "../shared/types.ts";
+import type {
+  CalendarItem,
+  ParsedQuickAdd,
+  Preferences,
+  Project,
+  Task,
+} from "../shared/types.ts";
 
 /** API logic, independent of HTTP. Takes a DO stub, not a Hono context. */
 
@@ -22,7 +28,7 @@ export class ServiceError extends Error {
 export interface AppState {
   projects: Project[];
   tasks: Task[];
-  preferences: { timeZone: string; dateFormat: "MDY" | "DMY" };
+  preferences: Preferences;
   user: AuthedUser;
 }
 

@@ -1,14 +1,12 @@
 import type {
   CalendarItem,
   GoogleAccountStatus,
+  Preferences,
   Project,
   Task,
 } from "../shared/types.ts";
 
-export interface Preferences {
-  timeZone: string;
-  dateFormat: "MDY" | "DMY";
-}
+export type { Preferences };
 
 export interface AppState {
   projects: Project[];
