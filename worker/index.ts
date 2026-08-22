@@ -1,7 +1,9 @@
 import { Hono, type Context } from "hono";
+import type { z } from "zod";
 import { getUser, type AuthedUser } from "./auth.ts";
 import { UserDO } from "./user-do.ts";
 import { buildAuthUrl } from "./google.ts";
+import * as schemas from "./schemas.ts";
 import * as service from "./service.ts";
 import { ServiceError } from "./service.ts";
 
@@ -14,6 +16,28 @@ const app = new Hono<Ctx>();
 const stub = (c: Context<Ctx>) => c.env.USER_DO.getByName(c.get("user").id);
 const settings = (c: Context<Ctx>, msg: string) =>
   c.redirect(`/app/settings?google=${encodeURIComponent(msg)}`);
+
+/**
+ * The only way a request body should reach the service layer or the DO. Both a
+ * malformed payload and a schema failure surface as 400s via app.onError.
+ */
+async function body<T>(c: Context<Ctx>, schema: z.ZodType<T>): Promise<T> {
+  let raw: unknown;
+  try {
+    raw = await c.req.json();
+  } catch {
+    throw new ServiceError(400, "expected a JSON body");
+  }
+
+  const parsed = schema.safeParse(raw);
+  if (!parsed.success) {
+    const detail = parsed.error.issues
+      .map((i) => (i.path.length ? `${i.path.join(".")}: ${i.message}` : i.message))
+      .join("; ");
+    throw new ServiceError(400, detail);
+  }
+  return parsed.data;
+}
 
 app.onError((err, c) => {
   if (err instanceof ServiceError) return c.json({ error: err.message }, err.status);
@@ -37,12 +61,18 @@ app.get("/api/state", async (c) =>
 );
 
 app.post("/api/tasks", async (c) => {
-  const { text, timeZone } = await c.req.json<{ text?: string; timeZone?: string }>();
+  const { text, timeZone } = await body(c, schemas.quickAddBody);
   return c.json(await service.quickAddTask(stub(c), text, timeZone), 201);
 });
 
 app.patch("/api/tasks/:id", async (c) =>
-  c.json({ task: await service.updateTask(stub(c), c.req.param("id"), await c.req.json()) }),
+  c.json({
+    task: await service.updateTask(
+      stub(c),
+      c.req.param("id"),
+      await body(c, schemas.taskPatchBody),
+    ),
+  }),
 );
 
 app.post("/api/tasks/:id/complete", async (c) =>
@@ -59,12 +89,12 @@ app.delete("/api/tasks/:id", async (c) => {
 });
 
 app.post("/api/projects", async (c) => {
-  const { name, color } = await c.req.json<{ name?: string; color?: string }>();
+  const { name, color } = await body(c, schemas.createProjectBody);
   return c.json({ project: await service.createProject(stub(c), name, color) }, 201);
 });
 
 app.patch("/api/projects/order", async (c) => {
-  const { ids } = await c.req.json<{ ids?: unknown }>();
+  const { ids } = await body(c, schemas.reorderBody);
   await service.reorderProjects(stub(c), ids);
   return c.body(null, 204);
 });
@@ -76,7 +106,7 @@ app.delete("/api/projects/:id", async (c) => {
 
 app.patch("/api/preferences", async (c) => {
   const s = stub(c);
-  await s.setPreferences(await c.req.json());
+  await s.setPreferences(await body(c, schemas.preferencesBody));
   return c.json({ preferences: await s.getPreferences() });
 });
 
@@ -105,9 +135,9 @@ app.post("/api/google/disconnect", async (c) => {
 });
 
 app.patch("/api/google/calendars/:id", async (c) => {
-  const { enabled } = await c.req.json<{ enabled: boolean }>();
+  const { enabled } = await body(c, schemas.calendarToggleBody);
   const s = stub(c);
-  await s.setCalendarEnabled(c.req.param("id"), Boolean(enabled));
+  await s.setCalendarEnabled(c.req.param("id"), enabled);
   return c.json(await s.getGoogleStatus());
 });
 
