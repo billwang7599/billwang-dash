@@ -4,14 +4,13 @@
 
 .shell {
   display: grid;
-  grid-template-columns: 15.5rem minmax(0, 1fr);
+  /* Tracks the sidebar's own width so collapsing it is a sidebar-only
+     concern; the shell never needs to know its collapsed state. */
+  grid-template-columns: auto minmax(0, 1fr);
   min-height: 100vh;
-  transition: grid-template-columns 0.18s var(--ease);
 }
-.shell.is-collapsed { grid-template-columns: 3.75rem minmax(0, 1fr); }
 @media (max-width: 780px) {
-  .shell,
-  .shell.is-collapsed { grid-template-columns: 1fr; }
+  .shell { grid-template-columns: 1fr; }
   .sidebar { position: static !important; height: auto !important; }
 }
 
@@ -39,14 +38,16 @@
   position: sticky;
   top: 0;
   height: 100vh;
+  width: 15.5rem;
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
   padding: 1.6rem 1rem 1.2rem;
   background: var(--paper-2);
   border-right: 1px solid var(--rule);
+  transition: width 0.18s var(--ease);
 }
-.sidebar.is-collapsed { padding-inline: 0.5rem; overflow: hidden; }
+.sidebar.is-collapsed { width: 3.75rem; padding-inline: 0.5rem; overflow: hidden; }
 
 .sidebar-top {
   display: flex;
@@ -186,8 +187,9 @@
 @media (max-width: 780px) {
   /* Rows stretch to fill the shell by default, which would leave the hidden
      menu behind as an empty band of sidebar background. */
-  .shell.is-collapsed { align-content: start; }
-  .sidebar.is-collapsed { padding-inline: 1rem; }
+  .shell:has(.sidebar.is-collapsed) { align-content: start; }
+  /* The desktop collapse width would clip the toggle row on a stacked layout. */
+  .sidebar.is-collapsed { width: auto; padding-inline: 1rem; }
   .sidebar.is-collapsed .wordmark-tail { display: inline; }
   .sidebar.is-collapsed .sidebar-top {
     flex-direction: row;
