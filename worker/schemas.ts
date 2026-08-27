@@ -56,10 +56,6 @@ export const createProjectBody = z.object({
   color: z.string().optional(),
 });
 
-export const reorderBody = z.object({
-  ids: z.array(z.string()),
-});
-
 export const preferencesBody = z.object({
   timeZone: z.string().optional(),
   dateFormat: z.enum(["MDY", "DMY"]).optional(),

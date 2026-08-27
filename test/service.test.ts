@@ -76,48 +76,17 @@ describe("ServiceError maps to HTTP status", () => {
   });
 });
 
-describe("project reorder validation", () => {
-  const patchOrder = (body: string) =>
-    SELF.fetch("https://example.com/api/projects/order", {
-      method: "PATCH",
+describe("projects over HTTP", () => {
+  it("creates a project", async () => {
+    const res = await SELF.fetch("https://example.com/api/projects", {
+      method: "POST",
       headers: { "content-type": "application/json" },
-      body,
+      body: JSON.stringify({ name: "Launch" }),
     });
-
-  it("rejects a non-array ids field", async () => {
-    expect((await patchOrder(JSON.stringify({ ids: "nope" }))).status).toBe(400);
-  });
-
-  it("rejects non-string ids", async () => {
-    expect((await patchOrder(JSON.stringify({ ids: [1, 2] }))).status).toBe(400);
-  });
-
-  it("rejects a body that is not JSON at all", async () => {
-    expect((await patchOrder("not json")).status).toBe(400);
-  });
-
-  it("reorders over HTTP", async () => {
-    const create = async (name: string) => {
-      const res = await SELF.fetch("https://example.com/api/projects", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
-      return (await res.json<{ project: { id: string; name: string } }>()).project;
-    };
-    const a = await create("One");
-    const b = await create("Two");
-
-    const res = await SELF.fetch("https://example.com/api/projects/order", {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ids: [b.id, a.id] }),
-    });
-    expect(res.status).toBe(204);
-
-    const state = await SELF.fetch("https://example.com/api/state");
-    const { projects } = await state.json<{ projects: { name: string; isInbox: boolean }[] }>();
-    expect(projects.filter((p) => !p.isInbox).map((p) => p.name)).toEqual(["Two", "One"]);
+    expect(res.status).toBe(201);
+    const { project } = await res.json<{ project: { name: string; isInbox: boolean } }>();
+    expect(project.name).toBe("Launch");
+    expect(project.isInbox).toBe(false);
   });
 });
 
@@ -131,6 +100,16 @@ describe("preferences validation", () => {
 
   it("rejects an unknown dateFormat", async () => {
     expect((await patchPrefs({ dateFormat: "YMD" })).status).toBe(400);
+  });
+
+  // Generic body() helper behavior -- malformed JSON, not preferences-specific.
+  it("rejects a body that is not JSON at all", async () => {
+    const res = await SELF.fetch("https://example.com/api/preferences", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: "not json",
+    });
+    expect(res.status).toBe(400);
   });
 
   it("still accepts a valid partial update", async () => {

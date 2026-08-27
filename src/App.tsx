@@ -117,25 +117,6 @@ export function App() {
     [editing],
   );
 
-  /**
-   * Optimistic: the sidebar reorders immediately, the write follows. Sidebar
-   * computes the new order (it owns the drag gesture); App just persists it.
-   */
-  const reorderProjects = useCallback(
-    (ids: string[]) =>
-      run(async () => {
-        setState((prev) => {
-          if (!prev) return prev;
-          const byId = new Map(prev.projects.map((p) => [p.id, p]));
-          const inbox = prev.projects.filter((p) => p.isInbox);
-          const reordered = ids.map((id) => byId.get(id)).filter((p) => p !== undefined);
-          return { ...prev, projects: [...inbox, ...reordered] };
-        });
-        await api.reorderProjects(ids);
-      })(),
-    [run],
-  );
-
   const setPreferences = useCallback((preferences: Preferences) => {
     setState((prev) => (prev ? { ...prev, preferences } : prev));
   }, []);
@@ -174,7 +155,6 @@ export function App() {
         todayCount={todayCount}
         overdueCount={overdueCount}
         navigate={navigate}
-        onReorderProjects={reorderProjects}
       />
 
       <main className="main">

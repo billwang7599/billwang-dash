@@ -882,9 +882,3 @@
   cursor: pointer;
   color: inherit;
 }
-
-/* ---- Sidebar drag ------------------------------------------------------- */
-
-.nav-item[draggable="true"] { cursor: grab; }
-.nav-item.is-dragging { opacity: 0.4; cursor: grabbing; }
-.nav-item[draggable="true"]:active { cursor: grabbing; }

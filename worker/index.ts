@@ -93,12 +93,6 @@ app.post("/api/projects", async (c) => {
   return c.json({ project: await service.createProject(stub(c), name, color) }, 201);
 });
 
-app.patch("/api/projects/order", async (c) => {
-  const { ids } = await body(c, schemas.reorderBody);
-  await service.reorderProjects(stub(c), ids);
-  return c.body(null, 204);
-});
-
 app.delete("/api/projects/:id", async (c) => {
   await service.deleteProject(stub(c), c.req.param("id"));
   return c.body(null, 204);

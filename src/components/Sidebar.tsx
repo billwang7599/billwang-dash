@@ -8,7 +8,6 @@ interface Props {
   todayCount: number;
   overdueCount: number;
   navigate: (path: string) => void;
-  onReorderProjects: (ids: string[]) => void;
 }
 
 /** The two fixed views. Order is fixed too -- not user-reorderable. */
@@ -17,44 +16,9 @@ const NAV_VIEWS: { key: "inbox" | "calendar"; label: string; path: string }[] = 
   { key: "calendar", label: "Calendar", path: "/app/calendar" },
 ];
 
-/** The project row currently being dragged, if any. */
-type Drag = { id: string };
-
-/** Moves the matched item to the matched target's slot. Null if either is gone. */
-function reorder<T>(
-  items: readonly T[],
-  isMoving: (item: T) => boolean,
-  isTarget: (item: T) => boolean,
-): T[] | null {
-  const from = items.findIndex(isMoving);
-  const to = items.findIndex(isTarget);
-  if (from === -1 || to === -1) return null;
-
-  const next = [...items];
-  next.splice(to, 0, ...next.splice(from, 1));
-  return next;
-}
-
-export function Sidebar({
-  state,
-  view,
-  todayCount,
-  overdueCount,
-  navigate,
-  onReorderProjects,
-}: Props) {
-  const [drag, setDrag] = useState<Drag | null>(null);
+export function Sidebar({ state, view, todayCount, overdueCount, navigate }: Props) {
   // Not persisted: collapsing is a session-only UI preference, not a saved one.
   const [collapsed, setCollapsed] = useState(false);
-
-  const dropProject = (targetId: string) => {
-    if (!drag || drag.id === targetId) return;
-    setDrag(null);
-
-    const others = state.projects.filter((p) => !p.isInbox);
-    const next = reorder(others, (p) => p.id === drag.id, (p) => p.id === targetId);
-    if (next) onReorderProjects(next.map((p) => p.id));
-  };
 
   return (
     <aside className={`sidebar${collapsed ? " is-collapsed" : ""}`}>
@@ -104,11 +68,6 @@ export function Sidebar({
                   active={view.name === "project" && view.id === project.id}
                   collapsed={collapsed}
                   onClick={() => navigate(`/app/project/${project.id}`)}
-                  draggable
-                  dragging={drag?.id === project.id}
-                  onDragStart={() => setDrag({ id: project.id })}
-                  onDragEnd={() => setDrag(null)}
-                  onDrop={() => dropProject(project.id)}
                 />
               ))}
           </nav>
@@ -144,11 +103,6 @@ function NavItem({
   active,
   collapsed,
   onClick,
-  draggable,
-  dragging,
-  onDragStart,
-  onDragEnd,
-  onDrop,
 }: {
   label: string;
   count?: number;
@@ -156,35 +110,15 @@ function NavItem({
   active: boolean;
   collapsed?: boolean;
   onClick: () => void;
-  draggable?: boolean;
-  dragging?: boolean;
-  onDragStart?: () => void;
-  onDragEnd?: () => void;
-  onDrop?: () => void;
 }) {
   const hasCount = count !== undefined && count > 0;
   return (
     <button
-      className={`nav-item${active ? " is-active" : ""}${dragging ? " is-dragging" : ""}${
-        collapsed ? " is-collapsed" : ""
-      }`}
+      className={`nav-item${active ? " is-active" : ""}${collapsed ? " is-collapsed" : ""}`}
       onClick={onClick}
       // Collapsed rows are down to an initial, so the name lives in the tooltip.
       title={collapsed ? label : undefined}
       aria-label={collapsed ? label : undefined}
-      draggable={draggable}
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      // Without preventDefault the drop event never fires.
-      onDragOver={draggable ? (e) => e.preventDefault() : undefined}
-      onDrop={
-        onDrop
-          ? (e) => {
-              e.preventDefault();
-              onDrop();
-            }
-          : undefined
-      }
     >
       <span aria-hidden={collapsed || undefined}>
         {collapsed ? label.slice(0, 1).toUpperCase() : label}

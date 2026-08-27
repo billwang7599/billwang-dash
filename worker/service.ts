@@ -98,10 +98,6 @@ export async function createProject(
   return stub.createProject(name.trim(), color);
 }
 
-export async function reorderProjects(stub: Stub, ids: string[]): Promise<void> {
-  await stub.reorderProjects(ids);
-}
-
 export async function deleteProject(stub: Stub, id: string): Promise<void> {
   if (!(await stub.deleteProject(id))) {
     throw new ServiceError(400, "The Inbox cannot be deleted");
