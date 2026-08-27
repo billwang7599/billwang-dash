@@ -1,5 +1,4 @@
 import { useState } from "react";
-import type { NavKey } from "../../shared/types.ts";
 import type { AppState } from "../api.ts";
 import type { View } from "../App.tsx";
 
@@ -9,18 +8,17 @@ interface Props {
   todayCount: number;
   overdueCount: number;
   navigate: (path: string) => void;
-  onReorderNav: (navOrder: NavKey[]) => void;
   onReorderProjects: (ids: string[]) => void;
 }
 
-/** Label and route for each reorderable nav item. */
-const NAV_VIEWS: Record<NavKey, { label: string; path: string }> = {
-  inbox: { label: "Inbox", path: "/app" },
-  calendar: { label: "Calendar", path: "/app/calendar" },
-};
+/** The two fixed views. Order is fixed too -- not user-reorderable. */
+const NAV_VIEWS: { key: "inbox" | "calendar"; label: string; path: string }[] = [
+  { key: "inbox", label: "Inbox", path: "/app" },
+  { key: "calendar", label: "Calendar", path: "/app/calendar" },
+];
 
-/** What a sidebar row is being dragged out of; the two lists reorder apart. */
-type Drag = { kind: "nav" | "project"; id: string };
+/** The project row currently being dragged, if any. */
+type Drag = { id: string };
 
 /** Moves the matched item to the matched target's slot. Null if either is gone. */
 function reorder<T>(
@@ -43,27 +41,14 @@ export function Sidebar({
   todayCount,
   overdueCount,
   navigate,
-  onReorderNav,
   onReorderProjects,
 }: Props) {
   const [drag, setDrag] = useState<Drag | null>(null);
   // Not persisted: collapsing is a session-only UI preference, not a saved one.
   const [collapsed, setCollapsed] = useState(false);
 
-  const dropNav = (targetKey: NavKey) => {
-    if (drag?.kind !== "nav" || drag.id === targetKey) return;
-    setDrag(null);
-
-    const navOrder = reorder(
-      state.preferences.navOrder,
-      (k) => k === drag.id,
-      (k) => k === targetKey,
-    );
-    if (navOrder) onReorderNav(navOrder);
-  };
-
   const dropProject = (targetId: string) => {
-    if (drag?.kind !== "project" || drag.id === targetId) return;
+    if (!drag || drag.id === targetId) return;
     setDrag(null);
 
     const others = state.projects.filter((p) => !p.isInbox);
@@ -92,20 +77,15 @@ export function Sidebar({
       </div>
 
       <nav>
-        {state.preferences.navOrder.map((key) => (
+        {NAV_VIEWS.map(({ key, label, path }) => (
           <NavItem
             key={key}
-            label={NAV_VIEWS[key].label}
+            label={label}
             count={key === "inbox" ? todayCount : undefined}
             urgent={key === "inbox" && overdueCount > 0}
             active={view.name === key}
             collapsed={collapsed}
-            onClick={() => navigate(NAV_VIEWS[key].path)}
-            draggable
-            dragging={drag?.kind === "nav" && drag.id === key}
-            onDragStart={() => setDrag({ kind: "nav", id: key })}
-            onDragEnd={() => setDrag(null)}
-            onDrop={() => dropNav(key)}
+            onClick={() => navigate(path)}
           />
         ))}
       </nav>
@@ -125,8 +105,8 @@ export function Sidebar({
                   collapsed={collapsed}
                   onClick={() => navigate(`/app/project/${project.id}`)}
                   draggable
-                  dragging={drag?.kind === "project" && drag.id === project.id}
-                  onDragStart={() => setDrag({ kind: "project", id: project.id })}
+                  dragging={drag?.id === project.id}
+                  onDragStart={() => setDrag({ id: project.id })}
                   onDragEnd={() => setDrag(null)}
                   onDrop={() => dropProject(project.id)}
                 />

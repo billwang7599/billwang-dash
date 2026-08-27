@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { NavKey, Task } from "../shared/types.ts";
+import type { Task } from "../shared/types.ts";
 import { api, type AppState, type Preferences } from "./api.ts";
 import { QuickAdd } from "./components/QuickAdd.tsx";
 import { Settings } from "./components/Settings.tsx";
@@ -10,7 +10,8 @@ import { WeekCalendar } from "./components/WeekCalendar.tsx";
 import { todayKey } from "./format.ts";
 
 export type View =
-  | { name: NavKey }
+  | { name: "inbox" }
+  | { name: "calendar" }
   | { name: "settings" }
   | { name: "project"; id: string };
 
@@ -135,17 +136,6 @@ export function App() {
     [run],
   );
 
-  const reorderNav = useCallback(
-    (navOrder: NavKey[]) =>
-      run(async () => {
-        setState((prev) =>
-          prev ? { ...prev, preferences: { ...prev.preferences, navOrder } } : prev,
-        );
-        await api.setPreferences({ navOrder });
-      })(),
-    [run],
-  );
-
   const setPreferences = useCallback((preferences: Preferences) => {
     setState((prev) => (prev ? { ...prev, preferences } : prev));
   }, []);
@@ -184,7 +174,6 @@ export function App() {
         todayCount={todayCount}
         overdueCount={overdueCount}
         navigate={navigate}
-        onReorderNav={reorderNav}
         onReorderProjects={reorderProjects}
       />
 

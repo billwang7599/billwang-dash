@@ -1,13 +1,12 @@
 import { z } from "zod";
-import { NAV_KEYS } from "../shared/types.ts";
 
 /**
  * Request body shapes for /api. Hono's `c.req.json<T>()` only casts, so a body
  * reaching a typed method was an unchecked claim; these parse it instead.
  *
  * Writes only, deliberately. Rows read back out of the DO are repaired rather
- * than validated (see resolveNavOrder) — on a read there is nothing useful to
- * do with a rejection, because the bad data is already stored.
+ * than validated — on a read there is nothing useful to do with a rejection,
+ * because the bad data is already stored.
  */
 
 const nonEmpty = z.string().trim().min(1);
@@ -64,7 +63,6 @@ export const reorderBody = z.object({
 export const preferencesBody = z.object({
   timeZone: z.string().optional(),
   dateFormat: z.enum(["MDY", "DMY"]).optional(),
-  navOrder: z.array(z.enum(NAV_KEYS)).optional(),
 });
 
 export const calendarToggleBody = z.object({

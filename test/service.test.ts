@@ -129,23 +129,14 @@ describe("preferences validation", () => {
       body: JSON.stringify(body),
     });
 
-  // This route used to hand the raw body to setPreferences, so a non-array
-  // navOrder reached a for..of and 500ed.
-  it("rejects a navOrder that is not an array of nav keys", async () => {
-    for (const navOrder of [7, "nope", {}, ["nope"], [1]]) {
-      expect((await patchPrefs({ navOrder })).status).toBe(400);
-    }
-  });
-
   it("rejects an unknown dateFormat", async () => {
     expect((await patchPrefs({ dateFormat: "YMD" })).status).toBe(400);
   });
 
   it("still accepts a valid partial update", async () => {
-    const res = await patchPrefs({ navOrder: ["calendar"] });
+    const res = await patchPrefs({ timeZone: "America/Chicago" });
     expect(res.status).toBe(200);
-    const { preferences } = await res.json<{ preferences: { navOrder: string[] } }>();
-    // Resolved on the way in, so the absent key comes back appended.
-    expect(preferences.navOrder).toEqual(["calendar", "inbox"]);
+    const { preferences } = await res.json<{ preferences: { timeZone: string } }>();
+    expect(preferences.timeZone).toBe("America/Chicago");
   });
 });

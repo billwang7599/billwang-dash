@@ -1,7 +1,5 @@
 import { SELF, env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import { NAV_KEYS } from "../shared/types.ts";
-import { resolveNavOrder } from "../worker/user-do.ts";
 
 const stub = (name: string) => env.USER_DO.getByName(name);
 
@@ -191,62 +189,13 @@ describe("project ordering", () => {
   });
 });
 
-describe("sidebar preferences", () => {
-  it("defaults to the canonical nav order", async () => {
-    const prefs = await stub("nav1").getPreferences();
-    expect(prefs.navOrder).toEqual([...NAV_KEYS]);
-  });
-
-  it("persists a reordered sidebar", async () => {
-    const s = stub("nav2");
-    await s.setPreferences({ navOrder: ["calendar", "inbox"] });
-    expect((await s.getPreferences()).navOrder).toEqual(["calendar", "inbox"]);
-  });
-
-  it("leaves the other preferences alone", async () => {
-    const s = stub("nav4");
+describe("preferences", () => {
+  it("persists timeZone and dateFormat", async () => {
+    const s = stub("prefs1");
     await s.setPreferences({ timeZone: "America/Chicago", dateFormat: "DMY" });
-    await s.setPreferences({ navOrder: ["calendar", "inbox"] });
 
     const prefs = await s.getPreferences();
     expect(prefs.timeZone).toBe("America/Chicago");
     expect(prefs.dateFormat).toBe("DMY");
-  });
-
-  it("repairs a partial or junk order on the way in", async () => {
-    const s = stub("nav5");
-    await s.setPreferences({
-      navOrder: ["calendar", "calendar", "nope", "inbox"] as never,
-    });
-    // Duplicates and unknowns dropped.
-    expect((await s.getPreferences()).navOrder).toEqual(["calendar", "inbox"]);
-  });
-
-  // /api/preferences hands the request body straight to setPreferences, so the
-  // Partial<Preferences> type is unverified at runtime.
-  it("survives a navOrder that is not an array at all", async () => {
-    const s = stub("nav6");
-    for (const junk of [7, "nope", {}, null]) {
-      await s.setPreferences({ navOrder: junk } as never);
-      expect((await s.getPreferences()).navOrder).toEqual([...NAV_KEYS]);
-    }
-  });
-});
-
-describe("resolveNavOrder", () => {
-  it("returns the default for an empty or wholly unrecognisable list", () => {
-    expect(resolveNavOrder([])).toEqual([...NAV_KEYS]);
-    expect(resolveNavOrder(["nope", "bogus"])).toEqual([...NAV_KEYS]);
-  });
-
-  it("keeps the stored order and appends whatever it is missing", () => {
-    // The case a new nav item ships into: an order saved before it existed.
-    expect(resolveNavOrder(["calendar"])).toEqual(["calendar", "inbox"]);
-  });
-
-  it("always returns every key exactly once", () => {
-    const order = resolveNavOrder(["inbox", "inbox", "bogus"]);
-    expect([...order].sort()).toEqual([...NAV_KEYS].sort());
-    expect(order[0]).toBe("inbox");
   });
 });
