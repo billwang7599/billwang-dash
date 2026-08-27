@@ -199,16 +199,14 @@ describe("sidebar preferences", () => {
 
   it("persists a reordered sidebar", async () => {
     const s = stub("nav2");
-    await s.setPreferences({ navOrder: ["calendar", "inbox", "today", "upcoming"] });
-    expect((await s.getPreferences()).navOrder).toEqual([
-      "calendar", "inbox", "today", "upcoming",
-    ]);
+    await s.setPreferences({ navOrder: ["calendar", "inbox"] });
+    expect((await s.getPreferences()).navOrder).toEqual(["calendar", "inbox"]);
   });
 
   it("leaves the other preferences alone", async () => {
     const s = stub("nav4");
     await s.setPreferences({ timeZone: "America/Chicago", dateFormat: "DMY" });
-    await s.setPreferences({ navOrder: ["calendar", "inbox", "today", "upcoming"] });
+    await s.setPreferences({ navOrder: ["calendar", "inbox"] });
 
     const prefs = await s.getPreferences();
     expect(prefs.timeZone).toBe("America/Chicago");
@@ -220,17 +218,15 @@ describe("sidebar preferences", () => {
     await s.setPreferences({
       navOrder: ["calendar", "calendar", "nope", "inbox"] as never,
     });
-    // Duplicates and unknowns dropped, the rest appended in canonical order.
-    expect((await s.getPreferences()).navOrder).toEqual([
-      "calendar", "inbox", "today", "upcoming",
-    ]);
+    // Duplicates and unknowns dropped.
+    expect((await s.getPreferences()).navOrder).toEqual(["calendar", "inbox"]);
   });
 
   // /api/preferences hands the request body straight to setPreferences, so the
   // Partial<Preferences> type is unverified at runtime.
   it("survives a navOrder that is not an array at all", async () => {
     const s = stub("nav6");
-    for (const junk of [7, "today", {}, null]) {
+    for (const junk of [7, "nope", {}, null]) {
       await s.setPreferences({ navOrder: junk } as never);
       expect((await s.getPreferences()).navOrder).toEqual([...NAV_KEYS]);
     }
@@ -245,9 +241,7 @@ describe("resolveNavOrder", () => {
 
   it("keeps the stored order and appends whatever it is missing", () => {
     // The case a new nav item ships into: an order saved before it existed.
-    expect(resolveNavOrder(["calendar"])).toEqual([
-      "calendar", "today", "upcoming", "inbox",
-    ]);
+    expect(resolveNavOrder(["calendar"])).toEqual(["calendar", "inbox"]);
   });
 
   it("always returns every key exactly once", () => {

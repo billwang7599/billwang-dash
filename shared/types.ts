@@ -127,7 +127,7 @@ export interface GoogleCalendarSummary {
 }
 
 /** The fixed views in the sidebar, in the order a new user sees them. */
-export const NAV_KEYS = ["today", "upcoming", "inbox", "calendar"] as const;
+export const NAV_KEYS = ["inbox", "calendar"] as const;
 
 export type NavKey = (typeof NAV_KEYS)[number];
 

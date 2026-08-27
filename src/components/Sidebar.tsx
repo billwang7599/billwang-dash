@@ -15,9 +15,7 @@ interface Props {
 
 /** Label and route for each reorderable nav item. */
 const NAV_VIEWS: Record<NavKey, { label: string; path: string }> = {
-  today: { label: "Today", path: "/app" },
-  upcoming: { label: "Upcoming", path: "/app/upcoming" },
-  inbox: { label: "Inbox", path: "/app/inbox" },
+  inbox: { label: "Inbox", path: "/app" },
   calendar: { label: "Calendar", path: "/app/calendar" },
 };
 
@@ -98,8 +96,8 @@ export function Sidebar({
           <NavItem
             key={key}
             label={NAV_VIEWS[key].label}
-            count={key === "today" ? todayCount : undefined}
-            urgent={key === "today" && overdueCount > 0}
+            count={key === "inbox" ? todayCount : undefined}
+            urgent={key === "inbox" && overdueCount > 0}
             active={view.name === key}
             collapsed={collapsed}
             onClick={() => navigate(NAV_VIEWS[key].path)}

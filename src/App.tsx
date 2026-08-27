@@ -17,11 +17,10 @@ export type View =
 function viewFromPath(pathname: string): View {
   const rest = pathname.replace(/^\/app\/?/, "").replace(/\/$/, "");
   if (rest.startsWith("project/")) return { name: "project", id: rest.slice(8) };
-  if (rest === "upcoming") return { name: "upcoming" };
-  if (rest === "inbox") return { name: "inbox" };
   if (rest === "calendar") return { name: "calendar" };
   if (rest === "settings") return { name: "settings" };
-  return { name: "today" };
+  // Old bookmarks to /app or /app/upcoming land here too; Inbox is the home view.
+  return { name: "inbox" };
 }
 
 export function App() {
@@ -153,20 +152,9 @@ export function App() {
 
   const filtered = useMemo(() => {
     if (!state) return [];
-    const today = todayKey(state.preferences.timeZone);
-
-    switch (view.name) {
-      case "today":
-        return state.tasks.filter((t) => t.due && t.due.date <= today);
-      case "upcoming":
-        return state.tasks.filter((t) => t.due && t.due.date > today);
-      case "inbox":
-        return state.tasks.filter((t) => t.projectId === "inbox");
-      case "project":
-        return state.tasks.filter((t) => t.projectId === view.id);
-      default:
-        return state.tasks;
-    }
+    return view.name === "project"
+      ? state.tasks.filter((t) => t.projectId === view.id)
+      : state.tasks;
   }, [state, view]);
 
   if (error) {
@@ -226,7 +214,7 @@ export function App() {
               tasks={filtered}
               projects={state.projects}
               timeZone={state.preferences.timeZone}
-              groupByDate={view.name !== "inbox" && view.name !== "project"}
+              groupByDate={view.name !== "project"}
               emptyMessage={emptyFor(view)}
               onComplete={completeTask}
               onDelete={deleteTask}
@@ -251,10 +239,6 @@ export function App() {
 
 function titleFor(view: View, state: AppState): string {
   switch (view.name) {
-    case "today":
-      return "Today";
-    case "upcoming":
-      return "Upcoming";
     case "inbox":
       return "Inbox";
     case "project":
@@ -266,12 +250,8 @@ function titleFor(view: View, state: AppState): string {
 
 function emptyFor(view: View): string {
   switch (view.name) {
-    case "today":
-      return "Nothing due today. Enjoy it.";
-    case "upcoming":
-      return "Nothing scheduled ahead.";
     case "inbox":
-      return "Inbox is empty.";
+      return "Nothing here. Add a task to get started.";
     default:
       return "No tasks here yet.";
   }

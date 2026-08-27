@@ -132,7 +132,7 @@ describe("preferences validation", () => {
   // This route used to hand the raw body to setPreferences, so a non-array
   // navOrder reached a for..of and 500ed.
   it("rejects a navOrder that is not an array of nav keys", async () => {
-    for (const navOrder of [7, "today", {}, ["nope"], [1]]) {
+    for (const navOrder of [7, "nope", {}, ["nope"], [1]]) {
       expect((await patchPrefs({ navOrder })).status).toBe(400);
     }
   });
@@ -142,10 +142,10 @@ describe("preferences validation", () => {
   });
 
   it("still accepts a valid partial update", async () => {
-    const res = await patchPrefs({ navOrder: ["calendar", "today"] });
+    const res = await patchPrefs({ navOrder: ["calendar"] });
     expect(res.status).toBe(200);
     const { preferences } = await res.json<{ preferences: { navOrder: string[] } }>();
-    // Resolved on the way in, so the two absent keys come back appended.
-    expect(preferences.navOrder).toEqual(["calendar", "today", "upcoming", "inbox"]);
+    // Resolved on the way in, so the absent key comes back appended.
+    expect(preferences.navOrder).toEqual(["calendar", "inbox"]);
   });
 });
