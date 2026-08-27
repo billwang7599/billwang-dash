@@ -57,6 +57,7 @@ interface ProjectRow extends Record<string, SqlStorageValue> {
   color: string;
   is_inbox: number;
   sort_order: number;
+  created_at: string;
 }
 
 const toProject = (r: ProjectRow): Project => ({
@@ -65,6 +66,7 @@ const toProject = (r: ProjectRow): Project => ({
   color: r.color,
   isInbox: r.is_inbox === 1,
   order: r.sort_order,
+  createdAt: r.created_at,
 });
 
 export interface TaskInput {
@@ -202,6 +204,16 @@ export class UserDO extends DurableObject<Env> {
         INSERT INTO _migrations (id) VALUES (3);
       `);
     }
+
+    if (version < 4) {
+      // '' means "created before this column existed" -- sorts as oldest,
+      // the honest answer since the real creation time isn't known.
+      sql.exec(`
+        ALTER TABLE projects ADD COLUMN created_at TEXT NOT NULL DEFAULT '';
+
+        INSERT INTO _migrations (id) VALUES (4);
+      `);
+    }
   }
 
   // ---- Profile -----------------------------------------------------------
@@ -247,11 +259,12 @@ export class UserDO extends DurableObject<Env> {
 
     const id = crypto.randomUUID();
     const order = this.nextOrder("projects");
+    const createdAt = new Date().toISOString();
     this.sql.exec(
-      "INSERT INTO projects (id, name, color, is_inbox, sort_order) VALUES (?, ?, ?, 0, ?)",
-      id, name, color, order,
+      "INSERT INTO projects (id, name, color, is_inbox, sort_order, created_at) VALUES (?, ?, ?, 0, ?, ?)",
+      id, name, color, order, createdAt,
     );
-    return { id, name, color, isInbox: false, order };
+    return { id, name, color, isInbox: false, order, createdAt };
   }
 
   /** False if the Inbox was targeted; it is the fallback for untagged tasks. */

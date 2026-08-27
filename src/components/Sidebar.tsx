@@ -1,6 +1,18 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { AppState } from "../api.ts";
 import type { View } from "../App.tsx";
+
+type ProjectSort = "alphabetical" | "recent";
+
+const SORT_LABEL: Record<ProjectSort, string> = {
+  alphabetical: "A–Z",
+  recent: "Recent",
+};
+
+const NEXT_SORT: Record<ProjectSort, ProjectSort> = {
+  alphabetical: "recent",
+  recent: "alphabetical",
+};
 
 interface Props {
   state: AppState;
@@ -19,6 +31,15 @@ const NAV_VIEWS: { key: "inbox" | "calendar"; label: string; path: string }[] = 
 export function Sidebar({ state, view, todayCount, overdueCount, navigate }: Props) {
   // Not persisted: collapsing is a session-only UI preference, not a saved one.
   const [collapsed, setCollapsed] = useState(false);
+  // Not persisted either -- same reasoning as collapsed.
+  const [projectSort, setProjectSort] = useState<ProjectSort>("alphabetical");
+
+  const sortedProjects = useMemo(() => {
+    const others = state.projects.filter((p) => !p.isInbox);
+    return projectSort === "alphabetical"
+      ? [...others].sort((a, b) => a.name.localeCompare(b.name))
+      : [...others].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }, [state.projects, projectSort]);
 
   return (
     <aside className={`sidebar${collapsed ? " is-collapsed" : ""}`}>
@@ -54,22 +75,31 @@ export function Sidebar({ state, view, todayCount, overdueCount, navigate }: Pro
         ))}
       </nav>
 
-      {state.projects.filter((p) => !p.isInbox).length > 0 && (
+      {sortedProjects.length > 0 && (
         <>
-          {!collapsed && <p className="nav-head">Projects</p>}
+          {!collapsed && (
+            <div className="nav-head-row">
+              <p className="nav-head">Projects</p>
+              <button
+                className="sort-toggle"
+                onClick={() => setProjectSort(NEXT_SORT[projectSort])}
+                title="Change project sort order"
+              >
+                {SORT_LABEL[projectSort]}
+              </button>
+            </div>
+          )}
           <nav className={collapsed ? "nav-divided" : undefined}>
-            {state.projects
-              .filter((p) => !p.isInbox)
-              .map((project) => (
-                <NavItem
-                  key={project.id}
-                  label={project.name}
-                  count={state.tasks.filter((t) => t.projectId === project.id).length}
-                  active={view.name === "project" && view.id === project.id}
-                  collapsed={collapsed}
-                  onClick={() => navigate(`/app/project/${project.id}`)}
-                />
-              ))}
+            {sortedProjects.map((project) => (
+              <NavItem
+                key={project.id}
+                label={project.name}
+                count={state.tasks.filter((t) => t.projectId === project.id).length}
+                active={view.name === "project" && view.id === project.id}
+                collapsed={collapsed}
+                onClick={() => navigate(`/app/project/${project.id}`)}
+              />
+            ))}
           </nav>
         </>
       )}

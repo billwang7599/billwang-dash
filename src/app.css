@@ -96,9 +96,31 @@
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-3);
-  margin: 1.4rem 0 0.4rem;
+  margin: 0;
   padding: 0 0.65rem;
 }
+
+.nav-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  margin: 1.4rem 0 0.4rem;
+}
+
+.sort-toggle {
+  border: 0;
+  background: none;
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+  padding: 0.15rem 0.45rem;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: background 0.16s var(--ease), color 0.16s var(--ease);
+}
+.sort-toggle:hover { background: var(--paper-3); color: var(--ink); }
 
 .nav-item {
   display: flex;

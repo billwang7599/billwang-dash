@@ -32,6 +32,13 @@ describe("UserDO storage", () => {
     expect((await s.listProjects()).filter((p) => !p.isInbox)).toHaveLength(1);
   });
 
+  it("stamps a new project with its creation time", async () => {
+    const before = new Date().toISOString();
+    const project = await stub("u5").createProject("Launch");
+    expect(project.createdAt >= before).toBe(true);
+    expect(project.createdAt <= new Date().toISOString()).toBe(true);
+  });
+
   it("round-trips labels and due dates", async () => {
     const s = stub("u5");
     const created = await s.createTask({

@@ -55,6 +55,8 @@ export interface Project {
   color: string;
   isInbox: boolean;
   order: number;
+  /** ISO timestamp, or "" for a project created before this field existed. */
+  createdAt: string;
 }
 
 /** A span of the raw input consumed by the parser, for UI highlighting. */
