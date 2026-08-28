@@ -57,6 +57,7 @@ export interface Project {
   order: number;
   /** ISO timestamp, or "" for a project created before this field existed. */
   createdAt: string;
+  pinned: boolean;
 }
 
 /** A span of the raw input consumed by the parser, for UI highlighting. */

@@ -20,6 +20,7 @@ interface Props {
   todayCount: number;
   overdueCount: number;
   navigate: (path: string) => void;
+  onTogglePin: (id: string, pinned: boolean) => void;
 }
 
 /** The two fixed views. Order is fixed too -- not user-reorderable. */
@@ -28,17 +29,26 @@ const NAV_VIEWS: { key: "inbox" | "calendar"; label: string; path: string }[] = 
   { key: "calendar", label: "Calendar", path: "/app/calendar" },
 ];
 
-export function Sidebar({ state, view, todayCount, overdueCount, navigate }: Props) {
+export function Sidebar({
+  state,
+  view,
+  todayCount,
+  overdueCount,
+  navigate,
+  onTogglePin,
+}: Props) {
   // Not persisted: collapsing is a session-only UI preference, not a saved one.
   const [collapsed, setCollapsed] = useState(false);
   // Not persisted either -- same reasoning as collapsed.
   const [projectSort, setProjectSort] = useState<ProjectSort>("alphabetical");
 
-  const sortedProjects = useMemo(() => {
+  const { pinned, unpinned } = useMemo(() => {
     const others = state.projects.filter((p) => !p.isInbox);
-    return projectSort === "alphabetical"
-      ? [...others].sort((a, b) => a.name.localeCompare(b.name))
-      : [...others].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const sorted =
+      projectSort === "alphabetical"
+        ? [...others].sort((a, b) => a.name.localeCompare(b.name))
+        : [...others].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return { pinned: sorted.filter((p) => p.pinned), unpinned: sorted.filter((p) => !p.pinned) };
   }, [state.projects, projectSort]);
 
   return (
@@ -75,7 +85,27 @@ export function Sidebar({ state, view, todayCount, overdueCount, navigate }: Pro
         ))}
       </nav>
 
-      {sortedProjects.length > 0 && (
+      {pinned.length > 0 && (
+        <>
+          {!collapsed && <p className="nav-head">Pinned</p>}
+          <nav className={collapsed ? "nav-divided" : undefined}>
+            {pinned.map((project) => (
+              <ProjectRow
+                key={project.id}
+                label={project.name}
+                count={state.tasks.filter((t) => t.projectId === project.id).length}
+                active={view.name === "project" && view.id === project.id}
+                collapsed={collapsed}
+                pinned
+                onClick={() => navigate(`/app/project/${project.id}`)}
+                onTogglePin={() => onTogglePin(project.id, false)}
+              />
+            ))}
+          </nav>
+        </>
+      )}
+
+      {unpinned.length > 0 && (
         <>
           {!collapsed && (
             <div className="nav-head-row">
@@ -90,14 +120,16 @@ export function Sidebar({ state, view, todayCount, overdueCount, navigate }: Pro
             </div>
           )}
           <nav className={collapsed ? "nav-divided" : undefined}>
-            {sortedProjects.map((project) => (
-              <NavItem
+            {unpinned.map((project) => (
+              <ProjectRow
                 key={project.id}
                 label={project.name}
                 count={state.tasks.filter((t) => t.projectId === project.id).length}
                 active={view.name === "project" && view.id === project.id}
                 collapsed={collapsed}
+                pinned={false}
                 onClick={() => navigate(`/app/project/${project.id}`)}
+                onTogglePin={() => onTogglePin(project.id, true)}
               />
             ))}
           </nav>
@@ -160,5 +192,43 @@ function NavItem({
         <span className={`nav-pip${urgent ? " is-urgent" : ""}`} aria-hidden="true" />
       )}
     </button>
+  );
+}
+
+/**
+ * NavItem plus a pin toggle. The toggle is a sibling, not a child of the
+ * NavItem button -- a <button> can't nest another interactive control.
+ */
+function ProjectRow({
+  label,
+  count,
+  active,
+  collapsed,
+  pinned,
+  onClick,
+  onTogglePin,
+}: {
+  label: string;
+  count: number;
+  active: boolean;
+  collapsed: boolean;
+  pinned: boolean;
+  onClick: () => void;
+  onTogglePin: () => void;
+}) {
+  return (
+    <div className="nav-row">
+      <NavItem label={label} count={count} active={active} collapsed={collapsed} onClick={onClick} />
+      {!collapsed && (
+        <button
+          className="pin-toggle"
+          onClick={onTogglePin}
+          title={pinned ? "Unpin project" : "Pin project"}
+          aria-label={pinned ? "Unpin project" : "Pin project"}
+        >
+          {pinned ? "Unpin" : "Pin"}
+        </button>
+      )}
+    </div>
   );
 }

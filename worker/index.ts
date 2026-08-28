@@ -98,6 +98,13 @@ app.delete("/api/projects/:id", async (c) => {
   return c.body(null, 204);
 });
 
+app.patch("/api/projects/:id/pinned", async (c) => {
+  const { pinned } = await body(c, schemas.pinnedBody);
+  const project = await stub(c).setProjectPinned(c.req.param("id"), pinned);
+  if (!project) throw new ServiceError(404, "not found");
+  return c.json({ project });
+});
+
 app.patch("/api/preferences", async (c) => {
   const s = stub(c);
   await s.setPreferences(await body(c, schemas.preferencesBody));

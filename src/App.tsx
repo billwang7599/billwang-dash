@@ -105,6 +105,19 @@ export function App() {
     [run],
   );
 
+  const togglePinProject = useCallback(
+    (id: string, pinned: boolean) =>
+      run(async () => {
+        const { project } = await api.setProjectPinned(id, pinned);
+        setState((prev) =>
+          prev
+            ? { ...prev, projects: prev.projects.map((p) => (p.id === id ? project : p)) }
+            : prev,
+        );
+      })(),
+    [run],
+  );
+
   const saveTask = useCallback(
     async (patch: Record<string, unknown>) => {
       if (!editing) return;
@@ -155,6 +168,7 @@ export function App() {
         todayCount={todayCount}
         overdueCount={overdueCount}
         navigate={navigate}
+        onTogglePin={togglePinProject}
       />
 
       <main className="main">

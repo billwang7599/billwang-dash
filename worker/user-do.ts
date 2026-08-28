@@ -58,6 +58,7 @@ interface ProjectRow extends Record<string, SqlStorageValue> {
   is_inbox: number;
   sort_order: number;
   created_at: string;
+  pinned: number;
 }
 
 const toProject = (r: ProjectRow): Project => ({
@@ -67,6 +68,7 @@ const toProject = (r: ProjectRow): Project => ({
   isInbox: r.is_inbox === 1,
   order: r.sort_order,
   createdAt: r.created_at,
+  pinned: r.pinned === 1,
 });
 
 export interface TaskInput {
@@ -214,6 +216,14 @@ export class UserDO extends DurableObject<Env> {
         INSERT INTO _migrations (id) VALUES (4);
       `);
     }
+
+    if (version < 5) {
+      sql.exec(`
+        ALTER TABLE projects ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
+
+        INSERT INTO _migrations (id) VALUES (5);
+      `);
+    }
   }
 
   // ---- Profile -----------------------------------------------------------
@@ -264,7 +274,13 @@ export class UserDO extends DurableObject<Env> {
       "INSERT INTO projects (id, name, color, is_inbox, sort_order, created_at) VALUES (?, ?, ?, 0, ?, ?)",
       id, name, color, order, createdAt,
     );
-    return { id, name, color, isInbox: false, order, createdAt };
+    return { id, name, color, isInbox: false, order, createdAt, pinned: false };
+  }
+
+  async setProjectPinned(id: string, pinned: boolean): Promise<Project | null> {
+    this.sql.exec("UPDATE projects SET pinned = ? WHERE id = ?", pinned ? 1 : 0, id);
+    const [row] = this.sql.exec<ProjectRow>("SELECT * FROM projects WHERE id = ?", id).toArray();
+    return row ? toProject(row) : null;
   }
 
   /** False if the Inbox was targeted; it is the fallback for untagged tasks. */

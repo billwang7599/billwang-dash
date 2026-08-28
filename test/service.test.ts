@@ -88,6 +88,41 @@ describe("projects over HTTP", () => {
     expect(project.name).toBe("Launch");
     expect(project.isInbox).toBe(false);
   });
+
+  it("pins and unpins a project", async () => {
+    const create = await SELF.fetch("https://example.com/api/projects", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Pin me" }),
+    });
+    const { project } = await create.json<{ project: { id: string } }>();
+
+    const res = await SELF.fetch(`https://example.com/api/projects/${project.id}/pinned`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ pinned: true }),
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json<{ project: { pinned: boolean } }>()).project.pinned).toBe(true);
+  });
+
+  it("404s pinning a project that does not exist", async () => {
+    const res = await SELF.fetch("https://example.com/api/projects/ghost/pinned", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ pinned: true }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("rejects a non-boolean pinned value", async () => {
+    const res = await SELF.fetch("https://example.com/api/projects/inbox/pinned", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ pinned: "yes" }),
+    });
+    expect(res.status).toBe(400);
+  });
 });
 
 describe("preferences validation", () => {

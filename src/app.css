@@ -185,6 +185,30 @@
   border-top: 1px solid var(--rule);
 }
 
+.nav-row { position: relative; }
+
+/* Sits in the same slot as the count badge, revealed on hover instead of
+   stacking beside it -- there isn't room for both in a narrow sidebar. */
+.pin-toggle {
+  position: absolute;
+  top: 50%;
+  right: 0.5rem;
+  transform: translateY(-50%);
+  border: 0;
+  background: var(--paper-3);
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  color: var(--ink-2);
+  padding: 0.15rem 0.4rem;
+  border-radius: 100px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s var(--ease);
+}
+.nav-row:hover .pin-toggle,
+.pin-toggle:focus-visible { opacity: 1; }
+.nav-row:hover .nav-count { opacity: 0; }
+
 .sidebar-foot { margin-top: auto; }
 .whoami {
   font-family: var(--mono);

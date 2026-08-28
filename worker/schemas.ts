@@ -64,3 +64,7 @@ export const preferencesBody = z.object({
 export const calendarToggleBody = z.object({
   enabled: z.boolean(),
 });
+
+export const pinnedBody = z.object({
+  pinned: z.boolean(),
+});

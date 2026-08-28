@@ -75,6 +75,12 @@ export const api = {
   deleteProject: (id: string) =>
     request<void>(`/api/projects/${id}`, { method: "DELETE" }),
 
+  setProjectPinned: (id: string, pinned: boolean) =>
+    request<{ project: Project }>(`/api/projects/${id}/pinned`, {
+      method: "PATCH",
+      body: JSON.stringify({ pinned }),
+    }),
+
   setPreferences: (prefs: Partial<Preferences>) =>
     request<{ preferences: Preferences }>("/api/preferences", {
       method: "PATCH",

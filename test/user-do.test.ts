@@ -39,6 +39,22 @@ describe("UserDO storage", () => {
     expect(project.createdAt <= new Date().toISOString()).toBe(true);
   });
 
+  it("starts a new project unpinned, and pins/unpins on request", async () => {
+    const s = stub("u6");
+    const project = await s.createProject("Launch");
+    expect(project.pinned).toBe(false);
+
+    const pinned = await s.setProjectPinned(project.id, true);
+    expect(pinned?.pinned).toBe(true);
+
+    const unpinned = await s.setProjectPinned(project.id, false);
+    expect(unpinned?.pinned).toBe(false);
+  });
+
+  it("returns null pinning a project that does not exist", async () => {
+    expect(await stub("u7").setProjectPinned("ghost", true)).toBeNull();
+  });
+
   it("round-trips labels and due dates", async () => {
     const s = stub("u5");
     const created = await s.createTask({
