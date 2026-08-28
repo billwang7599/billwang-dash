@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { AppState } from "../api.ts";
 import type { View } from "../App.tsx";
+import { ProjectSearch } from "./ProjectSearch.tsx";
 
 type ProjectSort = "alphabetical" | "recent";
 
@@ -41,6 +42,19 @@ export function Sidebar({
   const [collapsed, setCollapsed] = useState(false);
   // Not persisted either -- same reasoning as collapsed.
   const [projectSort, setProjectSort] = useState<ProjectSort>("alphabetical");
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        // Ctrl+K opens the browser's own search bar in Firefox otherwise.
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const { pinned, unpinned } = useMemo(() => {
     const others = state.projects.filter((p) => !p.isInbox);
@@ -52,109 +66,132 @@ export function Sidebar({
   }, [state.projects, projectSort]);
 
   return (
-    <aside className={`sidebar${collapsed ? " is-collapsed" : ""}`}>
-      <div className="sidebar-top">
-        {/* The tail is dropped by CSS, not here: the narrow-screen layout
-            keeps the full wordmark even while the menu is collapsed. */}
-        <a className="wordmark" href="/">
-          d<span className="wordmark-tail">ash</span>
-          <span className="dot">.</span>
-        </a>
-        <button
-          className="sidebar-toggle"
-          onClick={() => setCollapsed(!collapsed)}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          aria-expanded={!collapsed}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          {collapsed ? "»" : "«"}
-        </button>
-      </div>
+    <>
+      <aside className={`sidebar${collapsed ? " is-collapsed" : ""}`}>
+        <div className="sidebar-top">
+          {/* The tail is dropped by CSS, not here: the narrow-screen layout
+              keeps the full wordmark even while the menu is collapsed. */}
+          <a className="wordmark" href="/">
+            d<span className="wordmark-tail">ash</span>
+            <span className="dot">.</span>
+          </a>
+          <button
+            className="sidebar-toggle"
+            onClick={() => setCollapsed(!collapsed)}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-expanded={!collapsed}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {collapsed ? "»" : "«"}
+          </button>
+        </div>
 
-      <nav>
-        {NAV_VIEWS.map(({ key, label, path }) => (
-          <NavItem
-            key={key}
-            label={label}
-            count={key === "inbox" ? todayCount : undefined}
-            urgent={key === "inbox" && overdueCount > 0}
-            active={view.name === key}
-            collapsed={collapsed}
-            onClick={() => navigate(path)}
-          />
-        ))}
-      </nav>
+        <nav>
+          {NAV_VIEWS.map(({ key, label, path }) => (
+            <NavItem
+              key={key}
+              label={label}
+              count={key === "inbox" ? todayCount : undefined}
+              urgent={key === "inbox" && overdueCount > 0}
+              active={view.name === key}
+              collapsed={collapsed}
+              onClick={() => navigate(path)}
+            />
+          ))}
+        </nav>
 
-      {pinned.length > 0 && (
-        <>
-          {!collapsed && <p className="nav-head">Pinned</p>}
-          <nav className={collapsed ? "nav-divided" : undefined}>
-            {pinned.map((project) => (
-              <ProjectRow
-                key={project.id}
-                label={project.name}
-                count={state.tasks.filter((t) => t.projectId === project.id).length}
-                active={view.name === "project" && view.id === project.id}
-                collapsed={collapsed}
-                pinned
-                onClick={() => navigate(`/app/project/${project.id}`)}
-                onTogglePin={() => onTogglePin(project.id, false)}
-              />
-            ))}
-          </nav>
-        </>
-      )}
-
-      {unpinned.length > 0 && (
-        <>
-          {!collapsed && (
-            <div className="nav-head-row">
-              <p className="nav-head">Projects</p>
-              <button
-                className="sort-toggle"
-                onClick={() => setProjectSort(NEXT_SORT[projectSort])}
-                title="Change project sort order"
-              >
-                {SORT_LABEL[projectSort]}
-              </button>
-            </div>
-          )}
-          <nav className={collapsed ? "nav-divided" : undefined}>
-            {unpinned.map((project) => (
-              <ProjectRow
-                key={project.id}
-                label={project.name}
-                count={state.tasks.filter((t) => t.projectId === project.id).length}
-                active={view.name === "project" && view.id === project.id}
-                collapsed={collapsed}
-                pinned={false}
-                onClick={() => navigate(`/app/project/${project.id}`)}
-                onTogglePin={() => onTogglePin(project.id, true)}
-              />
-            ))}
-          </nav>
-        </>
-      )}
-
-      <div className="sidebar-foot">
-        <NavItem
-          label="Settings"
-          active={view.name === "settings"}
-          collapsed={collapsed}
-          onClick={() => navigate("/app/settings")}
-        />
-        {!collapsed && (
+        {pinned.length > 0 && (
           <>
-            <p className="whoami">{state.user.email}</p>
-            {/* A plain link, not fetch(): signing out is a full navigation to
-                Cloudflare Access, and the in-memory app state must not survive it. */}
-            <a className="signout" href="/logout">
-              Sign out
-            </a>
+            {!collapsed && <p className="nav-head">Pinned</p>}
+            <nav className={collapsed ? "nav-divided" : undefined}>
+              {pinned.map((project) => (
+                <ProjectRow
+                  key={project.id}
+                  label={project.name}
+                  count={state.tasks.filter((t) => t.projectId === project.id).length}
+                  active={view.name === "project" && view.id === project.id}
+                  collapsed={collapsed}
+                  pinned
+                  onClick={() => navigate(`/app/project/${project.id}`)}
+                  onTogglePin={() => onTogglePin(project.id, false)}
+                />
+              ))}
+            </nav>
           </>
         )}
-      </div>
-    </aside>
+
+        {unpinned.length > 0 && (
+          <>
+            {!collapsed && (
+              <div className="nav-head-row">
+                <p className="nav-head">Projects</p>
+                <div className="nav-head-actions">
+                  <button
+                    className="sort-toggle"
+                    onClick={() => setSearchOpen(true)}
+                    title="Search projects (⌘K)"
+                    aria-label="Search projects"
+                  >
+                    Search
+                  </button>
+                  <button
+                    className="sort-toggle"
+                    onClick={() => setProjectSort(NEXT_SORT[projectSort])}
+                    title="Change project sort order"
+                  >
+                    {SORT_LABEL[projectSort]}
+                  </button>
+                </div>
+              </div>
+            )}
+            <nav className={collapsed ? "nav-divided" : undefined}>
+              {unpinned.map((project) => (
+                <ProjectRow
+                  key={project.id}
+                  label={project.name}
+                  count={state.tasks.filter((t) => t.projectId === project.id).length}
+                  active={view.name === "project" && view.id === project.id}
+                  collapsed={collapsed}
+                  pinned={false}
+                  onClick={() => navigate(`/app/project/${project.id}`)}
+                  onTogglePin={() => onTogglePin(project.id, true)}
+                />
+              ))}
+            </nav>
+          </>
+        )}
+
+        <div className="sidebar-foot">
+          <NavItem
+            label="Settings"
+            active={view.name === "settings"}
+            collapsed={collapsed}
+            onClick={() => navigate("/app/settings")}
+          />
+          {!collapsed && (
+            <>
+              <p className="whoami">{state.user.email}</p>
+              {/* A plain link, not fetch(): signing out is a full navigation to
+                  Cloudflare Access, and the in-memory app state must not survive it. */}
+              <a className="signout" href="/logout">
+                Sign out
+              </a>
+            </>
+          )}
+        </div>
+      </aside>
+
+      {searchOpen && (
+        <ProjectSearch
+          projects={[...pinned, ...unpinned]}
+          onSelect={(project) => {
+            setSearchOpen(false);
+            navigate(`/app/project/${project.id}`);
+          }}
+          onClose={() => setSearchOpen(false)}
+        />
+      )}
+    </>
   );
 }
 
