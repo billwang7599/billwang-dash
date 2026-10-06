@@ -189,6 +189,15 @@ rollover, the public/protected split, and calendar timezone placement.
 
 ---
 
+## Todo
+
+- [ ] **Expose the task list over MCP** (maybe a Todoist-compatible export), so
+  agents can read and act on a person's todos on their behalf. Open questions:
+  how agents authenticate given Access sits in front of `/api*`, and which
+  operations are safe to hand over (read vs. add vs. complete).
+
+---
+
 ## Commands
 
 | Command | Does |
