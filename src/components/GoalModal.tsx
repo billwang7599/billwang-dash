@@ -25,6 +25,13 @@ interface Props {
 /** Number fields stay strings while typing; junk becomes NaN, which the schema rejects. */
 const num = (s: string) => (s.trim() === "" ? NaN : Number(s));
 
+/**
+ * Plain text fields, not type="number": Safari lets letters into those and then
+ * shows its own unstyled popup. Dropping anything but digits and a point keeps
+ * the field clean; a stray second point is left for the schema to reject.
+ */
+export const numeric = (s: string) => s.replace(/[^\d.]/g, "");
+
 export function GoalModal({ goal, horizon: initialHorizon, today, onSave, onClose }: Props) {
     const [title, setTitle] = useState(goal?.title ?? "");
     const [why, setWhy] = useState(goal?.why ?? "");
@@ -61,6 +68,7 @@ export function GoalModal({ goal, horizon: initialHorizon, today, onSave, onClos
     const missing = [
         !title.trim() && "a goal",
         !yesNo && !(num(target) > 0) && "a target above 0 (or leave it blank)",
+        !yesNo && !(num(current) >= 0) && "progress as a number",
         !deadline && "a deadline",
     ].filter(Boolean);
     const mismatch = deadline ? horizonMismatch(horizon, today, deadline) : null;
@@ -88,7 +96,7 @@ export function GoalModal({ goal, horizon: initialHorizon, today, onSave, onClos
                 aria-label={goal ? "Edit goal" : "New goal"}
                 onMouseDown={(e) => e.stopPropagation()}
             >
-                <form onSubmit={save}>
+                <form onSubmit={save} noValidate>
                     <input
                         ref={titleRef}
                         className="modal-title"
@@ -131,12 +139,9 @@ export function GoalModal({ goal, horizon: initialHorizon, today, onSave, onClos
                         <label>
                             <span>Target</span>
                             <input
-                                type="number"
                                 inputMode="decimal"
-                                min="0"
-                                step="any"
                                 value={target}
-                                onChange={(e) => setTarget(e.target.value)}
+                                onChange={(e) => setTarget(numeric(e.target.value))}
                                 placeholder="blank = yes/no"
                             />
                         </label>
@@ -155,13 +160,10 @@ export function GoalModal({ goal, horizon: initialHorizon, today, onSave, onClos
                         <label>
                             <span>Progress so far</span>
                             <input
-                                type="number"
                                 inputMode="decimal"
-                                min="0"
-                                step="any"
                                 value={yesNo ? "" : current}
                                 disabled={yesNo}
-                                onChange={(e) => setCurrent(e.target.value)}
+                                onChange={(e) => setCurrent(numeric(e.target.value))}
                             />
                         </label>
 

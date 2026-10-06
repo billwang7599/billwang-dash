@@ -12,7 +12,7 @@ import {
 } from "../../shared/goals.ts";
 import { formatPlainDate } from "../format.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
-import { GoalModal } from "./GoalModal.tsx";
+import { GoalModal, numeric } from "./GoalModal.tsx";
 
 interface Props {
     goals: Goal[];
@@ -201,12 +201,9 @@ function GoalCard({
                         </button>
                         <input
                             className="goal-current"
-                            type="number"
                             inputMode="decimal"
-                            min="0"
-                            step="any"
                             value={draft}
-                            onChange={(e) => setDraft(e.target.value)}
+                            onChange={(e) => setDraft(numeric(e.target.value))}
                             onBlur={commit}
                             onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
                             aria-label="Progress so far"
