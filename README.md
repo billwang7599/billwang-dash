@@ -4,8 +4,8 @@ A Todoist-style todo list and calendar on Cloudflare Workers + Durable Objects,
 with Todoist's quick-add grammar and read-only Google Calendar.
 
 ```
-Design review #Work @deep p1 every other tuesday at 3pm for 90m
-└─ content ──┘ └proj┘ └lab┘ └p┘ └── recurrence ──┘ └time┘ └dur┘
+Design review #Work p1 every other tuesday at 3pm for 90m
+└─ content ──┘ └proj┘ └p┘ └── recurrence ──┘ └time┘ └dur┘
 ```
 
 ---
@@ -144,8 +144,13 @@ defence-in-depth that duplicated what the platform already provides.
 | Recurrence | `every day`, `every other tuesday`, `every! 3 days` | Repeat rule |
 | Priority | `p1`–`p4`, `!!1` | 1 = urgent, 4 = default |
 | Project | `#Work`, `#"Q3 Launch"` | Filed, created if new |
-| Label | `@urgent`, `@"deep work"` | Tags, repeatable |
 | Deadline | `{apr 15}` | Hard deadline, separate from due date |
+
+**Bulk import.** Pasting several lines into the quick-add bar opens an import
+modal: one task per line in the same grammar, a preview of what each line parses
+to, and creation on confirm. Blank lines and leading `-`, `*` or `•` bullets are ignored, a line
+with no content is skipped rather than failing the batch, and a batch is capped
+at 500 lines (`shared/import.ts`).
 
 **`every!` vs `every`.** A normal rule advances from the *scheduled* date, so a
 daily task completed three days late doesn't fire three times catching up.
