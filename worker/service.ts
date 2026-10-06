@@ -1,4 +1,5 @@
 import { civilFromDate, civilFromKey, civilKey } from "../shared/civil.ts";
+import type { Goal, GoalInput } from "../shared/goals.ts";
 import type { DayStatus, HabitDetail, HabitInput, HabitSummary } from "../shared/habits.ts";
 import { MAX_IMPORT_LINES, splitImportLines } from "../shared/import.ts";
 import { parseQuickAdd } from "../shared/parser.ts";
@@ -36,6 +37,7 @@ export interface AppState {
     tasks: Task[];
     preferences: Preferences;
     habits: HabitSummary[];
+    goals: Goal[];
     user: AuthedUser;
 }
 
@@ -45,14 +47,15 @@ export async function loadState(
     user: AuthedUser,
     includeCompleted: boolean,
 ): Promise<AppState> {
-    const [projects, tasks, preferences, habits] = await Promise.all([
+    const [projects, tasks, preferences, habits, goals] = await Promise.all([
         stub.listProjects(),
         stub.listTasks({ includeCompleted }),
         stub.getPreferences(),
         stub.listHabits(),
+        stub.listGoals(),
         stub.syncProfile(user.email, user.name),
     ]);
-    return { projects, tasks, preferences, habits, user };
+    return { projects, tasks, preferences, habits, goals, user };
 }
 
 /** Re-parses server-side so what is stored cannot disagree with the preview. */
@@ -216,6 +219,24 @@ export async function setHabitCheckin(
     if (!habit) throw new ServiceError(404, "not found");
     return habit;
 }
+
+// ---- Goals -----------------------------------------------------------------
+
+export const createGoal = (stub: Stub, input: GoalInput): Promise<Goal> => stub.createGoal(input);
+
+export async function updateGoal(stub: Stub, id: string, input: GoalInput): Promise<Goal> {
+    const goal = await stub.updateGoal(id, input);
+    if (!goal) throw new ServiceError(404, "not found");
+    return goal;
+}
+
+export async function setGoalProgress(stub: Stub, id: string, current: number): Promise<Goal> {
+    const goal = await stub.setGoalProgress(id, current);
+    if (!goal) throw new ServiceError(404, "not found");
+    return goal;
+}
+
+export const deleteGoal = (stub: Stub, id: string): Promise<void> => stub.deleteGoal(id);
 
 async function todayKey(stub: Stub): Promise<string> {
     const { timeZone } = await stub.getPreferences();

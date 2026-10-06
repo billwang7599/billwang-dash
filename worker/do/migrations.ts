@@ -229,4 +229,46 @@ export const migrations: Migration[] = [
             ALTER TABLE habits ADD COLUMN description TEXT NOT NULL DEFAULT '';
         `,
     },
+    // SMART goals. The horizon is picked by hand; done is current >= target.
+    {
+        version: 15,
+        sql: `
+            CREATE TABLE goals (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                why TEXT NOT NULL DEFAULT '',
+                horizon TEXT NOT NULL CHECK (horizon IN ('short', 'medium', 'long')),
+                target REAL NOT NULL,
+                current REAL NOT NULL DEFAULT 0,
+                unit TEXT NOT NULL DEFAULT '',
+                deadline TEXT NOT NULL,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+        `,
+    },
+    // A null target makes a yes/no goal. SQLite can't drop NOT NULL in place,
+    // so the table is rebuilt.
+    {
+        version: 16,
+        sql: `
+            CREATE TABLE goals_new (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                why TEXT NOT NULL DEFAULT '',
+                horizon TEXT NOT NULL CHECK (horizon IN ('short', 'medium', 'long')),
+                target REAL,
+                current REAL NOT NULL DEFAULT 0,
+                unit TEXT NOT NULL DEFAULT '',
+                deadline TEXT NOT NULL,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            INSERT INTO goals_new SELECT * FROM goals;
+            DROP TABLE goals;
+            ALTER TABLE goals_new RENAME TO goals;
+        `,
+    },
 ];

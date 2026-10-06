@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { eventProblem } from "../shared/events.ts";
+import { goalInputSchema } from "../shared/goals.ts";
 import { habitInputSchema } from "../shared/habits.ts";
 
 /**
@@ -101,6 +102,13 @@ export const eventBody = z
 export const habitCheckinBody = z.object({
     status: z.enum(["done", "skipped"]).nullable(),
     note: z.string().max(500).optional(),
+});
+
+/** One shape for create and edit; the rules live in shared/goals.ts so the editor applies the same ones. */
+export const goalBody = goalInputSchema;
+
+export const goalProgressBody = z.object({
+    current: z.number().min(0).max(1e9),
 });
 
 export const googlePushBody = z.object({

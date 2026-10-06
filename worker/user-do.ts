@@ -1,7 +1,9 @@
 import { DurableObject } from "cloudflare:workers";
 import { civilFromDate, civilKey } from "../shared/civil.ts";
+import type { Goal, GoalInput } from "../shared/goals.ts";
 import type { DayStatus, HabitDetail, HabitInput, HabitSummary } from "../shared/habits.ts";
 import * as eventStore from "./do/events.ts";
+import * as goalStore from "./do/goals.ts";
 import * as habitStore from "./do/habits.ts";
 import { GoogleSync } from "./do/google.ts";
 import { migrations } from "./do/migrations.ts";
@@ -259,6 +261,28 @@ export class UserDO extends DurableObject<Env> {
         note: string | undefined,
     ): Promise<HabitSummary | null> {
         return habitStore.setHabitCheckin(this.sql, this.todayKey(), id, day, status, note);
+    }
+
+    // ---- Goals -------------------------------------------------------------
+
+    async listGoals(): Promise<Goal[]> {
+        return goalStore.listGoals(this.sql);
+    }
+
+    async createGoal(input: GoalInput): Promise<Goal> {
+        return goalStore.createGoal(this.sql, input);
+    }
+
+    async updateGoal(id: string, input: GoalInput): Promise<Goal | null> {
+        return goalStore.updateGoal(this.sql, id, input);
+    }
+
+    async setGoalProgress(id: string, current: number): Promise<Goal | null> {
+        return goalStore.setGoalProgress(this.sql, id, current);
+    }
+
+    async deleteGoal(id: string): Promise<void> {
+        goalStore.deleteGoal(this.sql, id);
     }
 
     // ---- Google ------------------------------------------------------------

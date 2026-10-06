@@ -946,6 +946,67 @@
 }
 .habit-day-btn.is-on { background: var(--ink); border-color: var(--ink); color: var(--paper); }
 
+/* ---- Goals --------------------------------------------------------------- */
+
+.nav-head-link { border: 0; background: none; cursor: pointer; text-align: left; }
+.nav-head-link:hover,
+.nav-head-link.is-active { color: var(--ink); }
+
+.goal-nav { flex-direction: column; align-items: stretch; gap: 0.3rem; }
+.goal-nav-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.goal-bar { display: block; height: 6px; border-radius: 100px; background: var(--paper-3); overflow: hidden; }
+.goal-bar > span { display: block; height: 100%; background: var(--sage); border-radius: inherit; transition: width 0.25s var(--ease); }
+.goal-bar-thin { height: 3px; }
+
+.goals-view { max-width: 44rem; }
+.goal-section { margin-bottom: 1.8rem; }
+.goal-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.6rem; }
+.goal-section-head h2 { margin: 0; font-family: var(--display); font-size: 1.15rem; font-weight: 400; }
+.goal-section-hint { margin-left: 0.4rem; font-family: var(--mono); font-size: 0.65rem; letter-spacing: 0.06em; color: var(--ink-3); }
+.goal-empty { margin-inline: 0; }
+
+.goal-card { padding: 0.85rem 1rem; margin-bottom: 0.6rem; background: var(--card); border: 1px solid var(--rule); border-radius: var(--r-md); }
+.goal-card.is-done { opacity: 0.7; }
+.goal-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6rem; }
+.goal-card-head h3 { flex: 1; min-width: 0; margin: 0; font-size: 0.98rem; font-weight: 500; }
+.goal-card-actions { display: flex; flex: none; gap: 0.1rem; }
+.goal-why { margin: 0.25rem 0 0; font-size: 0.85rem; color: var(--ink-2); white-space: pre-wrap; }
+.goal-card .goal-bar { margin: 0.7rem 0 0.6rem; }
+
+.goal-card-foot { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem 1rem; }
+.goal-stepper { display: flex; align-items: center; gap: 0.35rem; }
+.goal-current {
+    width: 4.5rem;
+    font: inherit;
+    font-size: 0.88rem;
+    text-align: right;
+    padding: 0.25rem 0.4rem;
+    border: 1px solid var(--rule-2);
+    border-radius: var(--r-sm);
+    background: var(--paper);
+    color: var(--ink);
+}
+.goal-current:focus { outline: none; border-color: var(--ink-3); }
+.goal-of { font-size: 0.86rem; color: var(--ink-2); }
+.goal-due { margin: 0; font-size: 0.78rem; color: var(--ink-3); }
+.goal-due.is-overdue { color: var(--amber); }
+
+/* Yes/no goals: a round check before the title, like a task, with the rest indented to the title. */
+.goal-check { width: 20px; height: 20px; margin: 0.05rem 0 0; }
+.goal-card.is-yesno .goal-card-head { gap: 0.7rem; }
+.goal-card.is-yesno .goal-why,
+.goal-card.is-yesno .goal-card-foot { padding-left: calc(20px + 0.7rem); }
+.goal-card.is-yesno .goal-card-foot { margin-top: 0.2rem; }
+.goal-card.is-yesno.is-done h3 { text-decoration: line-through; text-decoration-color: var(--ink-3); }
+
+.goal-done > summary { cursor: pointer; margin: 0.3rem 0 0.6rem; font-size: 0.8rem; color: var(--ink-3); }
+
+.goal-modal { width: min(30rem, 100%); }
+.goal-field-label { display: block; margin-bottom: 0.3rem; font-family: var(--mono); font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); }
+.goal-horizons { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.goal-mismatch { color: var(--amber); }
+
 /* ---- Event editor -------------------------------------------------------- */
 
 .event-edit { width: min(30rem, 100%); }
@@ -1424,7 +1485,8 @@
     .modal-grid input,
     .modal-grid select,
     .modal-desc,
-    .event-fields input { font-size: 16px; }
+    .event-fields input,
+    .goal-current { font-size: 16px; }
 }
 
 /* ---- Narrow screens ------------------------------------------------------ */

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Goal, GoalInput } from "../shared/goals.ts";
 import type { HabitInput, HabitSummary } from "../shared/habits.ts";
 import type { Task } from "../shared/types.ts";
 import { api, type AppState, type Preferences } from "./api.ts";
 import { ConfirmDialog } from "./components/ConfirmDialog.tsx";
+import { GoalsView } from "./components/GoalsView.tsx";
 import { HabitModal } from "./components/HabitModal.tsx";
 import { HabitView } from "./components/HabitView.tsx";
 import { ImportModal } from "./components/ImportModal.tsx";
@@ -21,6 +23,7 @@ export type View =
     | { name: "calendar" }
     | { name: "settings" }
     | { name: "trash" }
+    | { name: "goals" }
     | { name: "habit"; id: string }
     | { name: "project"; id: string };
 
@@ -30,6 +33,7 @@ function viewFromPath(pathname: string): View {
     if (rest === "calendar") return { name: "calendar" };
     if (rest === "settings") return { name: "settings" };
     if (rest === "trash") return { name: "trash" };
+    if (rest === "goals") return { name: "goals" };
     if (rest.startsWith("habit/")) return { name: "habit", id: rest.slice(6) };
     // Old bookmarks to /app or /app/upcoming land here too; Inbox is the home view.
     return { name: "inbox" };
@@ -196,6 +200,51 @@ export function App() {
         [run, navigate],
     );
 
+    /** Puts a goal the server just returned into the list, adding it if it's new. */
+    const applyGoal = useCallback((goal: Goal) => {
+        setState((prev) => {
+            if (!prev) return prev;
+            const exists = prev.goals.some((g) => g.id === goal.id);
+            const goals = exists ? prev.goals.map((g) => (g.id === goal.id ? goal : g)) : [...prev.goals, goal];
+            // Same order as the server: soonest deadline first.
+            return { ...prev, goals: goals.sort((a, b) => a.deadline.localeCompare(b.deadline) || a.sortOrder - b.sortOrder) };
+        });
+    }, []);
+
+    const createGoal = useCallback(
+        async (input: GoalInput) => {
+            const { goal } = await api.createGoal(input);
+            applyGoal(goal);
+        },
+        [applyGoal],
+    );
+
+    const updateGoal = useCallback(
+        async (id: string, input: GoalInput) => {
+            const { goal } = await api.updateGoal(id, input);
+            applyGoal(goal);
+        },
+        [applyGoal],
+    );
+
+    const setGoalProgress = useCallback(
+        (id: string, current: number) =>
+            run(async () => {
+                const { goal } = await api.setGoalProgress(id, current);
+                applyGoal(goal);
+            })(),
+        [run, applyGoal],
+    );
+
+    const deleteGoal = useCallback(
+        (id: string) =>
+            run(async () => {
+                await api.deleteGoal(id);
+                setState((prev) => (prev ? { ...prev, goals: prev.goals.filter((g) => g.id !== id) } : prev));
+            })(),
+        [run],
+    );
+
     const importTasks = useCallback(
         async (text: string) => {
             if (!state) return;
@@ -315,7 +364,7 @@ export function App() {
                     </p>
                 )}
 
-                {view.name !== "settings" && view.name !== "calendar" && view.name !== "trash" && view.name !== "habit" && (
+                {view.name !== "settings" && view.name !== "calendar" && view.name !== "trash" && view.name !== "habit" && view.name !== "goals" && (
                     <QuickAdd
                         preferences={state.preferences}
                         projects={state.projects}
@@ -346,6 +395,15 @@ export function App() {
                             <p className="habit-empty">That habit doesn't exist any more.</p>
                         );
                     })()
+                ) : view.name === "goals" ? (
+                    <GoalsView
+                        goals={state.goals}
+                        today={today}
+                        onCreate={createGoal}
+                        onUpdate={updateGoal}
+                        onProgress={setGoalProgress}
+                        onDelete={deleteGoal}
+                    />
                 ) : view.name === "trash" ? (
                     <Trash projects={state.projects} onChanged={reload} />
                 ) : view.name === "calendar" ? (

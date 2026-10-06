@@ -159,6 +159,26 @@ app.put("/api/habits/:id/checkins/:day", async (c) => {
     });
 });
 
+app.post("/api/goals", async (c) => {
+    const input = await body(c, schemas.goalBody);
+    return c.json({ goal: await service.createGoal(stub(c), input) }, 201);
+});
+
+app.patch("/api/goals/:id", async (c) => {
+    const input = await body(c, schemas.goalBody);
+    return c.json({ goal: await service.updateGoal(stub(c), c.req.param("id"), input) });
+});
+
+app.put("/api/goals/:id/progress", async (c) => {
+    const { current } = await body(c, schemas.goalProgressBody);
+    return c.json({ goal: await service.setGoalProgress(stub(c), c.req.param("id"), current) });
+});
+
+app.delete("/api/goals/:id", async (c) => {
+    await service.deleteGoal(stub(c), c.req.param("id"));
+    return c.body(null, 204);
+});
+
 app.post("/api/projects", async (c) => {
     const { name, color } = await body(c, schemas.createProjectBody);
     return c.json({ project: await service.createProject(stub(c), name, color) }, 201);

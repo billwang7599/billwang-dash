@@ -8,6 +8,7 @@ import type {
     Task,
     Trash,
 } from "../shared/types.ts";
+import type { Goal, GoalInput } from "../shared/goals.ts";
 import type { DayStatus, HabitDetail, HabitInput, HabitSummary } from "../shared/habits.ts";
 
 export type { Preferences };
@@ -17,6 +18,7 @@ export interface AppState {
     tasks: Task[];
     preferences: Preferences;
     habits: HabitSummary[];
+    goals: Goal[];
     user: { id: string; email: string; name: string | null; isAdmin: boolean };
 }
 
@@ -102,6 +104,20 @@ export const api = {
             method: "PUT",
             body: JSON.stringify(note === undefined ? { status } : { status, note }),
         }),
+
+    createGoal: (input: GoalInput) =>
+        request<{ goal: Goal }>("/api/goals", { method: "POST", body: JSON.stringify(input) }),
+
+    updateGoal: (id: string, input: GoalInput) =>
+        request<{ goal: Goal }>(`/api/goals/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
+
+    setGoalProgress: (id: string, current: number) =>
+        request<{ goal: Goal }>(`/api/goals/${id}/progress`, {
+            method: "PUT",
+            body: JSON.stringify({ current }),
+        }),
+
+    deleteGoal: (id: string) => request<void>(`/api/goals/${id}`, { method: "DELETE" }),
 
     getTrash: () => request<Trash>("/api/trash"),
 

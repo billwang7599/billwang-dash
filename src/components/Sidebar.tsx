@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AppState } from "../api.ts";
 import type { View } from "../App.tsx";
+import { HORIZONS, isDone, progress } from "../../shared/goals.ts";
 import type { HabitSummary } from "../../shared/habits.ts";
 import type { Project } from "../../shared/types.ts";
 import { NARROW, useMediaQuery } from "../useMediaQuery.ts";
@@ -87,6 +88,15 @@ export function Sidebar({
     }, []);
 
     const [pendingDelete, setPendingDelete] = useState<Project | null>(null);
+
+    /** Open goals, short term first; within a horizon the server's deadline order holds. */
+    const openGoals = useMemo(
+        () =>
+            state.goals
+                .filter((g) => !isDone(g))
+                .sort((a, b) => HORIZONS.indexOf(a.horizon) - HORIZONS.indexOf(b.horizon)),
+        [state.goals],
+    );
 
     const deleteMessage = (project: Project) => {
         const n = state.tasks.filter((t) => t.projectId === project.id).length;
@@ -222,6 +232,43 @@ export function Sidebar({
                                     onDelete={() => setPendingDelete(project)}
                                 />
                             ))}
+                        </nav>
+                    </>
+                )}
+
+                {!collapsed && (
+                    <>
+                        <div className="nav-head-row">
+                            <button
+                                className={`nav-head nav-head-link${view.name === "goals" ? " is-active" : ""}`}
+                                onClick={() => go("/app/goals")}
+                            >
+                                Goals
+                            </button>
+                        </div>
+                        <nav>
+                            {openGoals.map((goal) => (
+                                <button
+                                    key={goal.id}
+                                    className="nav-item goal-nav"
+                                    onClick={() => go("/app/goals")}
+                                    title={
+                                        goal.target === null
+                                            ? undefined
+                                            : `${goal.current} / ${goal.target}${goal.unit ? ` ${goal.unit}` : ""}`
+                                    }
+                                >
+                                    <span className="goal-nav-title">{goal.title}</span>
+                                    {goal.target !== null && (
+                                        <span className="goal-bar goal-bar-thin" aria-hidden="true">
+                                            <span style={{ width: `${progress(goal) * 100}%` }} />
+                                        </span>
+                                    )}
+                                </button>
+                            ))}
+                            {openGoals.length === 0 && (
+                                <p className="habit-empty">Set something specific to aim for.</p>
+                            )}
                         </nav>
                     </>
                 )}
