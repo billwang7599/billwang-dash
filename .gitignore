@@ -152,3 +152,7 @@ src/*.d.ts
 
 # Wrangler local state
 .wrangler/
+
+# Claude Code instructions are personal, never committed
+CLAUDE.md
+.claude/
