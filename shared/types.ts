@@ -120,6 +120,9 @@ export interface CalendarItem {
     color?: string;
     htmlLink?: string;
     location?: string;
+    description?: string;
+    /** The Google calendar's name, for the details view. */
+    calendarName?: string;
 }
 
 export interface GooglePushStatus {

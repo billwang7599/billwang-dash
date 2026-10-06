@@ -267,7 +267,14 @@ export function App() {
                 ) : view.name === "trash" ? (
                     <Trash projects={state.projects} onChanged={reload} />
                 ) : view.name === "calendar" ? (
-                    <WeekCalendar timeZone={state.preferences.timeZone} revision={revision} />
+                    <WeekCalendar
+                        timeZone={state.preferences.timeZone}
+                        revision={revision}
+                        onOpenTask={(id) => {
+                            const task = state.tasks.find((t) => t.id === id);
+                            if (task) setEditing(task);
+                        }}
+                    />
                 ) : (
                     <>
                         <h1 className="view-title">{titleFor(view, state)}</h1>

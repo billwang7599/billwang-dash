@@ -1,4 +1,4 @@
-import { civilFromDate, civilFromKey, civilKey, diffDays } from "../shared/civil.ts";
+import { addDays, civilFromDate, civilFromKey, civilKey, diffDays } from "../shared/civil.ts";
 import type { DueDate, Priority, Recurrence } from "../shared/types.ts";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -40,6 +40,40 @@ export function formatDueLabel(due: DueDate, timeZone: string): string {
     if (due.time) parts.push(formatTime(due.time));
     if (due.recurrence) parts.push(formatRecurrence(due.recurrence));
     return parts.join(" · ");
+}
+
+/** "Tue, 4 Aug 2026": a plain calendar date, unlike formatDateLabel, which speaks in due-date terms ("3d overdue"). */
+function formatPlainDate(dateKey: string): string {
+    const civil = civilFromKey(dateKey);
+    if (!civil) return dateKey;
+    return utcDate(civil).toLocaleDateString("en-GB", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        timeZone: "UTC",
+    });
+}
+
+/**
+ * "Tue, 4 Aug 2026 · 10:00–11:00", "… · All day", or "Tue, 4 Aug 2026 – Thu, 6 Aug 2026".
+ * An all-day event's bounds are bare dates that the server stored as UTC midnight,
+ * so they are read as dates, never shifted into the user's zone.
+ */
+export function formatEventWhen(
+    item: { start: string; end: string; allDay: boolean },
+    timeZone: string,
+): string {
+    if (item.allDay) {
+        const first = item.start.slice(0, 10);
+        const endExclusive = civilFromKey(item.end.slice(0, 10));
+        const last = endExclusive ? civilKey(addDays(endExclusive, -1)) : first;
+        return last > first
+            ? `${formatPlainDate(first)} – ${formatPlainDate(last)}`
+            : `${formatPlainDate(first)} · All day`;
+    }
+    const day = civilKey(civilFromDate(new Date(item.start), timeZone));
+    return `${formatPlainDate(day)} · ${formatInstant(item.start, timeZone)}–${formatInstant(item.end, timeZone)}`;
 }
 
 export function formatDateLabel(dateKey: string, timeZone: string): string {

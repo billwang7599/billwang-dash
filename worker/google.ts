@@ -43,6 +43,7 @@ interface GoogleEvent {
     allDay: boolean;
     htmlLink?: string;
     location?: string;
+    description?: string;
     /** Set on events dash wrote, so they aren't shown twice. */
     dashTaskId?: string;
 }
@@ -204,6 +205,7 @@ export async function listEvents(
             summary?: string;
             htmlLink?: string;
             location?: string;
+            description?: string;
             extendedProperties?: { private?: { dashTaskId?: string } };
             start?: { dateTime?: string; date?: string };
             end?: { dateTime?: string; date?: string };
@@ -224,6 +226,7 @@ export async function listEvents(
                 allDay,
                 htmlLink: e.htmlLink,
                 location: e.location,
+                description: e.description,
                 dashTaskId: e.extendedProperties?.private?.dashTaskId,
             };
         });

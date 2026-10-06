@@ -599,6 +599,10 @@
 
 .dh-allday { display: flex; flex-direction: column; gap: 2px; margin-top: 0.25rem; }
 .allday {
+    border: 0;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
     font-size: 0.62rem;
     padding: 0.1rem 0.3rem;
     border-radius: 3px;
@@ -664,13 +668,16 @@
 
 .cal-ev {
     position: absolute;
+    border: 0;
+    font: inherit;
+    text-align: left;
     border-radius: 4px;
     padding: 0.2rem 0.35rem;
     overflow: hidden;
     font-size: 0.68rem;
     line-height: 1.25;
     z-index: 2;
-    cursor: default;
+    cursor: pointer;
     transition: transform 0.15s var(--ease), box-shadow 0.15s var(--ease);
 }
 .cal-ev:hover { transform: scale(1.015); box-shadow: var(--shadow-md); z-index: 4; }
@@ -692,8 +699,43 @@
 .cal-ev.task[data-p="2"] { border-left-color: var(--p2); background: var(--amber-soft); color: var(--p2); }
 .cal-ev.task[data-p="3"] { border-left-color: var(--p3); background: var(--indigo-soft); color: var(--p3); }
 
-.ev-title { display: block; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Wraps up to --lines (set from the event's height) and then ellipsises. */
+.ev-title {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: var(--lines, 1);
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    font-weight: 500;
+}
 .ev-time { display: block; font-family: var(--mono); font-size: 0.6rem; opacity: 0.75; }
+
+/* ---- Calendar event details ---------------------------------------------- */
+
+.event-modal { width: min(30rem, 100%); }
+.event-title {
+    margin: 0 0 0.9rem;
+    font-family: var(--display);
+    font-size: 1.35rem;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    overflow-wrap: anywhere;
+}
+.event-facts { display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 1rem; margin: 0; font-size: 0.88rem; }
+.event-facts dt { color: var(--ink-3); }
+.event-facts dd { margin: 0; overflow-wrap: anywhere; }
+.event-desc {
+    margin: 1rem 0 0;
+    padding-top: 0.9rem;
+    border-top: 1px solid var(--rule);
+    font-size: 0.86rem;
+    line-height: 1.5;
+    color: var(--ink-2);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-height: 14rem;
+    overflow-y: auto;
+}
 
 /* ---- Settings ----------------------------------------------------------- */
 

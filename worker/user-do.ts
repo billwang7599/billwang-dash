@@ -831,6 +831,8 @@ export class UserDO extends DurableObject<Env> {
                     color: cal.color,
                     htmlLink: event.htmlLink,
                     location: event.location,
+                    description: event.description,
+                    calendarName: cal.summary,
                 });
             }
         });

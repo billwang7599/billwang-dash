@@ -10,6 +10,8 @@ import {
 } from "../../shared/civil.ts";
 import type { CalendarItem } from "../../shared/types.ts";
 import { api } from "../api.ts";
+import { EventDetails } from "./EventDetails.tsx";
+import { layoutEvents } from "../eventLayout.ts";
 import { formatInstant } from "../format.ts";
 
 const HOUR_PX = 46;
@@ -20,6 +22,8 @@ interface Props {
     timeZone: string;
     /** Bumped by the parent whenever tasks change, to force a refetch. */
     revision: number;
+    /** A task on the calendar was clicked; the parent opens its editor. */
+    onOpenTask: (taskId: string) => void;
 }
 
 /**
@@ -29,13 +33,14 @@ interface Props {
  * created as "5pm in Chicago" should sit at 5pm on the Chicago row even when
  * you open the app from another country.
  */
-export function WeekCalendar({ timeZone, revision }: Props) {
+export function WeekCalendar({ timeZone, revision, onOpenTask }: Props) {
     const [weekStart, setWeekStart] = useState<Civil>(() =>
         startOfWeek(civilFromDate(new Date(), timeZone)),
     );
     const [items, setItems] = useState<CalendarItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [selected, setSelected] = useState<CalendarItem | null>(null);
     const gridRef = useRef<HTMLDivElement>(null);
 
     const days = useMemo(
@@ -86,6 +91,12 @@ export function WeekCalendar({ timeZone, revision }: Props) {
     const todayK = civilKey(civilFromDate(new Date(), timeZone));
     const nowMinutes = minutesOfDay(new Date(), timeZone);
 
+    /** Tasks have their own editor; Google events get a read-only details view. */
+    function open(item: CalendarItem) {
+        if (item.kind === "task") onOpenTask(item.id.replace(/^task:/, ""));
+        else setSelected(item);
+    }
+
     return (
         <div className="cal-wrap">
             <header className="cal-head">
@@ -123,13 +134,15 @@ export function WeekCalendar({ timeZone, revision }: Props) {
                             <span className="dh-num">{day.d}</span>
                             <div className="dh-allday">
                                 {byDay.get(key)?.allDay.map((item) => (
-                                    <span
+                                    <button
                                         key={item.id}
+                                        type="button"
                                         className={`allday ${item.kind}`}
                                         title={item.title}
+                                        onClick={() => open(item)}
                                     >
                                         {item.title}
-                                    </span>
+                                    </button>
                                 ))}
                             </div>
                         </div>
@@ -163,35 +176,45 @@ export function WeekCalendar({ timeZone, revision }: Props) {
                                 </div>
                             )}
 
-                            {layout(byDay.get(key)?.timed ?? []).map(({ item, column, columns }) => {
+                            {layoutEvents(byDay.get(key)?.timed ?? []).map(({ item, column, columns, span }) => {
                                 const startMin = (Date.parse(item.start) - dayStartMs) / 60_000;
                                 const endMin = (Date.parse(item.end) - dayStartMs) / 60_000;
                                 const height = Math.max(18, ((endMin - startMin) / 60) * HOUR_PX);
+                                // Let a long title wrap as far as the event is tall, instead of one clipped line.
+                                const showTime = height >= 50;
+                                const titleLines = Math.max(1, Math.floor((height - 10 - (showTime ? 13 : 0)) / 14));
 
                                 return (
-                                    <article
+                                    <button
                                         key={item.id}
+                                        type="button"
                                         className={`cal-ev ${item.kind}`}
                                         data-p={item.priority}
                                         style={{
                                             top: (startMin / 60) * HOUR_PX,
                                             height,
                                             left: `${(column / columns) * 100}%`,
-                                            width: `${(1 / columns) * 100}%`,
+                                            width: `${(span / columns) * 100}%`,
+                                            ["--lines" as string]: titleLines,
                                         }}
                                         title={`${item.title} — ${formatInstant(item.start, timeZone)}`}
+                                        onClick={() => open(item)}
                                     >
                                         <span className="ev-title">{item.title}</span>
-                                        {height > 34 && (
+                                        {showTime && (
                                             <span className="ev-time">{formatInstant(item.start, timeZone)}</span>
                                         )}
-                                    </article>
+                                    </button>
                                 );
                             })}
                         </div>
                     );
                 })}
             </div>
+
+            {selected && (
+                <EventDetails item={selected} timeZone={timeZone} onClose={() => setSelected(null)} />
+            )}
         </div>
     );
 }
@@ -200,27 +223,4 @@ function startOfWeek(civil: Civil): Civil {
     // Weeks run Monday-first; nextWeekday looks forward, so step back a week.
     const monday = nextWeekday(civil, 1, true);
     return civilKey(monday) === civilKey(civil) ? civil : addDays(monday, -7);
-}
-
-/**
- * Side-by-side placement for overlapping events.
- *
- * Greedy interval colouring: walk in start order and drop each event into the
- * first column whose last event has already finished. Good enough for a week
- * view and far simpler than a full sweep-line packer.
- */
-function layout(items: CalendarItem[]) {
-    const sorted = [...items].sort((a, b) => a.start.localeCompare(b.start));
-    const columnEnds: number[] = [];
-    const placed = sorted.map((item) => {
-        const start = Date.parse(item.start);
-        const end = Date.parse(item.end);
-        let column = columnEnds.findIndex((columnEnd) => columnEnd <= start);
-        if (column === -1) column = columnEnds.length;
-        columnEnds[column] = end;
-        return { item, column };
-    });
-
-    const columns = Math.max(1, columnEnds.length);
-    return placed.map((p) => ({ ...p, columns }));
 }
