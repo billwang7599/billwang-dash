@@ -19,6 +19,7 @@ export function Settings({ preferences, user, onPreferencesChange, onOpenTrash }
     const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
     const [confirmingPushOff, setConfirmingPushOff] = useState(false);
     const [pushBusy, setPushBusy] = useState(false);
+    const [syncing, setSyncing] = useState(false);
     const [firstName, setFirstName] = useState(preferences.firstName);
     const [lastName, setLastName] = useState(preferences.lastName);
     const nameChanged =
@@ -39,6 +40,18 @@ export function Settings({ preferences, user, onPreferencesChange, onOpenTrash }
 
     async function toggleCalendar(id: string, enabled: boolean) {
         setGoogle(await api.setCalendarEnabled(id, enabled));
+    }
+
+    async function syncNow() {
+        setSyncing(true);
+        setError(null);
+        try {
+            setGoogle(await api.syncGoogle());
+        } catch (e) {
+            setError((e as Error).message);
+        } finally {
+            setSyncing(false);
+        }
     }
 
     async function disconnect() {
@@ -79,6 +92,7 @@ export function Settings({ preferences, user, onPreferencesChange, onOpenTrash }
 
     return (
         <div className="settings">
+            <p className="hero-kicker">Settings</p>
             <a className="settings-wordmark" href="/">
                 dash<span className="dot">.</span>
             </a>
@@ -86,171 +100,193 @@ export function Settings({ preferences, user, onPreferencesChange, onOpenTrash }
             {notice && <p className="banner banner-ok">{notice}</p>}
             {error && <p className="banner banner-bad">{error}</p>}
 
-            <section className="panel">
-                <h2>Profile</h2>
-                <form
-                    className="name-fields"
-                    onSubmit={(e) => {
-                        e.preventDefault();
-                        if (nameChanged && nameValid) {
-                            void updatePrefs({ firstName: firstName.trim(), lastName: lastName.trim() });
-                        }
-                    }}
-                >
-                    <label className="field">
-                        <span>First name</span>
-                        <input
-                            value={firstName}
-                            maxLength={50}
-                            autoComplete="given-name"
-                            onChange={(e) => setFirstName(e.target.value)}
-                        />
-                    </label>
-                    <label className="field">
-                        <span>Last name</span>
-                        <input
-                            value={lastName}
-                            maxLength={50}
-                            autoComplete="family-name"
-                            onChange={(e) => setLastName(e.target.value)}
-                        />
-                    </label>
-                    <button type="submit" className="btn btn-quiet" disabled={!nameChanged || !nameValid}>
-                        Save name
-                    </button>
-                </form>
-                <dl className="kv">
-                    <dt>Signed in as</dt>
-                    <dd>{user.name ? `${user.name} · ${user.email}` : user.email}</dd>
-                    <dt>Identity</dt>
-                    <dd>Cloudflare Access{user.isAdmin ? " · admin" : ""}</dd>
-                </dl>
-                {/* A plain link, not fetch(): signing out is a full navigation to Cloudflare
-                    Access, and the in-memory app state must not survive it. */}
-                <a className="btn btn-quiet settings-signout" href="/logout">
-                    Sign out
-                </a>
-            </section>
-
-            <section className="panel">
-                <h2>Recently deleted</h2>
-                <p className="panel-note">Deleted projects and tasks wait here until you restore them or delete them for good.</p>
-                <button className="btn btn-quiet" onClick={onOpenTrash}>
-                    Open recently deleted
-                </button>
-            </section>
-
-            <section className="panel">
-                <h2>Google Calendar</h2>
-                <p className="panel-note">
-                    Your Google events appear beside scheduled tasks in the calendar view.
-                    dash can also add your tasks and its own events to a separate &ldquo;dash&rdquo; calendar
-                    in Google. It only ever changes that calendar, never your others.
-                </p>
-
-                {google?.connected ? (
-                    <>
-                        <div className="connected">
-                            <span className="dot-ok" aria-hidden="true" />
-                            <div>
-                                <strong>{google.email ?? "Connected"}</strong>
-                                <span className="connected-sub">
-                                    {google.lastSyncedAt
-                                        ? `last synced ${new Date(google.lastSyncedAt).toLocaleString()}`
-                                        : "not synced yet"}
-                                </span>
-                            </div>
-                            <button className="btn btn-quiet" onClick={() => setConfirmingDisconnect(true)}>
-                                Disconnect
+            <div className="settings-cols">
+                <div>
+                    <section className="panel">
+                        <h2>Profile</h2>
+                        <form
+                            className="name-fields"
+                            onSubmit={(e) => {
+                                e.preventDefault();
+                                if (nameChanged && nameValid) {
+                                    void updatePrefs({ firstName: firstName.trim(), lastName: lastName.trim() });
+                                }
+                            }}
+                        >
+                            <label className="field">
+                                <span>First name</span>
+                                <input
+                                    value={firstName}
+                                    maxLength={50}
+                                    autoComplete="given-name"
+                                    onChange={(e) => setFirstName(e.target.value)}
+                                />
+                            </label>
+                            <label className="field">
+                                <span>Last name</span>
+                                <input
+                                    value={lastName}
+                                    maxLength={50}
+                                    autoComplete="family-name"
+                                    onChange={(e) => setLastName(e.target.value)}
+                                />
+                            </label>
+                            <button type="submit" className="btn btn-quiet" disabled={!nameChanged || !nameValid}>
+                                Save name
                             </button>
+                        </form>
+                        <dl className="kv">
+                            <dt>Signed in as</dt>
+                            <dd>{user.name ? `${user.name} · ${user.email}` : user.email}</dd>
+                            <dt>Identity</dt>
+                            <dd>Cloudflare Access{user.isAdmin ? " · admin" : ""}</dd>
+                        </dl>
+                        {/* A plain link, not fetch(): signing out is a full navigation to Cloudflare
+                            Access, and the in-memory app state must not survive it. */}
+                        <a className="btn btn-quiet settings-signout" href="/logout">
+                            Sign out
+                        </a>
+                    </section>
+
+                    <section className="panel">
+                        <h2>Dates &amp; times</h2>
+
+                        <div className="field">
+                            <span id="tz-label">Timezone</span>
+                            <TimeZoneSelect
+                                value={preferences.timeZone}
+                                deviceZone={deviceTimeZone()}
+                                labelledBy="tz-label"
+                                onChange={(timeZone) => updatePrefs({ timeZone })}
+                            />
+                            <small>Task times follow this zone. Change it when you move.</small>
                         </div>
 
-                        <div className="push">
-                            {google.canWrite ? (
-                                <label className="push-toggle">
-                                    <input
-                                        type="checkbox"
-                                        checked={google.push.enabled}
-                                        disabled={pushBusy}
-                                        onChange={(e) =>
-                                            e.target.checked ? setPush(true) : setConfirmingPushOff(true)
-                                        }
-                                    />
-                                    <span>
-                                        <strong>Show my tasks and events in Google Calendar</strong>
-                                        <small>
-                                            {google.push.enabled
-                                                ? google.push.pending > 0
-                                                    ? `Syncing, ${google.push.pending} waiting…`
-                                                    : "Up to date. Your tasks and events are in your dash calendar."
-                                                : "Adds tasks with a due date, and your dash events, to a calendar called \u201Cdash\u201D."}
-                                        </small>
-                                    </span>
-                                </label>
-                            ) : (
-                                <div className="push-grant">
-                                    <p>
-                                        To show your tasks and events in Google, dash needs permission to create its
-                                        own calendar. You'll be asked to approve again.
-                                    </p>
-                                    <a className="btn btn-quiet" href="/api/google/connect">
-                                        Grant access
-                                    </a>
-                                </div>
-                            )}
-                            {google.push.error && <p className="push-error">{google.push.error}</p>}
+                        <label className="field">
+                            <span>Numeric date order</span>
+                            <select
+                                value={preferences.dateFormat}
+                                onChange={(e) => updatePrefs({ dateFormat: e.target.value as "MDY" | "DMY" })}
+                            >
+                                <option value="MDY">Month first — 3/5 is 5 March</option>
+                                <option value="DMY">Day first — 3/5 is 3 May</option>
+                            </select>
+                            <small>Only affects slash-separated dates like “3/5”.</small>
+                        </label>
+                    </section>
+
+                    <section className="panel panel-row">
+                        <div>
+                            <h2>Recently deleted</h2>
+                            <p className="panel-note">Deleted projects and tasks wait here until you restore them or delete them for good.</p>
                         </div>
-
-                        <ul className="callist">
-                            {google.calendars.map((cal) => (
-                                <li key={cal.id}>
-                                    <label>
-                                        <input
-                                            type="checkbox"
-                                            checked={cal.enabled}
-                                            onChange={(e) => toggleCalendar(cal.id, e.target.checked)}
-                                        />
-                                        <span className="swatch" style={{ background: cal.color }} aria-hidden="true" />
-                                        <span className="cal-name">{cal.summary}</span>
-                                        {cal.primary && <span className="tag">primary</span>}
-                                    </label>
-                                </li>
-                            ))}
-                        </ul>
-                    </>
-                ) : (
-                    <a className="btn btn-primary" href="/api/google/connect">
-                        Connect Google Calendar
-                    </a>
-                )}
-            </section>
-
-            <section className="panel">
-                <h2>Dates &amp; times</h2>
-
-                <div className="field">
-                    <span id="tz-label">Timezone</span>
-                    <TimeZoneSelect
-                        value={preferences.timeZone}
-                        deviceZone={deviceTimeZone()}
-                        labelledBy="tz-label"
-                        onChange={(timeZone) => updatePrefs({ timeZone })}
-                    />
-                    <small>Task times follow this zone. Change it when you move.</small>
+                        <button className="btn btn-quiet" onClick={onOpenTrash}>
+                            Open ›
+                        </button>
+                    </section>
                 </div>
+                <div>
+                    <section className="panel">
+                        <h2>Google Calendar</h2>
+                        <p className="panel-note">
+                            Your Google events appear beside scheduled tasks in the calendar view.
+                            dash can also add your tasks and its own events to a separate &ldquo;dash&rdquo; calendar
+                            in Google. It only ever changes that calendar, never your others.
+                        </p>
 
-                <label className="field">
-                    <span>Numeric date order</span>
-                    <select
-                        value={preferences.dateFormat}
-                        onChange={(e) => updatePrefs({ dateFormat: e.target.value as "MDY" | "DMY" })}
-                    >
-                        <option value="MDY">Month first — 3/5 is 5 March</option>
-                        <option value="DMY">Day first — 3/5 is 3 May</option>
-                    </select>
-                    <small>Only affects slash-separated dates like “3/5”.</small>
-                </label>
-            </section>
+                        {google?.connected ? (
+                            <>
+                                <div className="connected">
+                                    <span className="dot-ok" aria-hidden="true" />
+                                    <div>
+                                        <strong>{google.email ?? "Connected"}</strong>
+                                        <span className="connected-sub">
+                                            {syncing
+                                                ? "syncing…"
+                                                : google.lastSyncedAt
+                                                  ? `last synced ${new Date(google.lastSyncedAt).toLocaleString()}`
+                                                  : "not synced yet"}
+                                        </span>
+                                    </div>
+                                    <button className="btn btn-quiet" onClick={() => setConfirmingDisconnect(true)}>
+                                        Disconnect
+                                    </button>
+                                </div>
+                                {/* Events are cached (today for an hour, later days for six, past
+                                    days until this), so this is how to see a change made in Google now. */}
+                                <div className="sync-row">
+                                    <p className="panel-note">
+                                        Google events refresh on their own: today every hour, later days every
+                                        6 hours, past days only when you sync.
+                                    </p>
+                                    <button className="btn btn-quiet" onClick={syncNow} disabled={syncing}>
+                                        {syncing ? "Syncing…" : "Sync now"}
+                                    </button>
+                                </div>
+
+                                <div className="push">
+                                    {google.canWrite ? (
+                                        <label className="push-toggle">
+                                            <input
+                                                type="checkbox"
+                                                checked={google.push.enabled}
+                                                disabled={pushBusy}
+                                                onChange={(e) =>
+                                                    e.target.checked ? setPush(true) : setConfirmingPushOff(true)
+                                                }
+                                            />
+                                            <span>
+                                                <strong>Show my tasks and events in Google Calendar</strong>
+                                                <small>
+                                                    {google.push.enabled
+                                                        ? google.push.pending > 0
+                                                            ? `Syncing, ${google.push.pending} waiting…`
+                                                            : "Up to date. Your tasks and events are in your dash calendar."
+                                                        : "Adds tasks with a due date, and your dash events, to a calendar called \u201Cdash\u201D."}
+                                                </small>
+                                            </span>
+                                        </label>
+                                    ) : (
+                                        <div className="push-grant">
+                                            <p>
+                                                To show your tasks and events in Google, dash needs permission to create its
+                                                own calendar. You'll be asked to approve again.
+                                            </p>
+                                            <a className="btn btn-quiet" href="/api/google/connect">
+                                                Grant access
+                                            </a>
+                                        </div>
+                                    )}
+                                    {google.push.error && <p className="push-error">{google.push.error}</p>}
+                                </div>
+
+                                <ul className="callist">
+                                    {google.calendars.map((cal) => (
+                                        <li key={cal.id}>
+                                            <label>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={cal.enabled}
+                                                    onChange={(e) => toggleCalendar(cal.id, e.target.checked)}
+                                                />
+                                                <span className="swatch" style={{ background: cal.color }} aria-hidden="true" />
+                                                <span className="cal-name">{cal.summary}</span>
+                                                {cal.primary && <span className="tag">primary</span>}
+                                            </label>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </>
+                        ) : (
+                            <a className="btn btn-primary" href="/api/google/connect">
+                                Connect Google Calendar
+                            </a>
+                        )}
+                    </section>
+                </div>
+            </div>
+
+
 
             {confirmingPushOff && (
                 <ConfirmDialog

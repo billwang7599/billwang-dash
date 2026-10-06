@@ -4,6 +4,7 @@ import type { View } from "../App.tsx";
 import { HORIZONS, isDone, progress } from "../../shared/goals.ts";
 import type { HabitSummary } from "../../shared/habits.ts";
 import type { Project } from "../../shared/types.ts";
+import { goalColors } from "../projectColors.ts";
 import { projectDeleteMessage } from "../projectDelete.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { ProjectSearch } from "./ProjectSearch.tsx";
@@ -26,6 +27,8 @@ interface Props {
     todayCount: number;
     overdueCount: number;
     navigate: (path: string) => void;
+    /** Project id -> card colour, shown as a dot beside each project. */
+    colors: Map<string, string>;
     onTogglePin: (id: string, pinned: boolean) => void;
     onDeleteProject: (id: string) => void;
     /** Check today off (or undo it) from the sidebar. */
@@ -44,6 +47,7 @@ export function Sidebar({
     todayCount,
     overdueCount,
     navigate,
+    colors,
     onTogglePin,
     onDeleteProject,
     onCheckHabit,
@@ -78,6 +82,8 @@ export function Sidebar({
                 .sort((a, b) => HORIZONS.indexOf(a.horizon) - HORIZONS.indexOf(b.horizon)),
         [state.goals],
     );
+
+    const goalColor = useMemo(() => goalColors(state.goals), [state.goals]);
 
     const { pinned, unpinned } = useMemo(() => {
         const others = state.projects.filter((p) => !p.isInbox);
@@ -138,6 +144,7 @@ export function Sidebar({
                                 <ProjectRow
                                     key={project.id}
                                     label={project.name}
+                                    swatch={colors.get(project.id)}
                                     count={state.tasks.filter((t) => t.projectId === project.id).length}
                                     active={view.name === "project" && view.id === project.id}
                                     collapsed={collapsed}
@@ -185,6 +192,7 @@ export function Sidebar({
                                 <ProjectRow
                                     key={project.id}
                                     label={project.name}
+                                    swatch={colors.get(project.id)}
                                     count={state.tasks.filter((t) => t.projectId === project.id).length}
                                     active={view.name === "project" && view.id === project.id}
                                     collapsed={collapsed}
@@ -220,7 +228,14 @@ export function Sidebar({
                                             : `${goal.current} / ${goal.target}${goal.unit ? ` ${goal.unit}` : ""}`
                                     }
                                 >
-                                    <span className="goal-nav-title">{goal.title}</span>
+                                    <span className="nav-label goal-nav-title">
+                                        <span
+                                            className="nav-swatch"
+                                            style={{ background: goalColor.get(goal.id) }}
+                                            aria-hidden="true"
+                                        />
+                                        {goal.title}
+                                    </span>
                                     {goal.target !== null && (
                                         <span className="goal-bar goal-bar-thin" aria-hidden="true">
                                             <span style={{ width: `${progress(goal) * 100}%` }} />
@@ -322,6 +337,7 @@ export function Sidebar({
 
 function NavItem({
     label,
+    swatch,
     count,
     urgent,
     active,
@@ -329,6 +345,8 @@ function NavItem({
     onClick,
 }: {
     label: string;
+    /** A colour dot before the label (projects). */
+    swatch?: string;
     count?: number;
     urgent?: boolean;
     active: boolean;
@@ -344,7 +362,8 @@ function NavItem({
             title={collapsed ? label : undefined}
             aria-label={collapsed ? label : undefined}
         >
-            <span aria-hidden={collapsed || undefined}>
+            <span className="nav-label" aria-hidden={collapsed || undefined}>
+                {swatch && <span className="nav-swatch" style={{ background: swatch }} aria-hidden="true" />}
                 {collapsed ? label.slice(0, 1).toUpperCase() : label}
             </span>
             {hasCount && !collapsed && (
@@ -363,6 +382,7 @@ function NavItem({
  */
 function ProjectRow({
     label,
+    swatch,
     count,
     active,
     collapsed,
@@ -372,6 +392,7 @@ function ProjectRow({
     onDelete,
 }: {
     label: string;
+    swatch?: string;
     count: number;
     active: boolean;
     collapsed: boolean;
@@ -382,16 +403,34 @@ function ProjectRow({
 }) {
     return (
         <div className="nav-row">
-            <NavItem label={label} count={count} active={active} collapsed={collapsed} onClick={onClick} />
+            <NavItem
+                label={label}
+                swatch={swatch}
+                count={count}
+                active={active}
+                collapsed={collapsed}
+                onClick={onClick}
+            />
             {!collapsed && (
                 <div className="row-actions">
                     <button
-                        className="row-action"
+                        className={`row-action${pinned ? " is-on" : ""}`}
                         onClick={onTogglePin}
                         title={pinned ? "Unpin project" : "Pin project"}
                         aria-label={pinned ? "Unpin project" : "Pin project"}
+                        aria-pressed={pinned}
                     >
-                        {pinned ? "Unpin" : "Pin"}
+                        {/* A pushpin; filled while pinned. */}
+                        <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+                            <path
+                                d="M6 2h4l-.5 4 2.5 2.5v1H4v-1L6.5 6 6 2zM8 9.5V14"
+                                fill={pinned ? "currentColor" : "none"}
+                                stroke="currentColor"
+                                strokeWidth="1.4"
+                                strokeLinejoin="round"
+                                strokeLinecap="round"
+                            />
+                        </svg>
                     </button>
                     <button
                         className="row-action row-action-danger"
@@ -399,7 +438,17 @@ function ProjectRow({
                         title="Delete project"
                         aria-label="Delete project"
                     >
-                        Delete
+                        {/* A bin. */}
+                        <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+                            <path
+                                d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5M7 7v4M9 7v4"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.4"
+                                strokeLinejoin="round"
+                                strokeLinecap="round"
+                            />
+                        </svg>
                     </button>
                 </div>
             )}

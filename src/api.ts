@@ -5,6 +5,7 @@ import type {
     GoogleAccountStatus,
     Preferences,
     Project,
+    ProjectColor,
     Task,
     Trash,
 } from "../shared/types.ts";
@@ -21,6 +22,8 @@ export interface AppState {
     goals: Goal[];
     /** Tasks completed since Monday in the user's zone. */
     completedThisWeek: number;
+    /** The same, per project id; projects with none are left out. */
+    completedThisWeekByProject: Record<string, number>;
     user: { id: string; email: string; name: string | null; isAdmin: boolean };
 }
 
@@ -77,10 +80,12 @@ export const api = {
         request<{ task: Task }>(`/api/tasks/${id}/complete`, { method: "POST" }),
 
     /** Most recent first; pass the last task's completedAt for the next page. */
-    listCompleted: (before?: string) =>
-        request<{ tasks: Task[]; more: boolean }>(
-            `/api/tasks/completed${before ? `?before=${encodeURIComponent(before)}` : ""}`,
-        ),
+    listCompleted: (before?: string, projectId?: string) => {
+        const query = new URLSearchParams();
+        if (before) query.set("before", before);
+        if (projectId) query.set("project", projectId);
+        return request<{ tasks: Task[]; more: boolean }>(`/api/tasks/completed${query.size ? `?${query}` : ""}`);
+    },
 
     uncompleteTask: (id: string) =>
         request<{ task: Task }>(`/api/tasks/${id}/uncomplete`, { method: "POST" }),
@@ -157,6 +162,12 @@ export const api = {
     deleteProject: (id: string) =>
         request<void>(`/api/projects/${id}`, { method: "DELETE" }),
 
+    setProjectColor: (id: string, color: ProjectColor) =>
+        request<{ project: Project }>(`/api/projects/${id}/color`, {
+            method: "PATCH",
+            body: JSON.stringify({ color }),
+        }),
+
     setProjectPinned: (id: string, pinned: boolean) =>
         request<{ project: Project }>(`/api/projects/${id}/pinned`, {
             method: "PATCH",
@@ -175,6 +186,9 @@ export const api = {
         ),
 
     googleStatus: () => request<GoogleAccountStatus>("/api/google/status"),
+
+    /** Refetch Google events now rather than waiting for the cache to go stale. */
+    syncGoogle: () => request<GoogleAccountStatus>("/api/google/sync", { method: "POST" }),
 
     disconnectGoogle: () =>
         request<GoogleAccountStatus>("/api/google/disconnect", { method: "POST" }),

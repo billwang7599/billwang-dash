@@ -88,6 +88,23 @@ describe("completed tasks", () => {
         await s.uncompleteTask(c.id);
         expect((await s.listGoals())[0].stepsDone).toBe(1);
     });
+
+    it("lists and counts one project's completed tasks", async () => {
+        const s = stub("g-completed-project");
+        const a = await s.createTask({ content: "A", projectName: "School" });
+        const b = await s.createTask({ content: "B" });
+        const c = await s.createTask({ content: "C", projectName: "School" });
+        const today = new Date().toISOString().slice(0, 10);
+        for (const t of [a, b, c]) await s.completeTask(t.id, today);
+
+        const school = (await s.listCompletedTasks(null, 10, a.projectId)).tasks.map((t) => t.content);
+        expect(school.sort()).toEqual(["A", "C"]);
+        expect((await s.listCompletedTasks(null, 10)).tasks).toHaveLength(3);
+
+        const counts = await s.countCompletedThisWeekByProject();
+        expect(counts[a.projectId]).toBe(2);
+        expect(counts[b.projectId]).toBe(1);
+    });
 });
 
 describe("goals over HTTP", () => {

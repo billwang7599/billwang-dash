@@ -303,4 +303,28 @@ export const migrations: Migration[] = [
             ALTER TABLE profile ADD COLUMN last_name TEXT NOT NULL DEFAULT '';
         `,
     },
+    // A cache of the user's Google events, so the calendar doesn't call Google on
+    // every view. gcal_cache_days says when each calendar's day was last fetched;
+    // gcal_cache_events holds what came back. See worker/do/gcal-cache.ts.
+    {
+        version: 21,
+        sql: `
+            CREATE TABLE gcal_cache_days (
+                calendar_id TEXT NOT NULL,
+                day TEXT NOT NULL,
+                synced_at INTEGER NOT NULL,
+                PRIMARY KEY (calendar_id, day)
+            );
+            CREATE TABLE gcal_cache_events (
+                calendar_id TEXT NOT NULL,
+                event_id TEXT NOT NULL,
+                start TEXT NOT NULL,
+                end TEXT NOT NULL,
+                all_day INTEGER NOT NULL,
+                data TEXT NOT NULL,
+                PRIMARY KEY (calendar_id, event_id)
+            );
+            CREATE INDEX idx_gcal_cache_events_start ON gcal_cache_events(calendar_id, start);
+        `,
+    },
 ];

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { eventProblem } from "../shared/events.ts";
 import { goalInputSchema } from "../shared/goals.ts";
 import { habitInputSchema } from "../shared/habits.ts";
+import { PROJECT_COLORS } from "../shared/types.ts";
 
 /**
  * Request body shapes for /api. Hono's `c.req.json<T>()` only casts, so a body
@@ -72,6 +73,10 @@ export const taskPatchBody = z.object({
 export const createProjectBody = z.object({
     name: nonEmpty,
     color: z.string().optional(),
+});
+
+export const projectColorBody = z.object({
+    color: z.enum(PROJECT_COLORS),
 });
 
 export const preferencesBody = z.object({

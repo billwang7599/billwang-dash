@@ -25,6 +25,8 @@ import type {
     GoogleCalendarSummary,
     Preferences,
 } from "../../shared/types.ts";
+import { addDays, civilFromDate, civilFromKey, civilKey, weekday, zonedToUtcMs } from "../../shared/civil.ts";
+import * as cache from "./gcal-cache.ts";
 import * as eventStore from "./events.ts";
 import * as taskStore from "./tasks.ts";
 
@@ -116,6 +118,7 @@ export class GoogleSync {
         await this.removeDashCalendar();
         this.sql.exec("DELETE FROM google_account");
         this.sql.exec("DELETE FROM google_calendars");
+        cache.clear(this.sql);
     }
 
     async status(): Promise<GoogleAccountStatus> {
@@ -171,52 +174,93 @@ export class GoogleSync {
 
     /**
      * Adds the user's Google events to the dash items for a window, soonest first.
-     * Events are fetched live, not cached — a stale calendar is worse than an extra
-     * API call at this volume.
+     * Events come from the per-day cache (gcal-cache.ts); only days that are missing
+     * or stale are fetched from Google, a run of consecutive days per request. If
+     * Google can't be reached, whatever is cached is shown.
      */
     async calendarItems(items: CalendarItem[], startISO: string, endISO: string): Promise<CalendarItem[]> {
         const bySoonest = (list: CalendarItem[]) => list.sort((a, b) => a.start.localeCompare(b.start));
 
-        const accessToken = await this.getValidAccessToken();
-        if (!accessToken) return bySoonest(items);
-
         const enabled = this.storedCalendars().filter((c) => c.enabled);
-        if (enabled.length === 0) return bySoonest(items);
+        if (enabled.length === 0 || !this.isConnected()) return bySoonest(items);
 
-        // One bad calendar shouldn't blank the whole view.
-        const results = await Promise.allSettled(
-            enabled.map((cal) => listEvents(accessToken, cal.id, startISO, endISO)),
-        );
+        const { timeZone } = await this.getPreferences();
+        const now = Date.now();
+        const today = civilFromDate(new Date(now), timeZone);
+        const days = daysIn(startISO, endISO, timeZone);
+        const dayStart = (key: string) => new Date(zonedToUtcMs(civilFromKey(key)!, 0, timeZone)).toISOString();
+        const dayEnd = (key: string) =>
+            new Date(zonedToUtcMs(addDays(civilFromKey(key)!, 1), 0, timeZone)).toISOString();
 
-        results.forEach((result, i) => {
-            if (result.status !== "fulfilled") return;
-            const cal = enabled[i];
-            for (const event of result.value) {
-                // Events dash wrote are the tasks themselves, already shown as tasks.
-                if (event.dashTaskId) continue;
-                items.push({
-                    id: `gcal:${cal.id}:${event.id}`,
-                    kind: "gcal",
-                    title: event.summary,
-                    start: event.start,
-                    end: event.end,
-                    allDay: event.allDay,
-                    calendarId: cal.id,
-                    color: cal.color,
-                    htmlLink: event.htmlLink,
-                    location: event.location,
-                    description: event.description,
-                    calendarName: cal.summary,
-                });
+        const stale = new Map(enabled.map((cal) => [cal.id, cache.staleDays(this.sql, cal.id, days, civilKey(today), now)]));
+        if ([...stale.values()].some((d) => d.length > 0)) {
+            const accessToken = await this.getValidAccessToken();
+            if (accessToken) {
+                // One bad calendar shouldn't blank the whole view: it keeps its cache.
+                await Promise.allSettled(
+                    enabled.flatMap((cal) =>
+                        cache.runs(stale.get(cal.id)!).map(async ([first, last]) => {
+                            const from = dayStart(first);
+                            const to = dayEnd(last);
+                            const events = await listEvents(accessToken, cal.id, from, to);
+                            cache.replaceDays(this.sql, cal.id, first, last, from, to, events, now);
+                        }),
+                    ),
+                );
+                this.sql.exec(
+                    "UPDATE google_account SET last_synced_at = ? WHERE id = 1",
+                    new Date(now).toISOString(),
+                );
+                cache.prune(this.sql, today, days[0]);
             }
-        });
+        }
 
-        this.sql.exec(
-            "UPDATE google_account SET last_synced_at = ? WHERE id = 1",
-            new Date().toISOString(),
-        );
+        if (days.length > 0) {
+            const first = days[0];
+            const last = days[days.length - 1];
+            for (const cal of enabled) {
+                for (const event of cache.readDays(this.sql, cal.id, first, last, dayStart(first), dayEnd(last))) {
+                    items.push({
+                        id: `gcal:${cal.id}:${event.id}`,
+                        kind: "gcal",
+                        title: event.summary,
+                        start: event.start,
+                        end: event.end,
+                        allDay: event.allDay,
+                        calendarId: cal.id,
+                        color: cal.color,
+                        htmlLink: event.htmlLink,
+                        location: event.location,
+                        description: event.description,
+                        calendarName: cal.summary,
+                    });
+                }
+            }
+        }
 
         return bySoonest(items);
+    }
+
+    /**
+     * A manual sync: every cached day goes stale (past days included), then this
+     * week is fetched straight away so "last synced" moves. Other weeks refetch
+     * when they're next looked at.
+     */
+    async syncNow(): Promise<GoogleAccountStatus> {
+        cache.forgetSync(this.sql);
+        const { timeZone } = await this.getPreferences();
+        const today = civilFromDate(new Date(), timeZone);
+        const monday = addDays(today, -((weekday(today) + 6) % 7));
+        await this.calendarItems(
+            [],
+            new Date(zonedToUtcMs(monday, 0, timeZone)).toISOString(),
+            new Date(zonedToUtcMs(addDays(monday, 7), 0, timeZone)).toISOString(),
+        );
+        return this.status();
+    }
+
+    private isConnected(): boolean {
+        return this.sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM google_account").one().n > 0;
     }
 
     private storedCalendars(): GoogleCalendarSummary[] {
@@ -547,4 +591,13 @@ export class GoogleSync {
         this.clearPushState();
         await this.storage.deleteAlarm();
     }
+}
+
+/** The user-zone days a window covers: from the start's day to the day before the end. */
+function daysIn(startISO: string, endISO: string, timeZone: string): string[] {
+    const first = civilFromDate(new Date(startISO), timeZone);
+    const last = civilKey(civilFromDate(new Date(Date.parse(endISO) - 1), timeZone));
+    const out: string[] = [];
+    for (let d = first; civilKey(d) <= last && out.length < 62; d = addDays(d, 1)) out.push(civilKey(d));
+    return out;
 }

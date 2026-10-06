@@ -12,8 +12,10 @@ import {
 } from "../../shared/goals.ts";
 import type { Project, Task } from "../../shared/types.ts";
 import { formatPlainDate } from "../format.ts";
+import { goalColors } from "../projectColors.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { GoalModal, numeric } from "./GoalModal.tsx";
+import { Hero } from "./Hero.tsx";
 import { TaskList } from "./TaskList.tsx";
 
 interface Props {
@@ -64,59 +66,72 @@ export function GoalsView({
     const [editing, setEditing] = useState<Editing>(null);
     const [deleting, setDeleting] = useState<Goal | null>(null);
 
+    const colors = goalColors(goals);
+    const open = goals.filter((g) => !isDone(g));
+    const nextDue = Math.min(...open.map((g) => daysLeft(today, g.deadline)).filter((n) => n >= 0));
+
     return (
         <div className="goals-view">
-            <h1 className="view-title">Goals</h1>
+            <div className="view-bar">
+                <button className="btn btn-primary" onClick={() => setEditing({ horizon: "short" })}>
+                    + New goal
+                </button>
+            </div>
+            <Hero
+                kicker="SMART goals"
+                title="Goals"
+                stats={[
+                    { value: open.length, label: "open" },
+                    { value: Number.isFinite(nextDue) ? nextDue : "–", label: "days to the next" },
+                    { value: goals.reduce((n, g) => n + g.stepsDone, 0), label: "steps done" },
+                ]}
+            />
 
-            {HORIZONS.map((h) => {
-                const inHorizon = goals.filter((g) => g.horizon === h);
-                const active = inHorizon.filter((g) => !isDone(g));
-                const done = inHorizon.filter(isDone);
-                return (
-                    <section key={h} className="goal-section" aria-label={HORIZON_LABELS[h]}>
-                        <div className="goal-section-head">
-                            <h2>
-                                {HORIZON_LABELS[h]} <span className="goal-section-hint">{HORIZON_HINTS[h]}</span>
-                            </h2>
-                            <button className="sort-toggle" onClick={() => setEditing({ horizon: h })}>
-                                + Add
-                            </button>
-                        </div>
+            {/* One column per horizon, so short / medium / long read side by side. */}
+            <div className="goal-cols">
+                {HORIZONS.map((h) => {
+                    const inHorizon = goals.filter((g) => g.horizon === h);
+                    const active = inHorizon.filter((g) => !isDone(g));
+                    const done = inHorizon.filter(isDone);
+                    const card = (g: Goal) => (
+                        <GoalCard
+                            key={g.id}
+                            goal={g}
+                            color={colors.get(g.id)}
+                            today={today}
+                            steps={stepsOf(g.id)}
+                            stepProps={stepProps}
+                            onProgress={onProgress}
+                            onEdit={() => setEditing({ goal: g })}
+                            onDelete={() => setDeleting(g)}
+                        />
+                    );
+                    return (
+                        <section key={h} className="goal-section" aria-label={HORIZON_LABELS[h]}>
+                            <div className="goal-section-head">
+                                <h2>{HORIZON_LABELS[h]}</h2>
+                                <span className="goal-section-hint">{HORIZON_HINTS[h]}</span>
+                                <button className="sort-toggle" onClick={() => setEditing({ horizon: h })}>
+                                    + Add
+                                </button>
+                            </div>
 
-                        {active.map((g) => (
-                            <GoalCard
-                                key={g.id}
-                                goal={g}
-                                today={today}
-                                steps={stepsOf(g.id)}
-                                stepProps={stepProps}
-                                onProgress={onProgress}
-                                onEdit={() => setEditing({ goal: g })}
-                                onDelete={() => setDeleting(g)}
-                            />
-                        ))}
-                        {active.length === 0 && <p className="habit-empty goal-empty">No open goals here.</p>}
+                            {active.length > 0 ? (
+                                <div className="stack">{active.map(card)}</div>
+                            ) : (
+                                <p className="goal-empty">No open goals here.</p>
+                            )}
 
-                        {done.length > 0 && (
-                            <details className="goal-done">
-                                <summary>Completed ({done.length})</summary>
-                                {done.map((g) => (
-                                    <GoalCard
-                                        key={g.id}
-                                        goal={g}
-                                        today={today}
-                                        steps={stepsOf(g.id)}
-                                        stepProps={stepProps}
-                                        onProgress={onProgress}
-                                        onEdit={() => setEditing({ goal: g })}
-                                        onDelete={() => setDeleting(g)}
-                                    />
-                                ))}
-                            </details>
-                        )}
-                    </section>
-                );
-            })}
+                            {done.length > 0 && (
+                                <details className="goal-done">
+                                    <summary>{done.length} done</summary>
+                                    <div className="stack">{done.map(card)}</div>
+                                </details>
+                            )}
+                        </section>
+                    );
+                })}
+            </div>
 
             {editing && (
                 <GoalModal
@@ -146,6 +161,7 @@ export function GoalsView({
 
 function GoalCard({
     goal,
+    color,
     today,
     steps,
     stepProps,
@@ -154,6 +170,8 @@ function GoalCard({
     onDelete,
 }: {
     goal: Goal;
+    /** Card colour, from goalColors. */
+    color: string | undefined;
     today: string;
     steps: Task[];
     stepProps: StepProps;
@@ -174,16 +192,20 @@ function GoalCard({
     const done = isDone(goal);
     const yesNo = goal.target === null;
     const left = daysLeft(today, goal.deadline);
-    const due = done
-        ? "Done"
+    // The big number on the right and the words under it.
+    const [dueNum, dueLabel] = done
+        ? ["✓", "done"]
         : left > 0
-          ? `${left} day${left === 1 ? "" : "s"} left`
+          ? [left, `day${left === 1 ? "" : "s"} left`]
           : left === 0
-            ? "Due today"
-            : `${-left} day${left === -1 ? "" : "s"} overdue`;
+            ? ["0", "due today"]
+            : [-left, `day${left === -1 ? "" : "s"} overdue`];
 
     return (
-        <article className={`goal-card${done ? " is-done" : ""}${yesNo ? " is-yesno" : ""}`}>
+        <article
+            className={`goal-card${done ? " is-done" : ""}${yesNo ? " is-yesno" : ""}`}
+            style={color ? { ["--card-c" as string]: color } : undefined}
+        >
             <div className="goal-card-head">
                 {yesNo && (
                     <button
@@ -204,17 +226,61 @@ function GoalCard({
                         </svg>
                     </button>
                 )}
-                <h3>{goal.title}</h3>
-                <div className="goal-card-actions">
-                    <button className="sort-toggle" onClick={onEdit}>
-                        Edit
-                    </button>
-                    <button className="sort-toggle" onClick={onDelete}>
-                        Delete
-                    </button>
+                <div className="goal-title">
+                    <h3>{goal.title}</h3>
+                    <p className="goal-date">{formatPlainDate(goal.deadline)}</p>
                 </div>
+                <p className={`goal-left${!done && left < 0 ? " is-overdue" : ""}`}>
+                    <b>{dueNum}</b>
+                    {dueLabel}
+                </p>
+                {/* Edit and Delete tucked away so the card stays quiet. */}
+                <details className="goal-menu">
+                    <summary aria-label={`Actions for ${goal.title}`}>⋯</summary>
+                    <div className="goal-menu-list">
+                        <button onClick={onEdit}>Edit</button>
+                        <button onClick={onDelete}>Delete</button>
+                    </div>
+                </details>
             </div>
             {goal.why && <p className="goal-why">{goal.why}</p>}
+
+            {!yesNo && (
+                <div className="goal-measure">
+                    <div className="goal-stepper" role="group" aria-label="Progress">
+                        <input
+                            className="goal-current"
+                            inputMode="decimal"
+                            // As wide as what's typed, so the "/ target" sits right after it.
+                            style={{ width: `${Math.max(1, draft.length) + 0.3}ch` }}
+                            value={draft}
+                            onChange={(e) => setDraft(numeric(e.target.value))}
+                            onBlur={commit}
+                            onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+                            aria-label="Progress so far"
+                        />
+                        <span className="goal-of">
+                            / {goal.target}
+                            {goal.unit && ` ${goal.unit}`}
+                        </span>
+                        <button
+                            className="habit-step"
+                            onClick={() => onProgress(goal.id, Math.max(0, goal.current - 1))}
+                            disabled={goal.current <= 0}
+                            aria-label="One less"
+                        >
+                            −
+                        </button>
+                        <button
+                            className="habit-step"
+                            onClick={() => onProgress(goal.id, goal.current + 1)}
+                            aria-label="One more"
+                        >
+                            +
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {goal.target !== null && (
                 <div
@@ -229,45 +295,7 @@ function GoalCard({
                 </div>
             )}
 
-            <div className="goal-card-foot">
-                {!yesNo && (
-                    <div className="goal-stepper" role="group" aria-label="Progress">
-                        <button
-                            className="habit-step"
-                            onClick={() => onProgress(goal.id, Math.max(0, goal.current - 1))}
-                            disabled={goal.current <= 0}
-                            aria-label="One less"
-                        >
-                            −
-                        </button>
-                        <input
-                            className="goal-current"
-                            inputMode="decimal"
-                            value={draft}
-                            onChange={(e) => setDraft(numeric(e.target.value))}
-                            onBlur={commit}
-                            onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-                            aria-label="Progress so far"
-                        />
-                        <span className="goal-of">
-                            / {goal.target}
-                            {goal.unit && ` ${goal.unit}`}
-                        </span>
-                        <button
-                            className="habit-step"
-                            onClick={() => onProgress(goal.id, goal.current + 1)}
-                            aria-label="One more"
-                        >
-                            +
-                        </button>
-                    </div>
-                )}
-                <p className={`goal-due${!done && left < 0 ? " is-overdue" : ""}`}>
-                    {formatPlainDate(goal.deadline)} · {due}
-                </p>
-            </div>
-
-            <GoalSteps goalId={goal.id} steps={steps} stepsDone={goal.stepsDone} {...stepProps} />
+            <GoalSteps goalId={goal.id} steps={steps} stepsDone={goal.stepsDone} today={today} {...stepProps} />
         </article>
     );
 }
@@ -281,13 +309,14 @@ function GoalSteps({
     goalId,
     steps,
     stepsDone,
+    today,
     projects,
     timeZone,
     onAddStep,
     onCompleteTask,
     onDeleteTask,
     onOpenTask,
-}: StepProps & { goalId: string; steps: Task[]; stepsDone: number }) {
+}: StepProps & { goalId: string; steps: Task[]; stepsDone: number; today: string }) {
     const [text, setText] = useState("");
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -319,7 +348,8 @@ function GoalSteps({
                     tasks={steps}
                     projects={projects}
                     timeZone={timeZone}
-                    groupByDate={false}
+                    today={today}
+                    layout="flat"
                     emptyMessage=""
                     onComplete={onCompleteTask}
                     onDelete={onDeleteTask}

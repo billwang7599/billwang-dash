@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isDone, type Goal, type GoalInput } from "../shared/goals.ts";
 import type { HabitInput, HabitSummary } from "../shared/habits.ts";
-import type { Task } from "../shared/types.ts";
+import type { ProjectColor, Task } from "../shared/types.ts";
 import { api, type AppState, type Preferences } from "./api.ts";
 import { AccountSetup } from "./components/AccountSetup.tsx";
 import { CompletedView } from "./components/CompletedView.tsx";
@@ -20,6 +20,8 @@ import { Sidebar } from "./components/Sidebar.tsx";
 import { TimeZoneNotice } from "./components/TimeZoneNotice.tsx";
 import { Trash } from "./components/Trash.tsx";
 import { TaskList } from "./components/TaskList.tsx";
+import { Hero, heroDate } from "./components/Hero.tsx";
+import { cardColor, projectColors } from "./projectColors.ts";
 import { TaskModal } from "./components/TaskModal.tsx";
 import { WeekCalendar } from "./components/WeekCalendar.tsx";
 import { deviceTimeZone, todayKey } from "./format.ts";
@@ -32,13 +34,17 @@ export type View =
     | { name: "trash" }
     | { name: "goals" }
     | { name: "habits" }
-    | { name: "completed" }
+    /** With a project id, only that project's completed tasks. */
+    | { name: "completed"; projectId?: string }
     | { name: "projects" }
     | { name: "habit"; id: string }
     | { name: "project"; id: string };
 
 function viewFromPath(pathname: string): View {
     const rest = pathname.replace(/^\/app\/?/, "").replace(/\/$/, "");
+    // Checked before "project/": /app/project/:id/completed is that project's done list.
+    const projectDone = rest.match(/^project\/([^/]+)\/completed$/);
+    if (projectDone) return { name: "completed", projectId: projectDone[1] };
     if (rest.startsWith("project/")) return { name: "project", id: rest.slice(8) };
     if (rest === "calendar") return { name: "calendar" };
     if (rest === "settings") return { name: "settings" };
@@ -138,6 +144,12 @@ export function App() {
                                     ? prev.tasks.filter((t) => t.id !== id)
                                     : prev.tasks.map((t) => (t.id === id ? task : t)),
                                 completedThisWeek: prev.completedThisWeek + (task.completed ? 1 : 0),
+                                completedThisWeekByProject: task.completed
+                                    ? {
+                                          ...prev.completedThisWeekByProject,
+                                          [task.projectId]: (prev.completedThisWeekByProject[task.projectId] ?? 0) + 1,
+                                      }
+                                    : prev.completedThisWeekByProject,
                                 goals:
                                     task.completed && task.goalId
                                         ? prev.goals.map((g) =>
@@ -324,6 +336,19 @@ export function App() {
         [run],
     );
 
+    const setProjectColor = useCallback(
+        (id: string, color: ProjectColor) =>
+            run(async () => {
+                const { project } = await api.setProjectColor(id, color);
+                setState((prev) =>
+                    prev
+                        ? { ...prev, projects: prev.projects.map((p) => (p.id === id ? project : p)) }
+                        : prev,
+                );
+            })(),
+        [run],
+    );
+
     const deleteProject = useCallback(
         (id: string) =>
             run(async () => {
@@ -394,6 +419,8 @@ export function App() {
         );
     }, [state, view]);
 
+    const colors = useMemo(() => projectColors(state?.projects ?? []), [state?.projects]);
+
     if (error) {
         return (
             <div className="fatal">
@@ -415,8 +442,6 @@ export function App() {
 
     return (
         <div className="shell">
-            <div className="grain" aria-hidden="true" />
-
             {narrow ? (
                 <MobileNav
                     view={view}
@@ -432,6 +457,7 @@ export function App() {
                     todayCount={todayCount}
                     overdueCount={overdueCount}
                     navigate={navigate}
+                    colors={colors}
                     onTogglePin={togglePinProject}
                     onDeleteProject={deleteProject}
                     onCheckHabit={checkHabitToday}
@@ -469,6 +495,8 @@ export function App() {
                         return habit ? (
                             <HabitView
                                 habit={habit}
+                                color={cardColor(state.habits.indexOf(habit))}
+                                onBack={() => navigate("/app/habits")}
                                 today={todayKey(state.preferences.timeZone)}
                                 revision={habitRevision}
                                 onChanged={applyHabit}
@@ -483,7 +511,14 @@ export function App() {
                     <ProjectsView
                         projects={state.projects}
                         tasks={state.tasks}
+                        colors={colors}
+                        timeZone={state.preferences.timeZone}
+                        today={today}
                         onOpen={(id) => navigate(`/app/project/${id}`)}
+                        onCreate={async (name) => {
+                            await api.createProject(name);
+                            await reload();
+                        }}
                         onTogglePin={togglePinProject}
                         onDelete={deleteProject}
                     />
@@ -492,11 +527,18 @@ export function App() {
                         projects={state.projects}
                         goals={state.goals}
                         timeZone={state.preferences.timeZone}
+                        colors={colors}
+                        project={view.projectId ? state.projects.find((p) => p.id === view.projectId) : undefined}
+                        doneThisWeek={
+                            view.projectId
+                                ? (state.completedThisWeekByProject[view.projectId] ?? 0)
+                                : state.completedThisWeek
+                        }
                         onUndo={async (task) => {
                             await api.uncompleteTask(task.id);
                             await reload();
                         }}
-                        onBack={() => navigate("/app")}
+                        onBack={() => navigate(view.projectId ? `/app/project/${view.projectId}` : "/app")}
                     />
                 ) : view.name === "habits" ? (
                     <HabitsView
@@ -528,6 +570,7 @@ export function App() {
                 ) : view.name === "calendar" ? (
                     <WeekCalendar
                         timeZone={state.preferences.timeZone}
+                        colors={colors}
                         revision={revision}
                         onOpenTask={(id) => {
                             const task = state.tasks.find((t) => t.id === id);
@@ -537,34 +580,70 @@ export function App() {
                 ) : (
                     <>
                         {view.name === "inbox" ? (
-                            <div className="view-head">
-                                <div className="view-head-title">
-                                    <h1 className="view-title">{titleFor(view, state)}</h1>
-                                    <button className="done-link" onClick={() => navigate("/app/completed")}>
-                                        {state.completedThisWeek} done this week →
-                                    </button>
+                            <>
+                                <div className="view-bar">
+                                    <InboxFilter
+                                        projects={state.projects}
+                                        goals={state.goals.filter(
+                                            (g) => !isDone(g) || state.tasks.some((t) => t.goalId === g.id),
+                                        )}
+                                        hidden={{
+                                            projects: state.preferences.inboxHiddenProjects,
+                                            goals: state.preferences.inboxHiddenGoals,
+                                        }}
+                                        onChange={setInboxHidden}
+                                    />
                                 </div>
-                                <InboxFilter
-                                    projects={state.projects}
-                                    goals={state.goals.filter(
-                                        (g) => !isDone(g) || state.tasks.some((t) => t.goalId === g.id),
-                                    )}
-                                    hidden={{
-                                        projects: state.preferences.inboxHiddenProjects,
-                                        goals: state.preferences.inboxHiddenGoals,
-                                    }}
-                                    onChange={setInboxHidden}
+                                <Hero
+                                    kicker={heroDate(today).weekday}
+                                    title={heroDate(today).title}
+                                    stats={[
+                                        { value: overdueCount, label: "overdue" },
+                                        { value: todayCount - overdueCount, label: "today" },
+                                        {
+                                            value: state.completedThisWeek,
+                                            label: "done this week",
+                                            onClick: () => navigate("/app/completed"),
+                                        },
+                                    ]}
                                 />
-                            </div>
+                            </>
                         ) : (
-                            <h1 className="view-title">{titleFor(view, state)}</h1>
+                            <Hero
+                                kicker="Project"
+                                title={titleFor(view, state)}
+                                accent={view.name === "project" ? colors.get(view.id) : undefined}
+                                onPickAccent={
+                                    view.name === "project"
+                                        ? (color) => setProjectColor(view.id, color)
+                                        : undefined
+                                }
+                                stats={[
+                                    { value: filtered.length, label: "open" },
+                                    {
+                                        value: filtered.filter((t) => t.due && t.due.date < today).length,
+                                        label: "overdue",
+                                    },
+                                    ...(view.name === "project"
+                                        ? [
+                                              {
+                                                  value: state.completedThisWeekByProject[view.id] ?? 0,
+                                                  label: "done this week",
+                                                  onClick: () => navigate(`/app/project/${view.id}/completed`),
+                                              },
+                                          ]
+                                        : []),
+                                ]}
+                            />
                         )}
                         <TaskList
                             tasks={filtered}
                             projects={state.projects}
                             goals={state.goals}
                             timeZone={state.preferences.timeZone}
-                            groupByDate={view.name !== "project"}
+                            today={today}
+                            layout={view.name === "project" ? "project" : "inbox"}
+                            colors={colors}
                             emptyMessage={
                                 filtered.length < state.tasks.length && view.name === "inbox"
                                     ? "Nothing matches your filter."
@@ -575,6 +654,8 @@ export function App() {
                                 setPendingTaskDelete(state.tasks.find((t) => t.id === id) ?? null)
                             }
                             onOpen={setEditing}
+                            onOpenProject={(id) => navigate(`/app/project/${id}`)}
+                            onOpenGoal={() => navigate("/app/goals")}
                         />
                     </>
                 )}
@@ -635,7 +716,12 @@ export function App() {
                     task={editing}
                     projects={state.projects}
                     goals={state.goals}
+                    colors={colors}
                     onSave={saveTask}
+                    onDelete={() => {
+                        setPendingTaskDelete(editing);
+                        setEditing(null);
+                    }}
                     onClose={() => setEditing(null)}
                 />
             )}

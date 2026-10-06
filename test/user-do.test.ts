@@ -51,6 +51,17 @@ describe("UserDO storage", () => {
         expect(unpinned?.pinned).toBe(false);
     });
 
+    it("stores a picked project colour", async () => {
+        const s = stub("u6c");
+        const project = await s.createProject("Launch");
+        expect(project.color).toBe("slate");
+
+        const colored = await s.setProjectColor(project.id, "sage");
+        expect(colored?.color).toBe("sage");
+        expect((await s.listProjects()).find((p) => p.id === project.id)?.color).toBe("sage");
+        expect(await s.setProjectColor("ghost", "sage")).toBeNull();
+    });
+
     it("returns null pinning a project that does not exist", async () => {
         expect(await stub("u7").setProjectPinned("ghost", true)).toBeNull();
     });

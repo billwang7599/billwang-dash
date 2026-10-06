@@ -48,6 +48,13 @@ export interface Task {
     updatedAt: string;
 }
 
+/**
+ * The colours a project can be given; the UI maps each name to a CSS token. Projects
+ * made before colours could be picked still say "slate", which means "pick one by order".
+ */
+export const PROJECT_COLORS = ["mustard", "lav", "sage", "terra", "rose", "olive", "sky", "stone"] as const;
+export type ProjectColor = (typeof PROJECT_COLORS)[number];
+
 export interface Project {
     id: string;
     name: string;

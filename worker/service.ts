@@ -40,6 +40,8 @@ export interface AppState {
     goals: Goal[];
     /** Tasks completed since Monday in the user's zone. */
     completedThisWeek: number;
+    /** The same, per project id; projects with none are left out. */
+    completedThisWeekByProject: Record<string, number>;
     user: AuthedUser;
 }
 
@@ -49,16 +51,18 @@ export async function loadState(
     user: AuthedUser,
     includeCompleted: boolean,
 ): Promise<AppState> {
-    const [projects, tasks, preferences, habits, goals, completedThisWeek] = await Promise.all([
-        stub.listProjects(),
-        stub.listTasks({ includeCompleted }),
-        stub.getPreferences(),
-        stub.listHabits(),
-        stub.listGoals(),
-        stub.countCompletedThisWeek(),
-        stub.syncProfile(user.email, user.name),
-    ]);
-    return { projects, tasks, preferences, habits, goals, completedThisWeek, user };
+    const [projects, tasks, preferences, habits, goals, completedThisWeek, completedThisWeekByProject] =
+        await Promise.all([
+            stub.listProjects(),
+            stub.listTasks({ includeCompleted }),
+            stub.getPreferences(),
+            stub.listHabits(),
+            stub.listGoals(),
+            stub.countCompletedThisWeek(),
+            stub.countCompletedThisWeekByProject(),
+            stub.syncProfile(user.email, user.name),
+        ]);
+    return { projects, tasks, preferences, habits, goals, completedThisWeek, completedThisWeekByProject, user };
 }
 
 /** Re-parses server-side so what is stored cannot disagree with the preview. */
@@ -119,15 +123,16 @@ export async function completeTask(stub: Stub, id: string): Promise<Task> {
 
 const COMPLETED_PAGE = 50;
 
-/** `before` is an ISO instant from the previous page's last task. */
+/** `before` is an ISO instant from the previous page's last task; `projectId` narrows to one project. */
 export async function listCompletedTasks(
     stub: Stub,
     before: string | undefined,
+    projectId?: string,
 ): Promise<{ tasks: Task[]; more: boolean }> {
     if (before !== undefined && Number.isNaN(Date.parse(before))) {
         throw new ServiceError(400, "before must be an ISO timestamp");
     }
-    return stub.listCompletedTasks(before ?? null, COMPLETED_PAGE);
+    return stub.listCompletedTasks(before ?? null, COMPLETED_PAGE, projectId ?? null);
 }
 
 export async function uncompleteTask(stub: Stub, id: string): Promise<Task> {
@@ -287,6 +292,12 @@ export async function setProjectPinned(
     return project;
 }
 
+export async function setProjectColor(stub: Stub, id: string, color: string): Promise<Project> {
+    const project = await stub.setProjectColor(id, color);
+    if (!project) throw new ServiceError(404, "not found");
+    return project;
+}
+
 export async function setPreferences(
     stub: Stub,
     prefs: Partial<Preferences>,
@@ -311,6 +322,8 @@ export async function calendarItems(
     }
     return stub.getCalendarItems(start, end);
 }
+
+export const syncGoogleNow = (stub: Stub): Promise<GoogleAccountStatus> => stub.syncGoogleNow();
 
 export async function disconnectGoogle(stub: Stub): Promise<GoogleAccountStatus> {
     await stub.disconnectGoogle();

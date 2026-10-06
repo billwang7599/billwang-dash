@@ -90,13 +90,16 @@ export function listCompleted(
     sql: SqlStorage,
     before: string | null,
     limit: number,
+    /** Only this project's tasks, when given. */
+    projectId: string | null = null,
 ): { tasks: Task[]; more: boolean } {
     const rows = sql
         .exec<TaskRow>(
             `SELECT * FROM tasks
              WHERE completed = 1 AND deleted_at IS NULL AND (? IS NULL OR completed_at < ?)
+               AND (? IS NULL OR project_id = ?)
              ORDER BY completed_at DESC LIMIT ?`,
-            before, before, limit + 1,
+            before, before, projectId, projectId, limit + 1,
         )
         .toArray();
     return { tasks: toTasks(rows.slice(0, limit)), more: rows.length > limit };
@@ -110,6 +113,19 @@ export function countCompletedSince(sql: SqlStorage, since: string): number {
             since,
         )
         .one().n;
+}
+
+/** Like countCompletedSince, split by project: project id -> count. Projects with none are left out. */
+export function countCompletedSinceByProject(sql: SqlStorage, since: string): Record<string, number> {
+    const rows = sql
+        .exec<{ project_id: string; n: number }>(
+            `SELECT project_id, COUNT(*) AS n FROM tasks
+             WHERE completed = 1 AND deleted_at IS NULL AND completed_at >= ?
+             GROUP BY project_id`,
+            since,
+        )
+        .toArray();
+    return Object.fromEntries(rows.map((r) => [r.project_id, r.n]));
 }
 
 export function getTask(sql: SqlStorage, id: string): Task | null {

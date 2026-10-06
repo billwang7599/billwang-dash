@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Project, Trash as TrashContents } from "../../shared/types.ts";
 import { api } from "../api.ts";
+import { cardColor } from "../projectColors.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
+import { Hero } from "./Hero.tsx";
 
 interface Props {
     projects: Project[];
@@ -53,81 +55,107 @@ export function Trash({ projects, onChanged, onBack }: Props) {
 
     return (
         <div className="trash">
-            <button className="trash-back sort-toggle" onClick={onBack}>
-                ← Settings
-            </button>
-            <div className="trash-head">
-                <h1 className="view-title">Recently deleted</h1>
+            <div className="view-bar is-start">
+                <button className="back-link" onClick={onBack}>
+                    ← Settings
+                </button>
                 {trash && !empty && (
-                    <button className="btn btn-quiet" onClick={() => setPending({ kind: "all" })}>
+                    <button className="btn btn-quiet btn-quiet-danger" onClick={() => setPending({ kind: "all" })}>
                         Delete all
                     </button>
                 )}
             </div>
+            <Hero
+                kicker="Kept until you clear them"
+                title="Recently deleted"
+                stats={
+                    trash
+                        ? [
+                              { value: trash.projects.length, label: "projects" },
+                              { value: trash.tasks.length, label: "tasks" },
+                          ]
+                        : []
+                }
+            />
 
             {error && <p className="banner banner-bad">{error}</p>}
             {trash === null && !error && <p className="trash-empty">Loading…</p>}
             {empty && <p className="trash-empty">Nothing recently deleted.</p>}
 
-            {trash && !empty && (
-                <ul className="trash-list">
-                    {trash.projects.map((p) => (
-                        <li key={p.id} className="trash-row">
-                            <div className="trash-info">
-                                <span className="trash-name">#{p.name}</span>
-                                <span className="trash-meta">
-                                    project · {p.taskCount} task{p.taskCount === 1 ? "" : "s"} · deleted{" "}
-                                    {formatWhen(p.deletedAt)}
-                                </span>
+            {trash && trash.projects.length > 0 && (
+                <section className="trash-section">
+                    <h2 className="group-head">
+                        Projects <span className="group-count">{trash.projects.length}</span>
+                    </h2>
+                    {/* A deleted project has no place in the order any more, so it's coloured by its place here. */}
+                    <div className="stack">
+                        {trash.projects.map((p, i) => (
+                            <div key={p.id} className="tcard trash-row" style={{ ["--card-c" as string]: cardColor(i) }}>
+                                <div className="trash-info">
+                                    <span className="trash-name">{p.name}</span>
+                                    <span className="trash-meta">
+                                        Deleted {formatWhen(p.deletedAt)} · {p.taskCount} task
+                                        {p.taskCount === 1 ? "" : "s"} went with it
+                                    </span>
+                                </div>
+                                <div className="trash-actions">
+                                    <button
+                                        className="btn btn-quiet"
+                                        disabled={nameTaken(projects, p.name)}
+                                        title={
+                                            nameTaken(projects, p.name)
+                                                ? "A project with this name already exists"
+                                                : undefined
+                                        }
+                                        onClick={() => act(() => api.restoreTrashedProject(p.id))}
+                                    >
+                                        Restore
+                                    </button>
+                                    <button
+                                        className="btn btn-quiet btn-quiet-danger"
+                                        onClick={() => setPending({ kind: "project", id: p.id, name: p.name })}
+                                    >
+                                        Delete forever
+                                    </button>
+                                </div>
                             </div>
-                            <div className="trash-actions">
-                                <button
-                                    className="btn btn-quiet"
-                                    disabled={nameTaken(projects, p.name)}
-                                    title={
-                                        nameTaken(projects, p.name)
-                                            ? "A project with this name already exists"
-                                            : undefined
-                                    }
-                                    onClick={() => act(() => api.restoreTrashedProject(p.id))}
-                                >
-                                    Restore
-                                </button>
-                                <button
-                                    className="btn btn-quiet btn-quiet-danger"
-                                    onClick={() => setPending({ kind: "project", id: p.id, name: p.name })}
-                                >
-                                    Delete forever
-                                </button>
-                            </div>
-                        </li>
-                    ))}
-                    {trash.tasks.map((t) => (
-                        <li key={t.id} className="trash-row">
-                            <div className="trash-info">
-                                <span className="trash-name">{t.content}</span>
-                                <span className="trash-meta">
-                                    task
-                                    {projectName(projects, t.projectId)} · deleted {formatWhen(t.deletedAt)}
-                                </span>
-                            </div>
-                            <div className="trash-actions">
-                                <button
-                                    className="btn btn-quiet"
-                                    onClick={() => act(() => api.restoreTrashedTask(t.id))}
-                                >
-                                    Restore
-                                </button>
-                                <button
-                                    className="btn btn-quiet btn-quiet-danger"
-                                    onClick={() => setPending({ kind: "task", id: t.id, name: t.content })}
-                                >
-                                    Delete forever
-                                </button>
-                            </div>
-                        </li>
-                    ))}
-                </ul>
+                        ))}
+                    </div>
+                </section>
+            )}
+
+            {trash && trash.tasks.length > 0 && (
+                <section className="trash-section">
+                    <h2 className="group-head">
+                        Tasks <span className="group-count">{trash.tasks.length}</span>
+                    </h2>
+                    <ul className="trash-list log-card">
+                        {trash.tasks.map((t) => (
+                            <li key={t.id} className="trash-row">
+                                <div className="trash-info">
+                                    <span className="trash-name">{t.content}</span>
+                                    <span className="trash-meta">
+                                        {projectName(projects, t.projectId)}deleted {formatWhen(t.deletedAt)}
+                                    </span>
+                                </div>
+                                <div className="trash-actions">
+                                    <button
+                                        className="btn btn-quiet"
+                                        onClick={() => act(() => api.restoreTrashedTask(t.id))}
+                                    >
+                                        Restore
+                                    </button>
+                                    <button
+                                        className="btn btn-quiet btn-quiet-danger"
+                                        onClick={() => setPending({ kind: "task", id: t.id, name: t.content })}
+                                    >
+                                        Delete forever
+                                    </button>
+                                </div>
+                            </li>
+                        ))}
+                    </ul>
+                </section>
             )}
 
             {pending && (
@@ -156,7 +184,7 @@ function nameTaken(projects: Project[], name: string): boolean {
 
 function projectName(projects: Project[], id: string): string {
     const p = projects.find((x) => x.id === id);
-    return p && !p.isInbox ? ` · #${p.name}` : "";
+    return p && !p.isInbox ? `${p.name} · ` : "";
 }
 
 function formatWhen(iso: string): string {

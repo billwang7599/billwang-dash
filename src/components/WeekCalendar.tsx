@@ -13,6 +13,7 @@ import type { CalEvent, CalendarItem, EventInput } from "../../shared/types.ts";
 import { api } from "../api.ts";
 import { dragRange, minutesAtOffset, rangeToEvent } from "../eventDrag.ts";
 import { EventDetails } from "./EventDetails.tsx";
+import { Hero } from "./Hero.tsx";
 import { EventModal } from "./EventModal.tsx";
 import { layoutEvents } from "../eventLayout.ts";
 import { formatInstant } from "../format.ts";
@@ -30,6 +31,8 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 
 interface Props {
     timeZone: string;
+    /** Project id -> card colour; a task on the calendar is outlined in its project's. */
+    colors: Map<string, string>;
     /** Bumped by the parent whenever tasks change, to force a refetch. */
     revision: number;
     /** A task on the calendar was clicked; the parent opens its editor. */
@@ -43,7 +46,7 @@ interface Props {
  * created as "5pm in Chicago" should sit at 5pm on the Chicago row even when
  * you open the app from another country.
  */
-export function WeekCalendar({ timeZone, revision, onOpenTask }: Props) {
+export function WeekCalendar({ timeZone, colors, revision, onOpenTask }: Props) {
     // Until a view is picked, a phone shows one day and anything wider the week.
     // Not persisted: a session-only preference, like the sidebar's collapse.
     const narrow = useMediaQuery(NARROW);
@@ -67,6 +70,26 @@ export function WeekCalendar({ timeZone, revision, onOpenTask }: Props) {
     const [draft, setDraft] = useState<{ day: string; start: number; end: number } | null>(null);
     const [editor, setEditor] = useState<{ initial: EventInput; id: string | null } | null>(null);
     const [reload, setReload] = useState(0);
+    // The range whose items are on screen. A refetch of the same range (after an edit)
+    // keeps them up quietly; a new range has nothing to show yet, so it gets a spinner.
+    const rangeKey = `${civilKey(rangeStart)}:${dayCount}`;
+    const [loadedRange, setLoadedRange] = useState<string | null>(null);
+    const syncing = loading && loadedRange !== rangeKey;
+    const [refreshing, setRefreshing] = useState(false);
+
+    /** Skips the cache: Google is asked again, then this range reloads. */
+    async function refresh() {
+        setRefreshing(true);
+        setError(null);
+        try {
+            await api.syncGoogle();
+            setReload((n) => n + 1);
+        } catch (e) {
+            setError((e as Error).message);
+        } finally {
+            setRefreshing(false);
+        }
+    }
 
     const days = useMemo(
         () => Array.from({ length: dayCount }, (_, i) => addDays(rangeStart, i)),
@@ -84,6 +107,7 @@ export function WeekCalendar({ timeZone, revision, onOpenTask }: Props) {
             .then((res) => {
                 if (!cancelled) {
                     setItems(res.items);
+                    setLoadedRange(`${civilKey(rangeStart)}:${dayCount}`);
                     setError(null);
                 }
             })
@@ -203,6 +227,18 @@ export function WeekCalendar({ timeZone, revision, onOpenTask }: Props) {
         return rangeToEvent(todayK, start, start + 60);
     }
 
+    const colorStyle = (item: CalendarItem) => {
+        const c = item.kind === "task" ? item.projectId && colors.get(item.projectId) : item.color;
+        return c ? { ["--c" as string]: c } : {};
+    };
+    const first = days[0];
+    const last = days[days.length - 1];
+    const rangeLabel =
+        first.m === last.m
+            ? `${first.d}${dayCount > 1 ? ` – ${last.d}` : ""} ${MONTHS[first.m - 1]}`
+            : `${first.d} ${MONTHS[first.m - 1]} – ${last.d} ${MONTHS[last.m - 1]}`;
+    const taskCount = items.filter((i) => i.kind === "task").length;
+
     async function saveEvent(input: EventInput) {
         if (editor?.id) await api.updateEvent(editor.id, input);
         else await api.createEvent(input);
@@ -218,44 +254,68 @@ export function WeekCalendar({ timeZone, revision, onOpenTask }: Props) {
     return (
         <div className="cal-wrap" style={{ ["--days" as string]: dayCount }}>
             <header className="cal-head">
-                <div className="cal-title">
-                    <h2>
-                        {MONTHS[rangeStart.m - 1]} {rangeStart.y}
-                    </h2>
-                    {loading && <span className="cal-loading">syncing…</span>}
-                </div>
-                <div className="cal-modes" role="group" aria-label="Calendar view">
-                    {MODES.map((m) => (
-                        <button
-                            key={m.mode}
-                            className={m.mode === mode ? "is-active" : undefined}
-                            aria-pressed={m.mode === mode}
-                            onClick={() => setMode(m.mode)}
-                        >
-                            {m.label}
+                <div className="cal-bar">
+                    <div className="cal-modes" role="group" aria-label="Calendar view">
+                        {MODES.map((m) => (
+                            <button
+                                key={m.mode}
+                                className={m.mode === mode ? "is-active" : undefined}
+                                aria-pressed={m.mode === mode}
+                                onClick={() => setMode(m.mode)}
+                            >
+                                {m.label}
+                            </button>
+                        ))}
+                    </div>
+                    <div className="cal-nav">
+                        <button onClick={() => setFocus(addDays(focus, -dayCount))} aria-label={`Previous ${unit}`}>
+                            ←
                         </button>
-                    ))}
+                        <button
+                            className="cal-today"
+                            onClick={() => setFocus(civilFromDate(new Date(), timeZone))}
+                        >
+                            Today
+                        </button>
+                        <button onClick={() => setFocus(addDays(focus, dayCount))} aria-label={`Next ${unit}`}>
+                            →
+                        </button>
+                    </div>
+                    <div className="cal-actions">
+                        <button
+                            className={`cal-refresh${refreshing ? " is-spinning" : ""}`}
+                            onClick={refresh}
+                            disabled={refreshing}
+                            aria-label="Sync with Google"
+                            title="Sync with Google"
+                        >
+                            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                                <path
+                                    d="M13 8a5 5 0 1 1-1.5-3.6M13 2.5v2.5h-2.5"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="1.6"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                />
+                            </svg>
+                        </button>
+                        <button className="cal-new" onClick={() => setEditor({ initial: newEventDefaults(), id: null })}>
+                            <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                                <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                            </svg>
+                            New event
+                        </button>
+                    </div>
                 </div>
-                <div className="cal-nav">
-                    <button className="cal-new" onClick={() => setEditor({ initial: newEventDefaults(), id: null })}>
-                        <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
-                            <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                        </svg>
-                        New event
-                    </button>
-                    <button onClick={() => setFocus(addDays(focus, -dayCount))} aria-label={`Previous ${unit}`}>
-                        ←
-                    </button>
-                    <button
-                        className="cal-today"
-                        onClick={() => setFocus(civilFromDate(new Date(), timeZone))}
-                    >
-                        Today
-                    </button>
-                    <button onClick={() => setFocus(addDays(focus, dayCount))} aria-label={`Next ${unit}`}>
-                        →
-                    </button>
-                </div>
+                <Hero
+                    kicker={loading ? "Syncing…" : rangeLabel}
+                    title={`${MONTHS[rangeStart.m - 1].toUpperCase()} ${rangeStart.y}`}
+                    stats={[
+                        { value: syncing ? "–" : items.length - taskCount, label: "events" },
+                        { value: syncing ? "–" : taskCount, label: "tasks" },
+                    ]}
+                />
             </header>
 
             {error && <p className="cal-error">{error}</p>}
@@ -274,7 +334,7 @@ export function WeekCalendar({ timeZone, revision, onOpenTask }: Props) {
                                         key={item.id}
                                         type="button"
                                         className={`allday ${item.kind}`}
-                                        style={item.color ? { ["--c" as string]: item.color } : undefined}
+                                        style={colorStyle(item)}
                                         title={item.title}
                                         onClick={() => open(item)}
                                     >
@@ -287,93 +347,101 @@ export function WeekCalendar({ timeZone, revision, onOpenTask }: Props) {
                 })}
             </div>
 
-            <div className="cal-grid" ref={gridRef}>
-                <div className="cal-hours">
-                    {Array.from({ length: 24 }, (_, h) => (
-                        <div className="cal-hour" key={h} style={{ height: HOUR_PX }}>
-                            <span>{h === 0 ? "" : `${h % 12 === 0 ? 12 : h % 12}${h < 12 ? "am" : "pm"}`}</span>
-                        </div>
-                    ))}
-                </div>
+            <div className="cal-body">
+                {syncing && (
+                    <div className="cal-syncing" role="status">
+                        <span className="spinner" aria-hidden="true" />
+                        Syncing…
+                    </div>
+                )}
+                <div className="cal-grid" ref={gridRef}>
+                    <div className="cal-hours">
+                        {Array.from({ length: 24 }, (_, h) => (
+                            <div className="cal-hour" key={h} style={{ height: HOUR_PX }}>
+                                <span>{h === 0 ? "" : `${h % 12 === 0 ? 12 : h % 12}${h < 12 ? "am" : "pm"}`}</span>
+                            </div>
+                        ))}
+                    </div>
 
-                {days.map((day) => {
-                    const key = civilKey(day);
-                    const dayStartMs = zonedToUtcMs(day, 0, timeZone);
-                    const isToday = key === todayK;
+                    {days.map((day) => {
+                        const key = civilKey(day);
+                        const dayStartMs = zonedToUtcMs(day, 0, timeZone);
+                        const isToday = key === todayK;
 
-                    return (
-                        <div
-                            className={`cal-day${isToday ? " is-today" : ""}`}
-                            key={key}
-                            onPointerDown={(e) => onDayPointerDown(e, key)}
-                            onPointerMove={onDayPointerMove}
-                            onPointerUp={onDayPointerUp}
-                            onPointerCancel={cancelDrag}
-                            onClick={(e) => onDayClick(e, key)}
-                        >
-                            {Array.from({ length: 24 }, (_, h) => (
-                                <div className="cal-slot" key={h} style={{ height: HOUR_PX }} />
-                            ))}
+                        return (
+                            <div
+                                className={`cal-day${isToday ? " is-today" : ""}`}
+                                key={key}
+                                onPointerDown={(e) => onDayPointerDown(e, key)}
+                                onPointerMove={onDayPointerMove}
+                                onPointerUp={onDayPointerUp}
+                                onPointerCancel={cancelDrag}
+                                onClick={(e) => onDayClick(e, key)}
+                            >
+                                {Array.from({ length: 24 }, (_, h) => (
+                                    <div className="cal-slot" key={h} style={{ height: HOUR_PX }} />
+                                ))}
 
-                            {isToday && (
-                                <div className="cal-now" style={{ top: (nowMinutes / 60) * HOUR_PX }}>
-                                    <span />
-                                </div>
-                            )}
+                                {isToday && (
+                                    <div className="cal-now" style={{ top: (nowMinutes / 60) * HOUR_PX }}>
+                                        <span />
+                                    </div>
+                                )}
 
-                            {layoutEvents(byDay.get(key)?.timed ?? []).map(({ item, column, columns, span }) => {
-                                // Clipped to this day, so an overnight item continues in the next column.
-                                const startMin = Math.max(0, (Date.parse(item.start) - dayStartMs) / 60_000);
-                                const endMin = Math.min(1440, (Date.parse(item.end) - dayStartMs) / 60_000);
-                                const height = Math.max(18, ((endMin - startMin) / 60) * HOUR_PX);
-                                // Let a long title wrap as far as the event is tall, instead of one clipped line.
-                                const showTime = height >= 50;
-                                const titleLines = Math.max(1, Math.floor((height - 10 - (showTime ? 13 : 0)) / 14));
+                                {layoutEvents(byDay.get(key)?.timed ?? []).map(({ item, column, columns, span }) => {
+                                    // Clipped to this day, so an overnight item continues in the next column.
+                                    const startMin = Math.max(0, (Date.parse(item.start) - dayStartMs) / 60_000);
+                                    const endMin = Math.min(1440, (Date.parse(item.end) - dayStartMs) / 60_000);
+                                    const height = Math.max(18, ((endMin - startMin) / 60) * HOUR_PX);
+                                    // Let a long title wrap as far as the event is tall, instead of one clipped line.
+                                    const showTime = height >= 50;
+                                    const titleLines = Math.max(1, Math.floor((height - 10 - (showTime ? 13 : 0)) / 14));
 
-                                return (
-                                    <button
-                                        key={item.id}
-                                        type="button"
-                                        className={`cal-ev ${item.kind}`}
-                                        data-p={item.priority}
+                                    return (
+                                        <button
+                                            key={item.id}
+                                            type="button"
+                                            className={`cal-ev ${item.kind}`}
+                                            data-p={item.priority}
+                                            style={{
+                                                top: (startMin / 60) * HOUR_PX,
+                                                height,
+                                                left: `${(column / columns) * 100}%`,
+                                                width: `${(span / columns) * 100}%`,
+                                                ["--lines" as string]: titleLines,
+                                                ...colorStyle(item),
+                                            }}
+                                            title={`${item.title} — ${formatInstant(item.start, timeZone)}`}
+                                            onClick={() => open(item)}
+                                        >
+                                            <span className="ev-title">{item.title}</span>
+                                            {showTime && (
+                                                <span className="ev-time">{formatInstant(item.start, timeZone)}</span>
+                                            )}
+                                        </button>
+                                    );
+                                })}
+
+                                {draft && draft.day === key && (
+                                    <div
+                                        className="cal-ev event is-draft"
                                         style={{
-                                            top: (startMin / 60) * HOUR_PX,
-                                            height,
-                                            left: `${(column / columns) * 100}%`,
-                                            width: `${(span / columns) * 100}%`,
-                                            ["--lines" as string]: titleLines,
-                                            ...(item.color ? { ["--c" as string]: item.color } : {}),
+                                            top: (draft.start / 60) * HOUR_PX,
+                                            height: ((draft.end - draft.start) / 60) * HOUR_PX,
+                                            left: 0,
+                                            width: "100%",
                                         }}
-                                        title={`${item.title} — ${formatInstant(item.start, timeZone)}`}
-                                        onClick={() => open(item)}
                                     >
-                                        <span className="ev-title">{item.title}</span>
-                                        {showTime && (
-                                            <span className="ev-time">{formatInstant(item.start, timeZone)}</span>
-                                        )}
-                                    </button>
-                                );
-                            })}
-
-                            {draft && draft.day === key && (
-                                <div
-                                    className="cal-ev event is-draft"
-                                    style={{
-                                        top: (draft.start / 60) * HOUR_PX,
-                                        height: ((draft.end - draft.start) / 60) * HOUR_PX,
-                                        left: 0,
-                                        width: "100%",
-                                    }}
-                                >
-                                    <span className="ev-title">(No title)</span>
-                                    <span className="ev-time">
-                                        {minutesToTime(draft.start)}–{minutesToTime(draft.end)}
-                                    </span>
-                                </div>
-                            )}
-                        </div>
-                    );
-                })}
+                                        <span className="ev-title">(No title)</span>
+                                        <span className="ev-time">
+                                            {minutesToTime(draft.start)}–{minutesToTime(draft.end)}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
             </div>
 
             {editor && (

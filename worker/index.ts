@@ -66,7 +66,7 @@ app.post("/api/tasks", async (c) => {
 });
 
 app.get("/api/tasks/completed", async (c) =>
-    c.json(await service.listCompletedTasks(stub(c), c.req.query("before"))),
+    c.json(await service.listCompletedTasks(stub(c), c.req.query("before"), c.req.query("project"))),
 );
 
 app.post("/api/tasks/import", async (c) => {
@@ -200,6 +200,11 @@ app.patch("/api/projects/:id/pinned", async (c) => {
     return c.json({ project: await service.setProjectPinned(stub(c), c.req.param("id"), pinned) });
 });
 
+app.patch("/api/projects/:id/color", async (c) => {
+    const { color } = await body(c, schemas.projectColorBody);
+    return c.json({ project: await service.setProjectColor(stub(c), c.req.param("id"), color) });
+});
+
 app.patch("/api/preferences", async (c) =>
     c.json({
         preferences: await service.setPreferences(
@@ -230,6 +235,8 @@ app.get("/api/google/callback", async (c) =>
 app.post("/api/google/disconnect", async (c) =>
     c.json(await service.disconnectGoogle(stub(c))),
 );
+
+app.post("/api/google/sync", async (c) => c.json(await service.syncGoogleNow(stub(c))));
 
 app.post("/api/google/push", async (c) => {
     const { enabled } = await body(c, schemas.googlePushBody);

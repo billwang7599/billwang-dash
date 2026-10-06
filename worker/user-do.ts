@@ -143,6 +143,10 @@ export class UserDO extends DurableObject<Env> {
         return projectStore.setProjectPinned(this.sql, id, pinned);
     }
 
+    async setProjectColor(id: string, color: string): Promise<Project | null> {
+        return projectStore.setProjectColor(this.sql, id, color);
+    }
+
     /** False if the Inbox was targeted; it is the fallback for untagged tasks. */
     async deleteProject(id: string): Promise<boolean> {
         if (!projectStore.trashProject(this.sql, id)) return false;
@@ -185,17 +189,30 @@ export class UserDO extends DurableObject<Env> {
         return task;
     }
 
-    async listCompletedTasks(before: string | null, limit: number): Promise<{ tasks: Task[]; more: boolean }> {
-        return taskStore.listCompleted(this.sql, before, limit);
+    async listCompletedTasks(
+        before: string | null,
+        limit: number,
+        projectId: string | null = null,
+    ): Promise<{ tasks: Task[]; more: boolean }> {
+        return taskStore.listCompleted(this.sql, before, limit, projectId);
     }
 
     /** Since Monday 00:00 in the user's zone. */
     async countCompletedThisWeek(): Promise<number> {
+        return taskStore.countCompletedSince(this.sql, await this.weekStart());
+    }
+
+    /** The same, per project: project id -> count. */
+    async countCompletedThisWeekByProject(): Promise<Record<string, number>> {
+        return taskStore.countCompletedSinceByProject(this.sql, await this.weekStart());
+    }
+
+    /** Monday 00:00 in the user's zone, as an ISO instant. */
+    private async weekStart(): Promise<string> {
         const { timeZone } = await this.getPreferences();
         const today = civilFromDate(new Date(), timeZone);
         const monday = addDays(today, -((weekday(today) + 6) % 7));
-        const since = new Date(zonedToUtcMs(monday, 0, timeZone)).toISOString();
-        return taskStore.countCompletedSince(this.sql, since);
+        return new Date(zonedToUtcMs(monday, 0, timeZone)).toISOString();
     }
 
     async uncompleteTask(id: string): Promise<Task | null> {
@@ -352,6 +369,11 @@ export class UserDO extends DurableObject<Env> {
 
     disconnectGoogle(): Promise<void> {
         return this.google.disconnect();
+    }
+
+    /** Manual sync: refetch Google events instead of trusting the cache. */
+    syncGoogleNow(): Promise<GoogleAccountStatus> {
+        return this.google.syncNow();
     }
 
     getGoogleStatus(): Promise<GoogleAccountStatus> {

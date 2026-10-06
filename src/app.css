@@ -1,5 +1,46 @@
 @import "./tokens.css";
 
+/*
+ * The app's own look, over the shared tokens (the landing page keeps the originals).
+ * Neutral grey paper and near-black ink; colour is saved for cards, one per project
+ * or habit, so it always means "this belongs together".
+ */
+:root {
+    --paper: #e7e6e1;
+    --paper-2: #dfded8;
+    --paper-3: #d3d1c9;
+    --card: #f6f5f1;
+
+    --ink: #111110;
+    --ink-2: #55534d;
+    --ink-3: #8a877f;
+    --rule: #d6d4cc;
+    --rule-2: #bdbab2;
+
+    --accent: #c4502b;
+    --accent-soft: #f2d8cd;
+
+    --display: "Inter Tight", ui-sans-serif, system-ui, sans-serif;
+    --sans: "Inter Tight", ui-sans-serif, system-ui, sans-serif;
+    --mono: "Inter Tight", ui-sans-serif, system-ui, sans-serif;
+
+    --r-sm: 8px;
+    --r-md: 14px;
+    --r-lg: 22px;
+
+    /* Card colours, handed out by projectColors.ts. */
+    --c-mustard: #e6c56c;
+    --c-lav: #b8afe8;
+    --c-sage: #a8cbbf;
+    --c-terra: #e4714c;
+    --c-rose: #dcaab5;
+    --c-olive: #cfcd9c;
+    --c-sky: #a9c3dc;
+    --c-stone: #d2d0c8;
+}
+
+body { font-variant-numeric: tabular-nums; }
+
 /* ---- Shell -------------------------------------------------------------- */
 
 .shell {
@@ -44,7 +85,6 @@
     /* Landscape phones are wide enough for this layout, with the notch on the left. */
     padding: 1.6rem 1rem 1.2rem max(1rem, env(safe-area-inset-left));
     background: var(--paper-2);
-    border-right: 1px solid var(--rule);
     transition: width 0.18s var(--ease);
 }
 .sidebar.is-collapsed { width: 3.75rem; padding-inline: 0.5rem; overflow: hidden; }
@@ -80,9 +120,9 @@
     min-width: 0;
     padding: 0 0.6rem;
     font-family: var(--display);
-    font-weight: 400;
-    font-size: 1.25rem;
-    letter-spacing: -0.02em;
+    font-weight: 500;
+    font-size: 1.6rem;
+    letter-spacing: -0.045em;
     color: var(--ink);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -107,10 +147,7 @@
 .sidebar-toggle:hover { background: var(--paper-3); color: var(--ink); }
 
 .nav-head {
-    font-family: var(--mono);
-    font-size: 0.65rem;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
+    font-size: 0.75rem;
     color: var(--ink-3);
     margin: 0;
     padding: 0 0.65rem;
@@ -156,27 +193,24 @@
     font-size: 0.92rem;
     color: var(--ink-2);
     text-align: left;
-    padding: 0.5rem 0.65rem;
-    border-radius: var(--r-sm);
+    padding: 0.5rem 0.8rem;
+    border-radius: 100px;
     cursor: pointer;
     transition: background 0.16s var(--ease), color 0.16s var(--ease);
 }
-.nav-item:hover { background: color-mix(in srgb, var(--paper-3) 55%, transparent); color: var(--ink); }
-.nav-item.is-active {
-    background: var(--paper-3);
-    color: var(--ink);
-    font-weight: 500;
-}
+.nav-item:hover { background: color-mix(in srgb, var(--paper-3) 70%, transparent); color: var(--ink); }
+.nav-item.is-active { background: var(--ink); color: var(--card); }
+.nav-label { display: flex; align-items: center; gap: 0.55rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-swatch { flex: none; width: 9px; height: 9px; border-radius: 50%; }
+.nav-item.is-collapsed .nav-swatch { display: none; }
 
 .nav-count {
-    font-family: var(--mono);
-    font-size: 0.7rem;
+    font-size: 0.75rem;
     color: var(--ink-3);
-    background: var(--paper-3);
     padding: 0.1rem 0.4rem;
     border-radius: 100px;
 }
-.nav-item.is-active .nav-count { background: var(--card); color: var(--ink-2); }
+.nav-item.is-active .nav-count:not(.is-urgent) { color: #a9a79f; }
 .nav-count.is-urgent { background: var(--accent); color: var(--paper); }
 
 .nav-item.is-collapsed {
@@ -220,16 +254,22 @@
     opacity: 0;
     transition: opacity 0.12s var(--ease);
 }
+/* Pin and delete, as round icon buttons. */
 .row-action {
+    display: grid;
+    place-items: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    padding: 0;
     border: 0;
+    border-radius: 50%;
     background: var(--paper-3);
-    font-family: var(--mono);
-    font-size: 0.65rem;
     color: var(--ink-2);
-    padding: 0.15rem 0.4rem;
-    border-radius: 100px;
     cursor: pointer;
+    transition: background 0.16s var(--ease), color 0.16s var(--ease);
 }
+.row-action:hover { background: var(--card); color: var(--ink); }
+.nav-item.is-active + .row-actions .row-action { background: rgb(255 255 255 / 0.15); color: var(--card); }
 .row-action-danger:hover,
 .row-action-danger:focus-visible { color: var(--accent); }
 .nav-row:hover .row-actions,
@@ -359,30 +399,119 @@ html:has(.mnav.is-open) { overflow: hidden; }
 /* ---- Main --------------------------------------------------------------- */
 
 .main {
-    padding: clamp(1.5rem, 3.5vw, 2.75rem) clamp(1.25rem, 4vw, 3rem) calc(4rem + env(safe-area-inset-bottom));
-    max-width: 62rem;
+    padding: clamp(1.5rem, 3.5vw, 2.25rem) clamp(1.25rem, 4vw, 2.75rem) calc(4rem + env(safe-area-inset-bottom));
+    max-width: 80rem;
     width: 100%;
 }
 
 .view-title {
     font-family: var(--display);
     font-weight: 400;
-    font-size: clamp(1.9rem, 4vw, 2.6rem);
-    letter-spacing: -0.03em;
-    margin: 2rem 0 1.2rem;
-    font-variation-settings: "SOFT" 20, "WONK" 1;
+    font-size: clamp(2.6rem, 6vw, 4.2rem);
+    line-height: 0.95;
+    letter-spacing: -0.055em;
+    margin: 1.5rem 0 1.4rem;
 }
+
+/* Actions above the hero, right-aligned like the mockup's pill row. */
+.view-bar { display: flex; justify-content: flex-end; align-items: center; gap: 0.5rem; min-height: 2.2rem; }
+.view-bar .pf { margin-top: 0; }
+
+/* One big title per page, counts on the right. */
+.hero {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem 2.5rem;
+    flex-wrap: wrap;
+    margin: 0.6rem 0 1.6rem;
+}
+/* Positioned, so the colour picker opens under the title's start rather than the
+   dot, which can sit at the screen's edge on a phone. */
+.hero-main { position: relative; min-width: 0; }
+.hero-kicker { margin: 0 0 0.35rem; font-size: 0.85rem; color: var(--ink-2); }
+.hero-title {
+    margin: 0;
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: clamp(3.4rem, 9vw, 6.5rem);
+    line-height: 0.84;
+    letter-spacing: -0.06em;
+    overflow-wrap: anywhere;
+}
+.hero-stats { display: flex; gap: 2rem; padding-bottom: 0.2rem; }
+
+/* A project's coloured full stop opens its colour picker. */
+.hero-picker { display: inline-block; }
+.hero-dot.is-button {
+    border: 0;
+    background: none;
+    padding: 0;
+    font: inherit;
+    letter-spacing: inherit;
+    line-height: inherit;
+    cursor: pointer;
+    transition: transform 0.16s var(--ease);
+}
+.hero-dot.is-button:hover { transform: scale(1.15); }
+.swatches {
+    position: absolute;
+    left: 0;
+    top: calc(100% + 0.4rem);
+    z-index: 20;
+    display: grid;
+    grid-template-columns: repeat(4, 1.8rem);
+    gap: 0.45rem;
+    padding: 0.6rem;
+    background: var(--card);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-md);
+}
+.swatch-btn {
+    width: 1.8rem;
+    height: 1.8rem;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.12s var(--ease);
+}
+.swatch-btn:hover { transform: scale(1.12); }
+.swatch-btn.is-on { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--ink); }
+.hero-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    border: 0;
+    background: none;
+    padding: 0;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+}
+.hero-stat-value { font-size: 2rem; line-height: 1; letter-spacing: -0.05em; }
+.hero-stat-label { margin-top: 0.25rem; font-size: 0.78rem; color: var(--ink-2); }
+.hero-stat.is-link { cursor: pointer; }
+.hero-stat.is-link:hover .hero-stat-label { color: var(--ink); text-decoration: underline; }
 
 /* ---- Quick add ---------------------------------------------------------- */
 
 /* Quick-add sits at the foot of the list and sticks to the bottom of the screen. */
-.main.has-dock { padding-bottom: 0; }
+/* A column at least the screen's height, so with a short list the dock still sits
+   at the bottom (margin-top: auto) instead of right under the last card. */
+.main.has-dock {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding-bottom: 0;
+}
 .qa-dock {
     position: sticky;
     bottom: 0;
     z-index: 5;
-    margin-top: 1.5rem;
-    padding: 1.2rem 0 calc(1rem + env(safe-area-inset-bottom));
+    margin-top: auto;
+    padding: 2.7rem 0 calc(1rem + env(safe-area-inset-bottom));
     /* Fades the list out behind it instead of a hard edge. */
     background: linear-gradient(to top, var(--paper) 75%, transparent);
 }
@@ -521,22 +650,107 @@ html:has(.mnav.is-open) { overflow: hidden; }
 
 /* ---- Tasks -------------------------------------------------------------- */
 
-.task-group { margin-bottom: 1.8rem; }
+/* Date groups flow down two columns on a wide screen, one on a narrow one. */
+.task-groups { columns: 2 24rem; column-gap: 1.8rem; }
+.task-group { break-inside: avoid; margin-bottom: 1.8rem; }
 
 .group-head {
     display: flex;
     align-items: baseline;
+    justify-content: space-between;
     gap: 0.5rem;
-    font-size: 0.78rem;
-    font-family: var(--mono);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--ink-3);
-    margin: 0 0 0.35rem;
-    padding-bottom: 0.4rem;
-    border-bottom: 1px solid var(--rule);
+    font-size: 0.85rem;
+    font-weight: 500;
+    margin: 0 0 0.55rem;
+    padding: 0 0.3rem;
 }
-.group-count { color: var(--rule-2); }
+.group-count { color: var(--ink-3); font-weight: 400; }
+
+/*
+ * A stack of colour cards, each tucked under the one above. The card's colour comes
+ * in as --card-c; the soft upward shadow keeps same-colour neighbours apart.
+ */
+.stack { display: flex; flex-direction: column; }
+.tcard,
+.hcard {
+    position: relative;
+    background: var(--card-c, var(--card));
+    border-radius: var(--r-lg);
+    padding: 0.9rem 1.15rem 1.9rem;
+    margin-top: -1.1rem;
+}
+/* Task cards fade toward the paper the further away their date is (--strength, set per group). */
+.tcard { background: color-mix(in srgb, var(--card-c, var(--card)) var(--strength, 100%), var(--paper)); }
+.tcard:first-child,
+.hcard:first-child { margin-top: 0; }
+.tcard:last-child,
+.hcard:last-child { padding-bottom: 0.9rem; }
+.tcard + .tcard,
+.hcard + .hcard { box-shadow: 0 -1px 0 rgb(0 0 0 / 0.06), 0 -8px 16px -10px rgb(0 0 0 / 0.28); }
+
+.tcard-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin: 0 0 0.2rem;
+    font-size: 1.45rem;
+    font-weight: 500;
+    letter-spacing: -0.04em;
+}
+.tcard-head span { font-weight: 400; opacity: 0.5; }
+
+/* Everything past two weeks, folded: plain, with a peek at what's next. */
+.later-card {
+    display: block;
+    width: 100%;
+    margin-top: 0.6rem;
+    padding: 0.9rem 1.15rem;
+    border: 0;
+    border-radius: var(--r-lg);
+    background: color-mix(in srgb, var(--ink) 5%, var(--paper));
+    font: inherit;
+    color: var(--ink);
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.16s var(--ease);
+}
+.task-group > .later-card { margin-top: 0; }
+.later-card:hover { background: color-mix(in srgb, var(--ink) 9%, var(--paper)); }
+.later-card .tcard-head::after { content: " ›"; margin-left: 0.3rem; color: var(--ink-3); }
+.later-card .tcard-head { justify-content: flex-start; gap: 0.5rem; }
+.later-card .tcard-head span { margin-left: auto; order: 2; }
+.later-peek { display: flex; flex-wrap: wrap; gap: 0.2rem 1rem; margin-top: 0.3rem; font-size: 0.85rem; color: var(--ink-2); }
+.later-item { display: inline-flex; align-items: center; gap: 0.4rem; }
+
+/* Rows inside a card sit on its colour, so their lines and checks are ink-based. */
+.tcard .task { padding: 0.6rem 0; border-bottom: 0; border-top: 1px solid rgb(0 0 0 / 0.1); }
+.tcard .task:hover { background: none; }
+.tcard .task-title { font-size: 1rem; font-weight: 500; letter-spacing: -0.015em; }
+.tcard .task-meta { color: rgb(0 0 0 / 0.6); }
+.tcard .meta-goal,
+.tcard .meta-project { color: inherit; }
+.tcard .check,
+.tcard .check[data-p] { border-color: rgb(0 0 0 / 0.45); background: transparent; }
+.tcard .check[data-p="1"] { border: 2.5px solid var(--ink); }
+.tcard .check[data-p="2"] { border: 2px solid rgb(0 0 0 / 0.7); }
+.tcard .check:hover,
+.tcard .check[data-p]:hover { background: var(--ink); border-color: var(--ink); color: var(--card); }
+.tcard .task-delete:hover { background: rgb(0 0 0 / 0.08); color: var(--ink); }
+
+.task-when {
+    flex: none;
+    margin-left: auto;
+    padding-top: 0.1rem;
+    font-size: 0.95rem;
+    letter-spacing: -0.02em;
+    white-space: nowrap;
+}
+/* Ink, not red: red disappears on the terracotta card. The words say it's late. */
+.task-when.is-late { font-weight: 600; }
+.task-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.35rem; }
+.chip { font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 100px; background: rgb(0 0 0 / 0.1); }
+.chip-deadline { background: var(--ink); color: var(--card); }
 
 .tasks { list-style: none; margin: 0; padding: 0; }
 
@@ -577,7 +791,80 @@ html:has(.mnav.is-open) { overflow: hidden; }
 .check[data-p="3"]:hover { background: var(--p3); }
 .check[data-p="4"]:hover { background: var(--ink-3); border-color: var(--ink-3); }
 
-.task-body { flex: 1; min-width: 0; }
+.task-main { flex: 1; min-width: 0; }
+.task-body { display: block; width: 100%; min-width: 0; }
+
+/* ---- Ticking a task off: pop, ripple, tick, strike, fold ---- */
+.task.is-completing .check,
+.task.is-completing .check[data-p] {
+    background: var(--ink);
+    border-color: var(--ink);
+    color: var(--card);
+    animation: check-pop 0.36s cubic-bezier(0.34, 1.56, 0.64, 1), check-ring 0.55s var(--ease);
+}
+.task.is-completing .check path { stroke-dasharray: 20; animation: tick-draw 0.28s 0.08s var(--ease) both; }
+/* The line is a growing background on the title's text, so it follows each wrapped line. */
+.task.is-completing .task-title {
+    display: inline;
+    background: linear-gradient(currentColor, currentColor) no-repeat 0 58% / 0 1.5px;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+    animation: strike 0.3s 0.1s var(--ease) forwards;
+}
+.task.is-completing .task-title,
+.task.is-completing .task-when,
+.task.is-completing .task-meta { transition: opacity 0.3s 0.15s var(--ease); opacity: 0.5; }
+/* The row folds from its measured height (set inline) to nothing. */
+.task.is-folding {
+    overflow: hidden;
+    opacity: 0;
+    padding-block: 0;
+    border-color: transparent;
+    transition: height 0.26s var(--ease), opacity 0.2s var(--ease), padding 0.26s var(--ease);
+}
+@keyframes check-pop {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.3); }
+    100% { transform: scale(1); }
+}
+@keyframes check-ring {
+    from { box-shadow: 0 0 0 0 rgb(17 17 16 / 0.35); }
+    to { box-shadow: 0 0 0 12px rgb(17 17 16 / 0); }
+}
+@keyframes tick-draw {
+    from { stroke-dashoffset: 20; }
+    to { stroke-dashoffset: 0; }
+}
+@keyframes strike {
+    to { background-size: 100% 1.5px; }
+}
+
+/* Project and goal labels under a task, and project names on Inbox cards, open their page. */
+.meta-link {
+    border: 0;
+    background: none;
+    padding: 0;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+}
+.meta-link:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
+.tcard-link {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.35rem;
+    border: 0;
+    background: none;
+    padding: 0;
+    font: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+    cursor: pointer;
+}
+.tcard-link::after { content: "›"; font-size: 0.8em; opacity: 0; transform: translateX(-3px); transition: opacity 0.16s var(--ease), transform 0.16s var(--ease); }
+.tcard-link:hover::after,
+.tcard-link:focus-visible::after { opacity: 0.6; transform: none; }
+.tcard-link:hover { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; }
 
 .task-title {
     margin: 0;
@@ -590,22 +877,28 @@ html:has(.mnav.is-open) { overflow: hidden; }
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
-    margin-top: 0.2rem;
+    margin-top: 0.1rem;
     font-size: 0.76rem;
     color: var(--ink-3);
 }
 .meta-due { color: var(--amber); font-family: var(--mono); font-size: 0.72rem; }
 .meta-deadline { color: var(--accent); font-family: var(--mono); font-size: 0.72rem; }
-.meta-project { color: var(--sage); }
-.meta-goal { color: var(--indigo); }
+.meta-project,
+.meta-goal { color: inherit; }
 
+/* As tall as the title's first line and centred in it, so the × lines up with the
+   text and the time beside it rather than hanging below them. */
 .task-delete {
     flex: none;
+    display: grid;
+    place-items: center;
+    width: 1.6rem;
+    height: 1.45rem;
     border: 0;
     background: none;
     color: var(--ink-3);
     cursor: pointer;
-    padding: 0.25rem;
+    padding: 0;
     border-radius: var(--r-sm);
     opacity: 0;
     transition: opacity 0.18s var(--ease), color 0.18s var(--ease), background 0.18s var(--ease);
@@ -635,82 +928,60 @@ html:has(.mnav.is-open) { overflow: hidden; }
     height: 100dvh;
     overflow: hidden;
 }
-/* No top bar on a phone: the header clears the status bar / Dynamic Island itself. */
-@media (max-width: 780px) {
-    .cal-head { padding-top: calc(0.8rem + env(safe-area-inset-top)); }
-}
 
-.cal-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 1rem 1.1rem;
-    border-bottom: 1px solid var(--rule);
-}
-.cal-title { display: flex; align-items: baseline; gap: 0.75rem; }
-.cal-head h2 {
-    font-family: var(--display);
-    font-weight: 400;
-    font-size: 1.5rem;
-    letter-spacing: -0.02em;
-    margin: 0;
-    font-variation-settings: "SOFT" 20, "WONK" 1;
-}
-.cal-loading { font-family: var(--mono); font-size: 0.68rem; color: var(--ink-3); }
+.cal-head { padding: clamp(1.25rem, 3vw, 2rem) clamp(1rem, 3vw, 2.25rem) 0; }
+.cal-head .hero { margin: 1.2rem 0 1rem; }
+.cal-head .hero-title { font-size: clamp(2.6rem, 6vw, 4.6rem); }
 
-.cal-nav { display: flex; gap: 0.35rem; }
-.cal-nav button {
+/* Mode pills on the left, prev / today / next centred, the one filled action on the right. */
+.cal-bar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 0.5rem 1rem; }
+.cal-bar .cal-modes { justify-self: start; }
+.cal-actions { justify-self: end; display: flex; align-items: center; gap: 0.4rem; }
+.cal-refresh {
+    display: grid;
+    place-items: center;
+    width: 2.1rem;
+    height: 2.1rem;
+    padding: 0;
     border: 1px solid var(--rule-2);
-    background: var(--paper);
-    font: inherit;
-    font-size: 0.82rem;
-    color: var(--ink-2);
-    padding: 0.3rem 0.7rem;
-    border-radius: var(--r-sm);
+    border-radius: 50%;
+    background: none;
+    color: var(--ink);
     cursor: pointer;
-    transition: all 0.18s var(--ease);
+    transition: border-color 0.16s var(--ease);
 }
-/* The primary action, so it's filled like the app's other primary buttons
-   rather than outlined like the navigation beside it. */
-.cal-nav .cal-new {
+.cal-refresh:hover:not(:disabled) { border-color: var(--ink); }
+.cal-refresh:disabled { cursor: default; }
+.cal-refresh.is-spinning svg { animation: spin 0.8s linear infinite; }
+.cal-modes,
+.cal-nav { display: flex; gap: 0.35rem; }
+.cal-modes button,
+.cal-nav button,
+.cal-new {
+    border: 1px solid var(--rule-2);
+    background: none;
+    font: inherit;
+    font-size: 0.85rem;
+    color: var(--ink);
+    padding: 0.4rem 0.9rem;
+    border-radius: 100px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.16s var(--ease), color 0.16s var(--ease), border-color 0.16s var(--ease);
+}
+.cal-modes button:hover,
+.cal-nav button:hover { border-color: var(--ink); }
+.cal-modes button.is-active { background: var(--ink); border-color: var(--ink); color: var(--card); }
+.cal-new {
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
-    margin-right: 0.5rem;
     background: var(--ink);
     border-color: var(--ink);
-    color: var(--paper);
+    color: var(--card);
     font-weight: 500;
-    padding-inline: 0.9rem 1rem;
-    border-radius: 100px;
 }
-.cal-nav .cal-new:hover { background: var(--accent); border-color: var(--accent); }
-.cal-nav button:hover { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-
-/* Segmented Day / 3 days / Week switch, between the title and the nav. */
-.cal-modes {
-    display: flex;
-    margin-left: auto;
-    padding: 2px;
-    border: 1px solid var(--rule-2);
-    border-radius: var(--r-sm);
-    background: var(--paper-2);
-}
-.cal-modes button {
-    border: 0;
-    background: none;
-    font: inherit;
-    font-size: 0.8rem;
-    color: var(--ink-3);
-    padding: 0.25rem 0.65rem;
-    border-radius: 4px;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: background 0.16s var(--ease), color 0.16s var(--ease);
-}
-.cal-modes button:hover { color: var(--ink); }
-.cal-modes button.is-active { background: var(--card); color: var(--ink); box-shadow: var(--shadow-sm); }
+.cal-new:hover { background: var(--accent); border-color: var(--accent); }
 
 .cal-error {
     margin: 0;
@@ -720,36 +991,29 @@ html:has(.mnav.is-open) { overflow: hidden; }
     background: var(--accent-soft);
 }
 
+/* Columns stay neutral: colour lives only on the events. Today is a faint shade, not a highlight. */
 .cal-daybar {
     display: grid;
     grid-template-columns: 3.2rem repeat(var(--days, 7), minmax(0, 1fr));
     border-bottom: 1px solid var(--rule);
-    background: var(--paper-2);
 }
-.cal-gutter { border-right: 1px solid var(--rule); }
+.cal-gutter { border-right: 1px solid transparent; }
 
 .cal-dayhead {
-    padding: 0.5rem 0.4rem;
-    border-right: 1px solid var(--rule);
-    text-align: center;
+    padding: 0.6rem 0.6rem 0.5rem;
+    border-left: 1px solid var(--rule);
     min-width: 0;
 }
-.cal-dayhead:last-child { border-right: 0; }
-.dh-name {
-    display: block;
-    font-family: var(--mono);
-    font-size: 0.62rem;
-    letter-spacing: 0.1em;
-    color: var(--ink-3);
-}
+.cal-dayhead.is-today { background: rgb(17 17 16 / 0.045); border-radius: var(--r-lg) var(--r-lg) 0 0; border-left-color: transparent; }
+.dh-name { display: block; font-size: 0.75rem; color: var(--ink-2); }
 .dh-num {
     display: block;
-    font-family: var(--display);
-    font-size: 1.15rem;
-    line-height: 1.2;
+    margin-top: 0.2rem;
+    font-size: clamp(1.6rem, 3vw, 2.6rem);
+    line-height: 0.9;
+    letter-spacing: -0.06em;
 }
-.cal-dayhead.is-today .dh-num { color: var(--accent); font-weight: 600; }
-.cal-dayhead.is-today .dh-name { color: var(--accent); }
+.cal-dayhead.is-today .dh-name { color: var(--accent); font-weight: 500; }
 
 .dh-allday { display: flex; flex-direction: column; gap: 2px; margin-top: 0.25rem; }
 .allday {
@@ -757,18 +1021,46 @@ html:has(.mnav.is-open) { overflow: hidden; }
     font: inherit;
     text-align: left;
     cursor: pointer;
-    font-size: 0.62rem;
-    padding: 0.1rem 0.3rem;
-    border-radius: 3px;
+    font-size: 0.68rem;
+    padding: 0.15rem 0.45rem;
+    border-radius: 6px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    background: color-mix(in srgb, var(--c, var(--sage)) 15%, var(--card));
-    color: color-mix(in srgb, var(--c, var(--sage)) 75%, var(--ink));
-    border-left: 2px solid var(--c, var(--sage));
+    background: color-mix(in srgb, var(--c, var(--c-sage)) 45%, var(--paper));
+    color: var(--ink);
 }
-.allday.event { background: var(--teal); color: var(--paper); border-left-color: color-mix(in srgb, var(--teal) 60%, black); }
-.allday.task { background: var(--accent-soft); color: var(--accent); border-left-color: var(--accent); }
+.allday.event { background: var(--ink); color: var(--card); }
+.allday.task { background: color-mix(in srgb, var(--c, var(--ink-3)) 12%, var(--paper)); box-shadow: inset 0 0 0 1.5px var(--c, var(--ink-3)); }
+
+/* Holds the grid and, while a new range loads, a spinner over it. */
+.cal-body { position: relative; display: flex; flex: 1; min-height: 0; }
+.cal-body > .cal-grid { flex: 1; }
+.cal-syncing {
+    position: absolute;
+    inset: 0;
+    z-index: 6;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.8rem;
+    background: color-mix(in srgb, var(--paper) 70%, transparent);
+    font-size: 0.85rem;
+    color: var(--ink-2);
+    animation: fade-in 0.2s var(--ease);
+}
+.spinner {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    border: 2.5px solid var(--rule-2);
+    border-top-color: var(--ink);
+    animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
 
 .cal-grid {
     display: grid;
@@ -783,49 +1075,43 @@ html:has(.mnav.is-open) { overflow: hidden; }
     position: relative;
 }
 
-.cal-hours { border-right: 1px solid var(--rule); }
-.cal-hour {
-    position: relative;
-    border-bottom: 1px solid var(--paper-2);
-}
+.cal-hour { position: relative; }
 .cal-hour span {
     position: absolute;
     top: -0.5rem;
-    right: 0.4rem;
-    font-family: var(--mono);
-    font-size: 0.6rem;
+    right: 0.5rem;
+    font-size: 0.68rem;
     color: var(--ink-3);
 }
 
 .cal-day {
     position: relative;
-    border-right: 1px solid var(--rule);
+    border-left: 1px solid var(--rule);
     min-width: 0;
     /* Pressing and dragging draws an event, so dragging must not select text. */
     user-select: none;
     cursor: cell;
 }
-.cal-day:last-child { border-right: 0; }
-.cal-day.is-today { background: color-mix(in srgb, var(--amber) 3%, transparent); }
-.cal-slot { border-bottom: 1px solid var(--paper-2); }
+.cal-day.is-today { background: rgb(17 17 16 / 0.045); border-left-color: transparent; }
+.cal-slot { border-bottom: 1px solid rgb(0 0 0 / 0.06); }
 
 .cal-now {
     position: absolute;
     left: 0;
     right: 0;
-    height: 1px;
-    background: var(--accent);
+    height: 2px;
+    background: var(--c-terra);
     z-index: 3;
     pointer-events: none;
 }
 .cal-now span {
     position: absolute;
-    left: -3px;
-    top: -3px;
-    width: 7px;
-    height: 7px;
+    left: -4px;
+    top: -4px;
+    width: 10px;
+    height: 10px;
     border-radius: 50%;
-    background: var(--accent);
+    background: var(--c-terra);
 }
 
 .cal-ev {
@@ -833,10 +1119,10 @@ html:has(.mnav.is-open) { overflow: hidden; }
     border: 0;
     font: inherit;
     text-align: left;
-    border-radius: 4px;
-    padding: 0.2rem 0.35rem;
+    border-radius: 10px;
+    padding: 0.3rem 0.5rem;
     overflow: hidden;
-    font-size: 0.68rem;
+    font-size: 0.74rem;
     line-height: 1.25;
     z-index: 2;
     cursor: pointer;
@@ -848,34 +1134,28 @@ html:has(.mnav.is-open) { overflow: hidden; }
     .cal-ev:hover { transform: scale(1.015); box-shadow: var(--shadow-md); z-index: 4; }
 }
 
-/* Google events take their calendar's own colour (--c, set from the data), with
-   sage as the fallback; they are filled, while tasks are outlined. */
+/* Google events are filled with their calendar's own colour (--c, from the data),
+   softened onto the paper so ink text stays readable. */
 .cal-ev.gcal {
-    background: color-mix(in srgb, var(--c, var(--sage)) 15%, var(--card));
-    color: color-mix(in srgb, var(--c, var(--sage)) 75%, var(--ink));
-    border-left: 2.5px solid var(--c, var(--sage));
+    background: color-mix(in srgb, var(--c, var(--c-sage)) 45%, var(--paper));
+    color: var(--ink);
 }
-/* dash's own events are solid; the one being drawn is lighter and ignores the pointer. */
-.cal-ev.event {
-    background: var(--teal);
-    color: var(--paper);
-    border-left: 2.5px solid color-mix(in srgb, var(--teal) 60%, black);
-}
+/* dash's own events are solid ink; the one being drawn is lighter and ignores the pointer. */
+.cal-ev.event { background: var(--ink); color: var(--card); }
 .cal-ev.is-draft {
     opacity: 0.8;
     pointer-events: none;
     box-shadow: var(--shadow-md);
     z-index: 5;
 }
+/* Tasks are outlined in their project's colour (--c). Block, because the
+   task list's .task row is a flex row and the class name is shared. */
 .cal-ev.task {
-    background: var(--card);
-    border: 1px solid var(--rule-2);
-    border-left: 2.5px solid var(--p4);
-    color: var(--ink-2);
+    display: block;
+    background: color-mix(in srgb, var(--c, var(--ink-3)) 12%, var(--paper));
+    box-shadow: inset 0 0 0 2px var(--c, var(--ink-3));
+    color: var(--ink);
 }
-.cal-ev.task[data-p="1"] { border-left-color: var(--p1); background: var(--accent-soft); color: var(--p1); }
-.cal-ev.task[data-p="2"] { border-left-color: var(--p2); background: var(--amber-soft); color: var(--p2); }
-.cal-ev.task[data-p="3"] { border-left-color: var(--p3); background: var(--indigo-soft); color: var(--p3); }
 
 /* Wraps up to --lines (set from the event's height) and then ellipsises. */
 .ev-title {
@@ -886,7 +1166,7 @@ html:has(.mnav.is-open) { overflow: hidden; }
     overflow-wrap: anywhere;
     font-weight: 500;
 }
-.ev-time { display: block; font-family: var(--mono); font-size: 0.6rem; opacity: 0.75; }
+.ev-time { display: block; font-size: 0.66rem; opacity: 0.7; }
 
 /* ---- Habits -------------------------------------------------------------- */
 
@@ -909,15 +1189,12 @@ html:has(.mnav.is-open) { overflow: hidden; }
     cursor: pointer;
     transition: all 0.15s var(--ease);
 }
-.habit-check:hover { border-color: var(--sage); color: var(--sage); }
-.habit-check.is-done { background: var(--sage); border-color: var(--sage); color: var(--paper); }
+.habit-check:hover { border-color: var(--ink); color: var(--ink); }
+.habit-check.is-done { background: var(--ink); border-color: var(--ink); color: var(--card); }
 .habit-check.is-skipped { border-style: dashed; }
 
-.habit-view { max-width: 40rem; }
-.habit-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
-.habit-freq { margin: -0.9rem 0 1.2rem; font-size: 0.86rem; color: var(--ink-3); }
-.habit-desc { margin: -0.7rem 0 1.2rem; max-width: 40rem; font-size: 0.9rem; color: var(--ink-2); white-space: pre-wrap; }
-.habit-actions { display: flex; gap: 0.4rem; margin-top: 2rem; }
+.habit-desc { margin: -0.6rem 0 1.4rem; max-width: 40rem; font-size: 0.92rem; color: var(--ink-2); white-space: pre-wrap; }
+.habit-page-cols { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 1.4rem; align-items: start; }
 
 .habit-stats {
     display: grid;
@@ -925,27 +1202,27 @@ html:has(.mnav.is-open) { overflow: hidden; }
     gap: 0.6rem;
     margin: 0 0 1.4rem;
 }
-.habit-stats > div { padding: 0.7rem 0.85rem; background: var(--card); border: 1px solid var(--rule); border-radius: var(--r-md); }
-.habit-stats dt { font-size: 0.72rem; color: var(--ink-3); }
-.habit-stats dd { margin: 0.15rem 0 0; font-family: var(--display); font-size: 1.35rem; letter-spacing: -0.02em; }
+.habit-stats > div { padding: 0.8rem 1rem; background: var(--card); border-radius: var(--r-lg); }
+.habit-stats dt { font-size: 0.75rem; color: var(--ink-2); }
+.habit-stats dd { margin: 0.2rem 0 0; font-size: 1.9rem; line-height: 1; letter-spacing: -0.05em; }
 
-.habit-month { padding: 1rem 1.1rem; background: var(--card); border: 1px solid var(--rule); border-radius: var(--r-lg); }
-.habit-month-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.7rem; }
-.habit-month-head h2 { margin: 0; font-family: var(--display); font-size: 1.15rem; font-weight: 400; }
+.habit-month { padding: 1.1rem 1.25rem; background: var(--card); border-radius: var(--r-lg); }
+.habit-month-head { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.7rem; }
+.habit-month-head h2 { margin: 0; font-size: 1.3rem; font-weight: 500; letter-spacing: -0.03em; }
 .habit-step {
     border: 1px solid var(--rule-2);
     background: transparent;
-    border-radius: var(--r-sm);
+    border-radius: 100px;
     padding: 0.2rem 0.6rem;
     font: inherit;
     color: var(--ink-2);
     cursor: pointer;
 }
-.habit-step:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.habit-step:hover:not(:disabled) { border-color: var(--ink); color: var(--ink); }
 .habit-step:disabled { opacity: 0.35; cursor: default; }
 
-.habit-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.3rem; }
-.habit-grid-head { text-align: center; font-family: var(--mono); font-size: 0.62rem; color: var(--ink-3); padding-bottom: 0.2rem; }
+.habit-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.4rem; }
+.habit-grid-head { text-align: center; font-size: 0.68rem; color: var(--ink-3); padding-bottom: 0.2rem; }
 .habit-cell {
     aspect-ratio: 1;
     display: grid;
@@ -959,67 +1236,88 @@ html:has(.mnav.is-open) { overflow: hidden; }
     cursor: pointer;
     padding: 0;
 }
-.habit-cell.is-done { background: var(--sage); color: var(--paper); }
+.habit-cell.is-done { background: var(--ink); color: var(--card); }
 .habit-cell.is-skipped { background: transparent; border: 1.5px dashed var(--ink-3); }
 .habit-cell.is-missed { background: var(--accent-soft); color: var(--accent); }
 .habit-cell.is-off { background: transparent; color: var(--ink-3); }
 .habit-cell.is-pending { background: var(--paper-3); }
-.habit-cell.is-future { background: transparent; color: var(--rule-2); cursor: default; }
-.habit-cell.is-today { box-shadow: 0 0 0 1px var(--ink-3); }
+.habit-cell.is-future { background: transparent; border-color: var(--rule); color: var(--rule-2); cursor: default; }
+.habit-cell.is-today { box-shadow: 0 0 0 2px var(--c-terra); }
 .habit-cell.is-selected { outline: 2px solid var(--ink); outline-offset: 1px; }
 
 .habit-legend { display: flex; gap: 1rem; list-style: none; margin: 0.8rem 0 0; padding: 0; font-size: 0.74rem; color: var(--ink-3); }
 .habit-legend li { display: flex; align-items: center; gap: 0.35rem; }
 .habit-legend .habit-cell { width: 0.8rem; aspect-ratio: auto; height: 0.8rem; cursor: default; }
 
-.habit-day { margin-top: 1.2rem; }
-.habit-day h3 { margin: 0 0 0.6rem; font-size: 0.95rem; font-weight: 500; }
+/* The selected day, as a card in the habit's colour. */
+.habit-day { padding: 1.1rem 1.25rem; border-radius: var(--r-lg); background: var(--card-c, var(--card)); }
+.habit-day-kicker { margin: 0; font-size: 0.75rem; color: rgb(0 0 0 / 0.6); }
+.habit-day h3 { margin: 0.1rem 0 0.8rem; font-size: 1.9rem; font-weight: 400; letter-spacing: -0.05em; }
+.habit-day .btn-quiet { border-color: rgb(0 0 0 / 0.3); color: var(--ink); }
+.habit-day .modal-desc { background: rgb(255 255 255 / 0.45); border-color: transparent; color: var(--ink); }
 .habit-day-actions { display: flex; gap: 0.4rem; margin-bottom: 0.7rem; }
 .habit-note { margin-bottom: 0; }
 
-/* All-habits grid: a row per habit, a column per day. Scrolls sideways on a
-   narrow screen with the names pinned. */
-.habits-view { max-width: 62rem; }
-.hg-scroll { overflow-x: auto; margin: 0 -0.2rem; padding: 0 0.2rem; }
-.hg { border-collapse: separate; border-spacing: 0.2rem 0.25rem; }
-.hg thead th {
-    font-family: var(--mono);
-    font-size: 0.6rem;
-    font-weight: 400;
-    color: var(--ink-3);
-    text-align: center;
-    min-width: 1.35rem;
-}
-.hg thead th.is-today { color: var(--ink); font-weight: 600; }
-.hg-letter { display: block; opacity: 0.7; }
-.hg-corner,
-.hg-name {
-    position: sticky;
-    left: 0;
-    z-index: 1;
-    background: var(--card);
-}
-.hg-name { text-align: left; padding-right: 0.7rem; min-width: 8rem; max-width: 12rem; }
-.hg-name button {
-    display: block;
-    max-width: 100%;
+/* All habits: colour cards (tick today, last 7 days) beside the selected habit's month. */
+.habits-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 1.8rem; align-items: start; }
+.hcard { display: flex; align-items: center; gap: 0.9rem; }
+.hcard-name {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
     border: 0;
     background: none;
     padding: 0;
     font: inherit;
-    font-size: 0.88rem;
-    font-weight: 500;
     color: var(--ink);
     text-align: left;
     cursor: pointer;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
 }
-.hg-name button:hover { color: var(--accent); }
-.hg-stats { display: block; font-family: var(--mono); font-size: 0.6rem; font-weight: 400; color: var(--ink-3); }
-.hg td { padding: 0; }
-.hg-cell { width: 1.35rem; height: 1.35rem; aspect-ratio: auto; }
+.hcard-name span { font-size: 1.4rem; font-weight: 500; letter-spacing: -0.04em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hcard-name small { font-size: 0.75rem; color: rgb(0 0 0 / 0.6); }
+.hcard.is-selected .hcard-name span { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; }
+.hcard-week { display: flex; gap: 4px; }
+.hcard-dot { width: 11px; height: 11px; border-radius: 50%; background: rgb(0 0 0 / 0.14); }
+.hcard-dot.is-done { background: var(--ink); }
+.hcard-dot.is-skipped { background: transparent; box-shadow: inset 0 0 0 1.5px rgb(0 0 0 / 0.5); }
+.hcard-dot.is-missed { background: rgb(0 0 0 / 0.28); }
+.hcard-dot.is-pending,
+.hcard-dot.is-off { background: rgb(0 0 0 / 0.1); }
+.hcard-tick {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 2.4rem;
+    height: 2.4rem;
+    border: 1.5px solid rgb(0 0 0 / 0.5);
+    border-radius: 50%;
+    background: transparent;
+    color: transparent;
+    cursor: pointer;
+    transition: all 0.15s var(--ease);
+}
+.hcard-tick:hover { color: var(--ink); border-color: var(--ink); }
+.hcard-tick.is-done { background: var(--ink); border-color: var(--ink); color: var(--card); }
+
+.habit-month-name {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    border: 0;
+    background: none;
+    padding: 0;
+    font: inherit;
+    font-size: 1.3rem;
+    font-weight: 500;
+    letter-spacing: -0.03em;
+    color: var(--ink);
+    cursor: pointer;
+}
+.habit-month-name:hover { text-decoration: underline; }
+.habit-month-nav { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: var(--ink-2); }
+.habit-month-stats { display: flex; gap: 1.8rem; margin: 0.2rem 0 1rem; font-size: 0.75rem; color: var(--ink-2); }
+.habit-month-stats b { display: block; font-size: 1.9rem; font-weight: 400; line-height: 1; letter-spacing: -0.05em; color: var(--ink); }
 
 .habit-modal { width: min(30rem, 100%); }
 .habit-days-label { display: block; margin-bottom: 0.3rem; font-size: 0.84rem; font-weight: 500; }
@@ -1038,41 +1336,118 @@ html:has(.mnav.is-open) { overflow: hidden; }
 
 /* ---- Projects page ------------------------------------------------------- */
 
-.projects-view { max-width: 40rem; }
 .projects-search {
-    width: 100%;
-    margin-bottom: 1rem;
-    padding: 0.55rem 0.75rem;
+    width: min(20rem, 100%);
+    margin-right: auto;
+    padding: 0.45rem 0.9rem;
     font: inherit;
-    font-size: 0.92rem;
+    font-size: 0.88rem;
     border: 1px solid var(--rule-2);
-    border-radius: var(--r-md);
+    border-radius: 100px;
+    background: transparent;
+    color: var(--ink);
+    outline: none;
+}
+.projects-search:focus { border-color: var(--ink); }
+.projects-empty { margin-inline: 0; }
+.new-project { display: flex; gap: 0.4rem; }
+.new-project input {
+    font: inherit;
+    font-size: 0.88rem;
+    padding: 0.45rem 0.9rem;
+    border: 1px solid var(--ink);
+    border-radius: 100px;
     background: var(--card);
     color: var(--ink);
     outline: none;
 }
-.projects-search:focus { border-color: var(--ink-3); }
-.projects-empty { margin-inline: 0; }
-.projects-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
-.projects-row { display: flex; align-items: center; gap: 0.3rem; border-bottom: 1px solid var(--rule); }
-.projects-name {
-    flex: 1;
-    min-width: 0;
+
+/* One colour tile per project: the open count is the big number. */
+.ptiles-section { margin-bottom: 1.6rem; }
+.ptiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: 0.9rem; }
+.ptile {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.6rem;
-    padding: 0.85rem 0.3rem;
+    flex-direction: column;
+    min-height: 9.5rem;
+    padding: 0.9rem 1.1rem 1rem;
+    border-radius: var(--r-lg);
+    background: var(--card-c, var(--card));
+}
+.ptile-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; }
+.ptile-name,
+.ptile-foot { border: 0; background: none; padding: 0; font: inherit; color: var(--ink); text-align: left; cursor: pointer; }
+.ptile-name { min-width: 0; font-size: 1.6rem; font-weight: 500; letter-spacing: -0.045em; line-height: 1.05; overflow-wrap: anywhere; }
+.ptile-name:hover { text-decoration: underline; }
+.ptile-foot { margin-top: auto; padding-top: 1rem; display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; }
+.ptile-count { font-size: 3rem; line-height: 0.85; letter-spacing: -0.06em; }
+.ptile-count small { display: block; margin-top: 0.4rem; font-size: 0.72rem; letter-spacing: 0; color: rgb(0 0 0 / 0.6); }
+.ptile-next { max-width: 60%; font-size: 0.75rem; color: rgb(0 0 0 / 0.65); text-align: right; }
+
+/* Small pill toggles: a sort, a priority, a repeat. */
+.pill-group { display: flex; gap: 0.3rem; }
+.pill-btn {
+    border: 1px solid var(--rule-2);
+    background: none;
+    font: inherit;
+    font-size: 0.82rem;
+    color: var(--ink);
+    padding: 0.35rem 0.85rem;
+    border-radius: 100px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.pill-btn:hover:not(:disabled) { border-color: var(--ink); }
+.pill-btn.is-on { background: var(--ink); border-color: var(--ink); color: var(--card); }
+.pill-btn:disabled { opacity: 0.4; cursor: default; }
+
+/* ⋯ menu on a goal card or project tile. */
+.goal-menu { position: relative; flex: none; }
+/* A round button that reads on any card colour: a light disc with ink dots. */
+.goal-menu > summary {
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    list-style: none;
+    cursor: pointer;
+    border-radius: 50%;
+    background: rgb(255 255 255 / 0.45);
+    font-size: 1.15rem;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.05em;
+    color: var(--ink);
+    transition: background 0.16s var(--ease), color 0.16s var(--ease);
+}
+.goal-menu > summary::-webkit-details-marker { display: none; }
+.goal-menu > summary:hover { background: rgb(255 255 255 / 0.75); }
+.goal-menu[open] > summary { background: var(--ink); color: var(--card); }
+.goal-menu-list {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 0.3rem);
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    min-width: 8rem;
+    padding: 0.3rem;
+    background: var(--card);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-md);
+}
+.goal-menu-list button {
     border: 0;
     background: none;
     font: inherit;
-    font-size: 0.95rem;
-    color: var(--ink);
+    font-size: 0.88rem;
     text-align: left;
+    padding: 0.45rem 0.6rem;
+    border-radius: var(--r-sm);
+    color: var(--ink);
     cursor: pointer;
 }
-.projects-name > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--sage); }
-.projects-row .sort-toggle.is-on { color: var(--ink); font-weight: 600; }
+.goal-menu-list button:hover { background: var(--paper-2); }
+.goal-menu-list button:last-child:hover { color: var(--accent); }
 
 /* ---- Account setup and profile name ------------------------------------- */
 
@@ -1081,47 +1456,49 @@ html:has(.mnav.is-open) { overflow: hidden; }
 .setup-title .dot { color: var(--accent); }
 .setup-lede { margin: 0 0 1.1rem; font-size: 0.92rem; color: var(--ink-2); }
 
-.name-fields { display: grid; grid-template-columns: 1fr 1fr auto; align-items: end; gap: 0 0.8rem; margin-bottom: 0.4rem; }
-.name-fields .btn { margin-bottom: 1.1rem; }
+/* Two names side by side, Save on its own row: the panel is half the page now. */
+.name-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 0.8rem; margin-bottom: 0.4rem; }
+.name-fields .field input { width: 100%; min-width: 0; }
+.name-fields .btn { grid-column: 1 / -1; justify-self: start; margin-bottom: 1.1rem; }
 
 .settings-wordmark {
     display: inline-block;
-    margin: 1.6rem 0 1.2rem;
+    margin: 0 0 1.6rem;
     font-family: var(--display);
-    font-weight: 600;
-    font-size: clamp(1.9rem, 4vw, 2.6rem);
-    letter-spacing: -0.03em;
+    font-weight: 500;
+    font-size: clamp(3.4rem, 9vw, 6.5rem);
+    line-height: 0.84;
+    letter-spacing: -0.06em;
     color: var(--ink);
     text-decoration: none;
     font-variation-settings: "SOFT" 30, "WONK" 1;
 }
-.settings-wordmark .dot { color: var(--accent); }
+.settings-wordmark .dot { color: var(--c-terra); }
 
 .settings-signout { display: inline-block; margin-top: 1rem; text-decoration: none; }
-.trash-back { margin: 1.4rem 0 -1rem; padding-left: 0; }
+/* A back link at the start of the bar; anything after it sits on the right. */
+.view-bar.is-start .back-link { margin-right: auto; }
+.back-link { border: 0; background: none; padding: 0; font: inherit; font-size: 0.88rem; color: var(--ink-2); cursor: pointer; }
+.back-link:hover { color: var(--ink); }
+
+/* A plain card holding rows: logs (Completed) and loose deleted tasks. Colour is
+   kept for live work, so these stay neutral. */
+.log-card { padding: 0.3rem 1.1rem; background: var(--card); border-radius: var(--r-lg); }
+.log-card > li:first-child { border-top: 0; }
 
 /* ---- Inbox filter (projects and goals) ----------------------------------- */
 
-.view-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-.view-head-title { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 0.9rem; min-width: 0; }
-.done-link {
-    border: 0;
-    background: none;
-    padding: 0;
-    font-family: var(--mono);
-    font-size: 0.72rem;
-    color: var(--ink-3);
-    cursor: pointer;
-    white-space: nowrap;
-}
-.done-link:hover { color: var(--sage); }
 
 /* Completed page: done rows read as done, but the undo stays readable. */
 .completed-view .task.is-done { opacity: 1; }
-.completed-view .task-title { text-decoration: line-through; color: var(--ink-3); }
-.completed-view .check { background: var(--sage); border-color: var(--sage); color: var(--paper); }
+.completed-view .task { border-bottom: 0; border-top: 1px solid var(--rule); }
+.completed-view .task:hover { background: none; }
+.completed-view .task-title { text-decoration: line-through; text-decoration-color: var(--ink-3); color: var(--ink-2); }
+.completed-view .task-meta { align-items: center; }
+.completed-view .check { background: var(--ink); border-color: var(--ink); color: var(--card); }
 .completed-view .task-body { cursor: default; }
-.completed-undo { align-self: center; }
+.completed-view .meta-due { color: var(--ink-3); }
+.completed-undo { align-self: center; border: 1px solid var(--rule-2); border-radius: 100px; padding: 0.25rem 0.7rem; color: var(--ink-2); }
 .completed-more { margin-top: 1rem; }
 
 /* Undo pop-up after ticking a task off. */
@@ -1207,81 +1584,136 @@ html:has(.mnav.is-open) { overflow: hidden; }
 
 /* ---- Goals --------------------------------------------------------------- */
 
-.nav-head-link { border: 0; background: none; cursor: pointer; text-align: left; }
-.nav-head-link:hover,
-.nav-head-link.is-active { color: var(--ink); }
+/* Section headings that open their page (Projects, Goals, Habits): darker than a
+   plain label, with an arrow and a pill on hover, so they read as links. */
+.nav-head-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin-left: -0.15rem;
+    padding: 0.2rem 0.6rem 0.2rem 0.8rem;
+    border: 0;
+    border-radius: 100px;
+    background: none;
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--ink-2);
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.16s var(--ease), color 0.16s var(--ease);
+}
+.nav-head-link::after { content: "›"; font-size: 1rem; line-height: 1; color: var(--ink-3); transition: transform 0.16s var(--ease); }
+.nav-head-link:hover { background: var(--paper-3); color: var(--ink); }
+.nav-head-link:hover::after { transform: translateX(2px); color: var(--ink); }
+.nav-head-link.is-active { background: var(--ink); color: var(--card); }
+.nav-head-link.is-active::after { color: var(--card); }
 
 .goal-nav { flex-direction: column; align-items: stretch; gap: 0.3rem; }
 .goal-nav-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .goal-bar { display: block; height: 6px; border-radius: 100px; background: var(--paper-3); overflow: hidden; }
-.goal-bar > span { display: block; height: 100%; background: var(--sage); border-radius: inherit; transition: width 0.25s var(--ease); }
+.goal-bar > span { display: block; height: 100%; background: var(--ink); border-radius: inherit; transition: width 0.25s var(--ease); }
 .goal-bar-thin { height: 3px; }
 
-.goals-view { max-width: 44rem; }
-.goal-section { margin-bottom: 1.8rem; }
-.goal-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.6rem; }
-.goal-section-head h2 { margin: 0; font-family: var(--display); font-size: 1.15rem; font-weight: 400; }
-.goal-section-hint { margin-left: 0.4rem; font-family: var(--mono); font-size: 0.65rem; letter-spacing: 0.06em; color: var(--ink-3); }
-.goal-empty { margin-inline: 0; }
+/* Short / medium / long stack vertically, and only go side by side once the page
+   is wide enough to give each column real room. A container query, so the sidebar
+   being open or collapsed counts. */
+.goals-view { container-type: inline-size; }
+.goal-cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.8rem 1.4rem; align-items: start; max-width: 52rem; }
+@container (min-width: 72rem) {
+    .goal-cols { grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: none; }
+}
+.goal-section-head { display: flex; align-items: baseline; gap: 0.5rem; padding: 0 0.3rem 0.6rem; }
+.goal-section-head h2 { margin: 0; font-size: 1.15rem; font-weight: 500; letter-spacing: -0.03em; white-space: nowrap; }
+.goal-section-hint { font-size: 0.75rem; color: var(--ink-3); white-space: nowrap; }
+.goal-section-head .sort-toggle { margin-left: auto; }
+.goal-empty {
+    margin: 0;
+    padding: 1.6rem 1rem;
+    border: 1.5px dashed var(--rule-2);
+    border-radius: var(--r-lg);
+    font-size: 0.85rem;
+    color: var(--ink-3);
+    text-align: center;
+}
 
-.goal-card { padding: 0.85rem 1rem; margin-bottom: 0.6rem; background: var(--card); border: 1px solid var(--rule); border-radius: var(--r-md); }
-.goal-card.is-done { opacity: 0.7; }
-.goal-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6rem; }
-.goal-card-head h3 { flex: 1; min-width: 0; margin: 0; font-size: 0.98rem; font-weight: 500; }
-.goal-card-actions { display: flex; flex: none; gap: 0.1rem; }
-.goal-why { margin: 0.25rem 0 0; font-size: 0.85rem; color: var(--ink-2); white-space: pre-wrap; }
-.goal-card .goal-bar { margin: 0.7rem 0 0.6rem; }
+/* Each goal is a colour card in its column's stack, like project cards on Inbox. */
+.goal-card {
+    position: relative;
+    background: var(--card-c, var(--card));
+    border-radius: var(--r-lg);
+    padding: 0.95rem 1.1rem 1.9rem;
+    margin-top: -1.1rem;
+}
+.goal-card:first-child { margin-top: 0; }
+.goal-card:last-child { padding-bottom: 0.9rem; }
+.goal-card + .goal-card { box-shadow: 0 -1px 0 rgb(0 0 0 / 0.06), 0 -8px 16px -10px rgb(0 0 0 / 0.28); }
+.goal-card.is-done { opacity: 0.75; }
+.goal-card-head { display: flex; align-items: flex-start; gap: 0.6rem; }
+.goal-title { flex: 1; min-width: 0; }
+.goal-title h3 { margin: 0; font-size: 1.35rem; font-weight: 500; letter-spacing: -0.04em; line-height: 1.08; overflow-wrap: anywhere; }
+.goal-date { margin: 0.2rem 0 0; font-size: 0.72rem; color: rgb(0 0 0 / 0.55); }
+.goal-left { flex: none; margin: 0; text-align: right; font-size: 0.7rem; line-height: 1.15; color: rgb(0 0 0 / 0.6); }
+.goal-left b { display: block; font-size: 1.9rem; font-weight: 400; letter-spacing: -0.05em; color: var(--ink); }
+.goal-left.is-overdue b { font-weight: 600; }
+.goal-why { margin: 0.4rem 0 0; font-size: 0.82rem; color: rgb(0 0 0 / 0.65); white-space: pre-wrap; }
+.goal-card .goal-bar { height: 8px; margin: 0.5rem 0 0.2rem; background: rgb(0 0 0 / 0.12); }
 
-.goal-card-foot { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem 1rem; }
-.goal-stepper { display: flex; align-items: center; gap: 0.35rem; }
+.goal-measure { margin-top: 0.7rem; }
+.goal-stepper { display: flex; align-items: baseline; gap: 0.35rem; }
 .goal-current {
-    width: 4.5rem;
     font: inherit;
-    font-size: 0.88rem;
-    text-align: right;
-    padding: 0.25rem 0.4rem;
-    border: 1px solid var(--rule-2);
-    border-radius: var(--r-sm);
-    background: var(--paper);
+    font-size: 2.1rem;
+    letter-spacing: -0.05em;
+    padding: 0;
+    border: 0;
+    border-bottom: 1.5px dashed transparent;
+    background: transparent;
     color: var(--ink);
 }
-.goal-current:focus { outline: none; border-color: var(--ink-3); }
-.goal-of { font-size: 0.86rem; color: var(--ink-2); }
+.goal-current:hover,
+.goal-current:focus { outline: none; border-bottom-color: rgb(0 0 0 / 0.4); }
+.goal-of { font-size: 0.85rem; color: rgb(0 0 0 / 0.6); margin-right: 0.4rem; }
+.goal-card .habit-step { border-color: rgb(0 0 0 / 0.3); align-self: center; }
 .goal-due { margin: 0; font-size: 0.78rem; color: var(--ink-3); }
-.goal-due.is-overdue { color: var(--amber); }
 
-/* Yes/no goals: a round check before the title, like a task, with the rest indented to the title. */
-.goal-check { width: 20px; height: 20px; margin: 0.05rem 0 0; }
-.goal-card.is-yesno .goal-card-head { gap: 0.7rem; }
-.goal-card.is-yesno .goal-why,
-.goal-card.is-yesno .goal-card-foot { padding-left: calc(20px + 0.7rem); }
-.goal-card.is-yesno .goal-card-foot { margin-top: 0.2rem; }
-.goal-card.is-yesno.is-done h3 { text-decoration: line-through; text-decoration-color: var(--ink-3); }
+/* Yes/no goals: a round check before the title. */
+.goal-check { width: 22px; height: 22px; margin: 0.15rem 0 0; border-color: rgb(0 0 0 / 0.45); }
+.goal-card.is-yesno.is-done h3 { text-decoration: line-through; text-decoration-color: rgb(0 0 0 / 0.4); }
 
-.goal-steps { margin-top: 0.75rem; padding-top: 0.35rem; border-top: 1px solid var(--rule); }
+/* Steps are task rows on the card's colour, like a project card's. */
+.goal-steps { margin-top: 0.6rem; }
 .goal-steps .tasks { margin: 0; }
-.goal-steps-done { margin: 0.1rem 0 0.2rem; font-family: var(--mono); font-size: 0.65rem; color: var(--sage); }
-.goal-step-add { display: flex; align-items: center; gap: 0.55rem; padding: 0.35rem 0.1rem 0; }
-.goal-step-add > span { width: 18px; text-align: center; color: var(--ink-3); }
+.goal-steps .task { padding: 0.55rem 0; border-bottom: 0; border-top: 1px solid rgb(0 0 0 / 0.1); }
+.goal-steps .task:hover { background: none; }
+.goal-steps .task-meta,
+.goal-steps .meta-project { color: rgb(0 0 0 / 0.6); }
+.goal-steps .check,
+.goal-steps .check[data-p] { border-color: rgb(0 0 0 / 0.45); background: transparent; }
+.goal-steps .check:hover,
+.goal-steps .check[data-p]:hover { background: var(--ink); border-color: var(--ink); color: var(--card); }
+.goal-steps-done { margin: 0 0 0.3rem; font-size: 0.72rem; color: rgb(0 0 0 / 0.6); }
+.goal-step-add { display: flex; align-items: center; gap: 0.75rem; padding: 0.55rem 0 0; border-top: 1px solid rgb(0 0 0 / 0.1); }
+.goal-step-add > span { width: 18px; text-align: center; color: rgb(0 0 0 / 0.5); }
 .goal-step-add input {
     flex: 1;
     min-width: 0;
     font: inherit;
-    font-size: 0.88rem;
-    padding: 0.3rem 0;
+    font-size: 0.9rem;
+    padding: 0.2rem 0;
     border: 0;
     background: transparent;
     color: var(--ink);
     outline: none;
 }
-.goal-step-add input::placeholder { color: var(--ink-3); }
+.goal-step-add input::placeholder { color: rgb(0 0 0 / 0.5); }
 .goal-step-add .modal-error { margin-top: 0.3rem; }
 
-.goal-done > summary { cursor: pointer; margin: 0.3rem 0 0.6rem; font-size: 0.8rem; color: var(--ink-3); }
+.goal-done > summary { cursor: pointer; margin: 0.8rem 0.3rem 0.6rem; font-size: 0.8rem; color: var(--ink-3); }
 
 .goal-modal { width: min(30rem, 100%); }
-.goal-field-label { display: block; margin-bottom: 0.3rem; font-family: var(--mono); font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); }
+.goal-field-label { display: block; margin-bottom: 0.3rem; font-size: 0.75rem; color: var(--ink-2); }
 .goal-horizons { display: flex; flex-wrap: wrap; gap: 0.35rem; }
 .goal-mismatch { color: var(--amber); }
 
@@ -1333,22 +1765,25 @@ html:has(.mnav.is-open) { overflow: hidden; }
 
 /* ---- Settings ----------------------------------------------------------- */
 
-.settings { max-width: 40rem; padding-top: 1.5rem; }
+.settings { padding-top: 1.5rem; }
+.settings .hero-kicker { margin-bottom: 0.4rem; }
+.settings-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.1rem; align-items: start; }
+.panel-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.panel-row h2 { margin-bottom: 0.3rem; }
+.panel-row .panel-note { margin: 0; }
 
 .panel {
     background: var(--card);
-    border: 1px solid var(--rule);
     border-radius: var(--r-lg);
     padding: 1.3rem 1.4rem;
     margin-bottom: 1.1rem;
 }
 .panel h2 {
     font-family: var(--display);
-    font-weight: 400;
-    font-size: 1.35rem;
-    letter-spacing: -0.02em;
+    font-weight: 500;
+    font-size: 1.45rem;
+    letter-spacing: -0.04em;
     margin: 0 0 0.9rem;
-    font-variation-settings: "SOFT" 20, "WONK" 1;
 }
 .panel-note {
     font-size: 0.85rem;
@@ -1425,18 +1860,23 @@ html:has(.mnav.is-open) { overflow: hidden; }
 .kv dt { color: var(--ink-3); }
 .kv dd { margin: 0; }
 
+/* The one colour card in Settings: sage while the account is connected. */
 .connected {
     display: flex;
     align-items: center;
     gap: 0.7rem;
-    padding: 0.8rem;
-    background: var(--paper-2);
+    padding: 0.8rem 0.9rem;
+    background: var(--c-sage);
     border-radius: var(--r-md);
     margin-bottom: 1rem;
 }
 .connected > div { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.connected strong { font-size: 0.9rem; font-weight: 500; }
-.connected-sub { font-family: var(--mono); font-size: 0.68rem; color: var(--ink-3); }
+.connected strong { font-size: 0.9rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.connected-sub { font-size: 0.75rem; color: rgb(0 0 0 / 0.6); }
+.connected .btn-quiet { background: rgb(255 255 255 / 0.4); border-color: transparent; color: var(--ink); }
+.connected .dot-ok { background: var(--ink); }
+.sync-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+.sync-row .panel-note { margin: 0; }
 .dot-ok { width: 8px; height: 8px; border-radius: 50%; background: var(--sage); flex: none; }
 
 .callist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.1rem; }
@@ -1480,6 +1920,7 @@ html:has(.mnav.is-open) { overflow: hidden; }
     border: 1px solid transparent;
     cursor: pointer;
     text-decoration: none;
+    white-space: nowrap;
     transition: all 0.2s var(--ease);
 }
 .btn-primary { background: var(--ink); color: var(--paper); }
@@ -1488,6 +1929,7 @@ html:has(.mnav.is-open) { overflow: hidden; }
 .btn-quiet:hover { border-color: var(--accent); color: var(--accent); }
 .btn-danger { background: var(--accent); color: var(--paper); }
 .btn-danger:hover { background: var(--ink); }
+.btn-quiet-danger { color: var(--accent); }
 
 .field { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 1.1rem; }
 .field > span { font-size: 0.84rem; font-weight: 500; }
@@ -1527,8 +1969,7 @@ html:has(.mnav.is-open) { overflow: hidden; }
 .modal {
     width: min(38rem, 100%);
     background: var(--card);
-    border: 1px solid var(--rule);
-    border-radius: var(--r-lg);
+    border-radius: 26px;
     box-shadow: var(--shadow-lg);
     padding: 1.3rem 1.4rem 1.1rem;
     animation: modal-rise 0.2s var(--ease);
@@ -1543,14 +1984,45 @@ html:has(.mnav.is-open) { overflow: hidden; }
     border: 0;
     background: none;
     font-family: var(--display);
-    font-size: 1.4rem;
-    font-weight: 400;
-    letter-spacing: -0.02em;
+    font-size: 1.9rem;
+    font-weight: 500;
+    letter-spacing: -0.045em;
     color: var(--ink);
-    padding: 0 0 0.3rem;
+    padding: 0 0 0.5rem;
     outline: none;
-    font-variation-settings: "SOFT" 20, "WONK" 1;
 }
+
+/* The project the task lives in, as a band in its colour; the select moves it. */
+.modal-band {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: -0.3rem -0.4rem 1rem;
+    padding: 0.55rem 0.9rem;
+    border-radius: var(--r-md);
+    background: var(--card-c, var(--c-stone));
+    cursor: pointer;
+}
+.modal-band .nav-swatch { background: var(--ink); }
+.modal-band select {
+    flex: 1;
+    min-width: 0;
+    appearance: none;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 0.92rem;
+    font-weight: 500;
+    color: var(--ink);
+    cursor: pointer;
+    outline: none;
+}
+.modal-band-hint { font-size: 0.78rem; color: rgb(0 0 0 / 0.6); pointer-events: none; }
+
+.modal-pills { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin-top: 0.9rem; }
+.modal-pills > span { width: 100%; font-size: 0.75rem; color: var(--ink-2); }
+.modal-delete { margin-right: auto; }
 
 .modal-desc {
     width: 100%;
@@ -1578,13 +2050,7 @@ html:has(.mnav.is-open) { overflow: hidden; }
     gap: 0.25rem;
     min-width: 0;
 }
-.modal-grid label > span {
-    font-family: var(--mono);
-    font-size: 0.65rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--ink-3);
-}
+.modal-grid label > span { font-size: 0.75rem; color: var(--ink-2); }
 .modal-grid input,
 .modal-grid select {
     font: inherit;
@@ -1639,15 +2105,20 @@ html:has(.mnav.is-open) { overflow: hidden; }
 .confirm-title {
     margin: 0 0 0.5rem;
     font-family: var(--display);
-    font-size: 1.25rem;
-    font-weight: 400;
-    letter-spacing: -0.02em;
+    font-size: 1.5rem;
+    font-weight: 500;
+    letter-spacing: -0.04em;
 }
 .confirm-message { margin: 0; font-size: 0.9rem; line-height: 1.5; color: var(--ink-2); }
 
-.trash-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.trash-section { max-width: 52rem; margin-bottom: 1.6rem; }
 .trash-empty { color: var(--ink-3); font-size: 0.9rem; }
-.trash-list { list-style: none; margin: 0; padding: 0; }
+.trash-list { list-style: none; margin: 0; }
+.trash-list .trash-row { border-bottom: 0; border-top: 1px solid var(--rule); }
+.tcard.trash-row { padding: 0.9rem 1.15rem 1.9rem; border: 0; }
+.tcard.trash-row:last-child { padding-bottom: 0.9rem; }
+.tcard.trash-row .btn-quiet { background: rgb(255 255 255 / 0.4); border-color: transparent; color: var(--ink); }
+.tcard.trash-row .trash-meta { color: rgb(0 0 0 / 0.6); }
 .trash-row {
     display: flex;
     align-items: center;
@@ -1657,8 +2128,8 @@ html:has(.mnav.is-open) { overflow: hidden; }
     border-bottom: 1px solid var(--rule);
 }
 .trash-info { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
-.trash-name { font-weight: 500; overflow-wrap: anywhere; }
-.trash-meta { font-family: var(--mono); font-size: 0.72rem; color: var(--ink-3); }
+.trash-name { font-size: 1rem; font-weight: 500; overflow-wrap: anywhere; }
+.trash-meta { font-size: 0.75rem; color: var(--ink-3); }
 .trash-actions { display: flex; flex: none; gap: 0.4rem; }
 .btn-quiet-danger:hover { border-color: var(--accent); color: var(--accent); }
 
@@ -1746,9 +2217,11 @@ html:has(.mnav.is-open) { overflow: hidden; }
     .habit-check::after { content: ""; position: absolute; inset: -12px; }
 
     .nav-item { padding-block: 0.7rem; }
-    .row-action,
+    .row-action { width: 2.2rem; height: 2.2rem; }
     .sort-toggle { padding: 0.45rem 0.65rem; }
-    .task-delete { padding: 0.6rem; }
+    /* Bigger hit area without changing where the × sits. */
+    .task-delete { position: relative; }
+    .task-delete::after { content: ""; position: absolute; inset: -10px; }
     .cal-nav button { padding: 0.5rem 0.85rem; }
     .cal-modes button { padding: 0.45rem 0.7rem; }
     .habit-step { padding: 0.45rem 0.8rem; }
@@ -1764,7 +2237,6 @@ html:has(.mnav.is-open) { overflow: hidden; }
     .modal-grid select,
     .modal-desc,
     .event-fields input,
-    .goal-current,
     .goal-step-add input { font-size: 16px; }
 }
 
@@ -1791,21 +2263,28 @@ html:has(.mnav.is-open) { overflow: hidden; }
     .qa-dock .qa-preview { border-top: 0; border-bottom: 1px dashed var(--rule); padding: 0.6rem 0.85rem; }
     .toast { bottom: calc(5.5rem + env(safe-area-inset-bottom)); }
 
-    .cal-head { flex-wrap: wrap; gap: 0.6rem; padding: 0.7rem 0.8rem; }
-    /* Title and view switch share the first row; the nav gets a row of its own. */
-    .cal-nav { flex-basis: 100%; justify-content: flex-end; }
-    .cal-nav .cal-new { margin-right: auto; }
-    .cal-nav button { white-space: nowrap; }
+    /* No top bar on a phone: the header clears the status bar / Dynamic Island itself. */
+    .cal-head { padding: calc(0.8rem + env(safe-area-inset-top)) 0.8rem 0; }
+    .cal-head .hero { margin: 0.8rem 0 0.6rem; }
+    .cal-head .hero-stats { display: none; }
+    /* Too narrow for three columns: wrap, with New event pushed right. */
+    .cal-bar { display: flex; flex-wrap: wrap; }
+    .cal-actions { margin-left: auto; }
+    .habits-layout { grid-template-columns: minmax(0, 1fr); }
+    /* Too narrow for the name, seven dots and the tick on one line: the name wraps. */
+    .hcard-name span { white-space: normal; font-size: 1.2rem; }
+    .habit-month-head { flex-wrap: wrap; }
+    .hero-stats { gap: 1.4rem; }
     /* One column has room for the whole all-day title. */
     .allday { white-space: normal; font-size: 0.72rem; }
 
-    .name-fields { grid-template-columns: 1fr; }
-    .name-fields .btn { justify-self: start; }
+    .name-fields { grid-template-columns: minmax(0, 1fr); }
 
-    .habit-head,
-    .trash-head,
     .trash-row { flex-wrap: wrap; }
-    .habit-actions { margin-top: 0; }
+    .habit-page-cols,
+    .settings-cols { grid-template-columns: minmax(0, 1fr); }
+    .view-bar { flex-wrap: wrap; }
+    .projects-search { width: 100%; }
 
     .modal-backdrop { padding: 1rem 0.75rem calc(1rem + env(safe-area-inset-bottom)); }
     .modal { padding: 1.1rem 1rem 1rem; }

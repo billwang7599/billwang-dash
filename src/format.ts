@@ -98,7 +98,7 @@ export function formatDateLabel(dateKey: string, timeZone: string): string {
     });
 }
 
-function formatTime(time: string): string {
+export function formatTime(time: string): string {
     const [h, m] = time.split(":").map(Number);
     const hour = h % 12 === 0 ? 12 : h % 12;
     return `${hour}${m === 0 ? "" : `:${String(m).padStart(2, "0")}`}${h < 12 ? "am" : "pm"}`;

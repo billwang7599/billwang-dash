@@ -7,13 +7,23 @@ interface Props {
     task: Task;
     projects: Project[];
     goals: Goal[];
+    /** Project id -> card colour; the band at the top takes the chosen project's. */
+    colors: Map<string, string>;
     onSave: (patch: Record<string, unknown>) => Promise<void>;
+    /** Hands over to the delete confirmation. */
+    onDelete: () => void;
     onClose: () => void;
 }
 
 const FREQS = ["daily", "weekly", "monthly", "yearly"] as const;
+const PRIORITIES = [
+    ["1", "Urgent"],
+    ["2", "High"],
+    ["3", "Medium"],
+    ["4", "Normal"],
+] as const;
 
-export function TaskModal({ task, projects, goals, onSave, onClose }: Props) {
+export function TaskModal({ task, projects, goals, colors, onSave, onDelete, onClose }: Props) {
     const [content, setContent] = useState(task.content);
     const [description, setDescription] = useState(task.description);
     const [projectId, setProjectId] = useState(task.projectId);
@@ -98,6 +108,21 @@ export function TaskModal({ task, projects, goals, onSave, onClose }: Props) {
                 onMouseDown={(e) => e.stopPropagation()}
             >
                 <form onSubmit={save}>
+                    {/* Where the task lives, in that project's colour; the select is how you move it. */}
+                    <label className="modal-band" style={{ ["--card-c" as string]: colors.get(projectId) }}>
+                        <span className="nav-swatch" aria-hidden="true" />
+                        <select value={projectId} onChange={(e) => setProjectId(e.target.value)} aria-label="Project">
+                            {projects.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                    {p.name}
+                                </option>
+                            ))}
+                        </select>
+                        <span className="modal-band-hint" aria-hidden="true">
+                            change ›
+                        </span>
+                    </label>
+
                     <input
                         ref={titleRef}
                         className="modal-title"
@@ -117,27 +142,6 @@ export function TaskModal({ task, projects, goals, onSave, onClose }: Props) {
                     />
 
                     <div className="modal-grid">
-                        <label>
-                            <span>Project</span>
-                            <select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-                                {projects.map((p) => (
-                                    <option key={p.id} value={p.id}>
-                                        {p.name}
-                                    </option>
-                                ))}
-                            </select>
-                        </label>
-
-                        <label>
-                            <span>Priority</span>
-                            <select value={priority} onChange={(e) => setPriority(e.target.value)}>
-                                <option value="1">P1 — Urgent</option>
-                                <option value="2">P2 — High</option>
-                                <option value="3">P3 — Medium</option>
-                                <option value="4">P4 — Normal</option>
-                            </select>
-                        </label>
-
                         <label>
                             <span>Goal</span>
                             <select value={goalId} onChange={(e) => setGoalId(e.target.value)}>
@@ -169,18 +173,6 @@ export function TaskModal({ task, projects, goals, onSave, onClose }: Props) {
                         </label>
 
                         <label>
-                            <span>Repeat</span>
-                            <select value={freq} onChange={(e) => setFreq(e.target.value)} disabled={!dueDate}>
-                                <option value="none">Never</option>
-                                {FREQS.map((f) => (
-                                    <option key={f} value={f}>
-                                        {f[0].toUpperCase() + f.slice(1)}
-                                    </option>
-                                ))}
-                            </select>
-                        </label>
-
-                        <label>
                             <span>Every</span>
                             <input
                                 type="number"
@@ -209,6 +201,40 @@ export function TaskModal({ task, projects, goals, onSave, onClose }: Props) {
                         </label>
                     </div>
 
+                    {/* Few options, so pills you can see at once rather than dropdowns. */}
+                    <div className="modal-pills" role="radiogroup" aria-label="Priority">
+                        <span>Priority</span>
+                        {PRIORITIES.map(([value, label]) => (
+                            <button
+                                key={value}
+                                type="button"
+                                role="radio"
+                                aria-checked={priority === value}
+                                className={`pill-btn${priority === value ? " is-on" : ""}`}
+                                onClick={() => setPriority(value)}
+                            >
+                                {label}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="modal-pills" role="radiogroup" aria-label="Repeat">
+                        <span>Repeat</span>
+                        {(["none", ...FREQS] as const).map((f) => (
+                            <button
+                                key={f}
+                                type="button"
+                                role="radio"
+                                aria-checked={freq === f}
+                                className={`pill-btn${freq === f ? " is-on" : ""}`}
+                                disabled={!dueDate}
+                                onClick={() => setFreq(f)}
+                            >
+                                {f === "none" ? "Never" : f[0].toUpperCase() + f.slice(1)}
+                            </button>
+                        ))}
+                    </div>
+
                     {original && original.weekdays.length > 0 && freq === original.freq && (
                         <p className="modal-note">
                             Keeping “{formatRecurrence(original)}”. Changing Repeat resets the specific days.
@@ -218,6 +244,9 @@ export function TaskModal({ task, projects, goals, onSave, onClose }: Props) {
                     {error && <p className="modal-error">{error}</p>}
 
                     <div className="modal-actions">
+                        <button type="button" className="btn btn-quiet btn-quiet-danger modal-delete" onClick={onDelete}>
+                            Delete
+                        </button>
                         <button type="button" className="btn btn-quiet" onClick={onClose}>
                             Cancel
                         </button>

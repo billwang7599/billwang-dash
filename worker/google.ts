@@ -35,7 +35,7 @@ interface GoogleCalendarEntry {
     primary: boolean;
 }
 
-interface GoogleEvent {
+export interface GoogleEvent {
     id: string;
     summary: string;
     start: string;

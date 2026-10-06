@@ -67,6 +67,14 @@ export function setProjectPinned(sql: SqlStorage, id: string, pinned: boolean): 
     return row ? toProject(row) : null;
 }
 
+export function setProjectColor(sql: SqlStorage, id: string, color: string): Project | null {
+    sql.exec("UPDATE projects SET color = ? WHERE id = ? AND deleted_at IS NULL", color, id);
+    const [row] = sql
+        .exec<ProjectRow>("SELECT * FROM projects WHERE id = ? AND deleted_at IS NULL", id)
+        .toArray();
+    return row ? toProject(row) : null;
+}
+
 /** Moves the project and its live tasks to the trash. False if the Inbox was targeted. */
 export function trashProject(sql: SqlStorage, id: string): boolean {
     if (id === INBOX_ID) return false;
