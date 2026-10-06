@@ -22,7 +22,6 @@ export function TaskModal({ task, projects, onSave, onClose }: Props) {
     const [duration, setDuration] = useState(
         task.durationMinutes === null ? "" : String(task.durationMinutes),
     );
-    const [labels, setLabels] = useState(task.labels.join(", "));
     const [freq, setFreq] = useState<string>(task.due?.recurrence?.freq ?? "none");
     const [interval, setInterval] = useState(String(task.due?.recurrence?.interval ?? 1));
 
@@ -68,7 +67,6 @@ export function TaskModal({ task, projects, onSave, onClose }: Props) {
                 description,
                 projectId,
                 priority: Number(priority),
-                labels: labels.split(",").map((l) => l.trim()).filter(Boolean),
                 deadline: deadline || null,
                 durationMinutes: duration ? Number(duration) : null,
                 due: dueDate
@@ -188,15 +186,6 @@ export function TaskModal({ task, projects, onSave, onClose }: Props) {
                                 value={duration}
                                 onChange={(e) => setDuration(e.target.value)}
                                 placeholder="—"
-                            />
-                        </label>
-
-                        <label className="modal-wide">
-                            <span>Labels</span>
-                            <input
-                                value={labels}
-                                onChange={(e) => setLabels(e.target.value)}
-                                placeholder="comma, separated"
                             />
                         </label>
                     </div>

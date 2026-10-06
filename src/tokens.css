@@ -54,6 +54,11 @@
     box-sizing: border-box;
 }
 
+/* No rubber-band: overscrolling would expose the page behind the shell. */
+html {
+    overscroll-behavior: none;
+}
+
 body {
     margin: 0;
     background: var(--paper);

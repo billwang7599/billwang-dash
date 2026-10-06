@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { AppState } from "../api.ts";
 import type { View } from "../App.tsx";
 import type { Project } from "../../shared/types.ts";
+import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { ProjectSearch } from "./ProjectSearch.tsx";
 
 type ProjectSort = "alphabetical" | "recent";
@@ -59,12 +60,12 @@ export function Sidebar({
         return () => window.removeEventListener("keydown", onKey);
     }, []);
 
-    const confirmDelete = (project: Project) => {
+    const [pendingDelete, setPendingDelete] = useState<Project | null>(null);
+
+    const deleteMessage = (project: Project) => {
         const n = state.tasks.filter((t) => t.projectId === project.id).length;
         const detail = n > 0 ? ` and its ${n} open task${n === 1 ? "" : "s"}` : "";
-        if (window.confirm(`Delete "${project.name}"${detail}? This can't be undone.`)) {
-            onDeleteProject(project.id);
-        }
+        return `"${project.name}"${detail} will move to the Trash. You can restore them from there.`;
     };
 
     const { pinned, unpinned } = useMemo(() => {
@@ -125,7 +126,7 @@ export function Sidebar({
                                     pinned
                                     onClick={() => navigate(`/app/project/${project.id}`)}
                                     onTogglePin={() => onTogglePin(project.id, false)}
-                                    onDelete={() => confirmDelete(project)}
+                                    onDelete={() => setPendingDelete(project)}
                                 />
                             ))}
                         </nav>
@@ -167,7 +168,7 @@ export function Sidebar({
                                     pinned={false}
                                     onClick={() => navigate(`/app/project/${project.id}`)}
                                     onTogglePin={() => onTogglePin(project.id, true)}
-                                    onDelete={() => confirmDelete(project)}
+                                    onDelete={() => setPendingDelete(project)}
                                 />
                             ))}
                         </nav>
@@ -175,6 +176,12 @@ export function Sidebar({
                 )}
 
                 <div className="sidebar-foot">
+                    <NavItem
+                        label="Trash"
+                        active={view.name === "trash"}
+                        collapsed={collapsed}
+                        onClick={() => navigate("/app/trash")}
+                    />
                     <NavItem
                         label="Settings"
                         active={view.name === "settings"}
@@ -193,6 +200,19 @@ export function Sidebar({
                     )}
                 </div>
             </aside>
+
+            {pendingDelete && (
+                <ConfirmDialog
+                    title="Delete project?"
+                    message={deleteMessage(pendingDelete)}
+                    confirmLabel="Delete"
+                    onConfirm={() => {
+                        onDeleteProject(pendingDelete.id);
+                        setPendingDelete(null);
+                    }}
+                    onCancel={() => setPendingDelete(null)}
+                />
+            )}
 
             {searchOpen && (
                 <ProjectSearch

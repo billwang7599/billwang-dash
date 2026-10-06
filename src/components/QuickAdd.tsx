@@ -1,11 +1,16 @@
 import { useMemo, useRef, useState } from "react";
+import { splitImportLines } from "../../shared/import.ts";
 import { parseQuickAdd } from "../../shared/parser.ts";
 import type { Preferences } from "../api.ts";
-import { formatDueLabel, priorityName } from "../format.ts";
+import type { Project } from "../../shared/types.ts";
+import { ParsedPills } from "./ParsedPills.tsx";
 
 interface Props {
     preferences: Preferences;
+    projects: Project[];
     onSubmit: (text: string) => Promise<void>;
+    /** Several lines were pasted: hand them to the bulk import instead. */
+    onPasteMany: (text: string) => void;
 }
 
 /**
@@ -17,7 +22,7 @@ interface Props {
  * keeps native caret, selection and IME behaviour, and the layer only paints
  * backgrounds.
  */
-export function QuickAdd({ preferences, onSubmit }: Props) {
+export function QuickAdd({ preferences, projects, onSubmit, onPasteMany }: Props) {
     const [text, setText] = useState("");
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -32,9 +37,15 @@ export function QuickAdd({ preferences, onSubmit }: Props) {
         [text, preferences.timeZone, preferences.dateFormat],
     );
 
+    // The server files "#name" into an existing project case-insensitively and
+    // creates one otherwise, so flag the case that would create one.
+    const isNewProject =
+        parsed.projectName !== null &&
+        !projects.some((p) => p.name.toLowerCase() === parsed.projectName!.toLowerCase());
+
     const segments = useMemo(() => buildSegments(text, parsed.tokens), [text, parsed.tokens]);
     const hasHints =
-        parsed.due || parsed.projectName || parsed.labels.length > 0 ||
+        parsed.due || parsed.projectName ||
         parsed.priority !== 4 || parsed.durationMinutes || parsed.deadline;
 
     async function submit(event: React.FormEvent) {
@@ -58,10 +69,6 @@ export function QuickAdd({ preferences, onSubmit }: Props) {
     return (
         <form className="quickadd" onSubmit={submit}>
             <div className="qa-field">
-                <span className="qa-plus" aria-hidden="true">
-                    +
-                </span>
-
                 <div className="qa-input-wrap">
                     <div className="qa-highlight" aria-hidden="true">
                         {segments.map((seg, i) =>
@@ -80,7 +87,15 @@ export function QuickAdd({ preferences, onSubmit }: Props) {
                         className="qa-input"
                         value={text}
                         onChange={(e) => setText(e.target.value)}
-                        placeholder="Design review #Work @deep p1 every other tuesday at 3pm"
+                        onPaste={(e) => {
+                            // An <input> would flatten the newlines, so catch it first.
+                            const pasted = e.clipboardData.getData("text");
+                            if (splitImportLines(pasted).length > 1) {
+                                e.preventDefault();
+                                onPasteMany(pasted);
+                            }
+                        }}
+                        placeholder="Design review #Work p1 every other tuesday at 3pm"
                         aria-label="Add a task"
                         autoComplete="off"
                         spellCheck={false}
@@ -95,28 +110,11 @@ export function QuickAdd({ preferences, onSubmit }: Props) {
             {hasHints && (
                 <div className="qa-preview">
                     <span className="qa-preview-label">{parsed.content || "…"}</span>
-                    {parsed.due && (
-                        <span className="pill pill-date">{formatDueLabel(parsed.due, preferences.timeZone)}</span>
-                    )}
-                    {parsed.deadline && (
-                        <span className="pill pill-deadline">due {parsed.deadline}</span>
-                    )}
-                    {parsed.durationMinutes && (
-                        <span className="pill">{formatDuration(parsed.durationMinutes)}</span>
-                    )}
-                    {parsed.projectName && (
-                        <span className="pill pill-project">#{parsed.projectName}</span>
-                    )}
-                    {parsed.labels.map((label) => (
-                        <span key={label} className="pill pill-label">
-                            @{label}
-                        </span>
-                    ))}
-                    {parsed.priority !== 4 && (
-                        <span className="pill pill-priority" data-p={parsed.priority}>
-                            {priorityName(parsed.priority)}
-                        </span>
-                    )}
+                    <ParsedPills
+                        parsed={parsed}
+                        timeZone={preferences.timeZone}
+                        isNewProject={isNewProject}
+                    />
                 </div>
             )}
 
@@ -149,11 +147,4 @@ function buildSegments(
 
     if (cursor < raw.length) segments.push({ text: raw.slice(cursor), type: null });
     return segments;
-}
-
-function formatDuration(minutes: number): string {
-    if (minutes < 60) return `${minutes}m`;
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
-    return m === 0 ? `${h}h` : `${h}h ${m}m`;
 }

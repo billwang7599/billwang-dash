@@ -145,10 +145,10 @@
     cursor: pointer;
     transition: background 0.16s var(--ease), color 0.16s var(--ease);
 }
-.nav-item:hover { background: var(--paper-3); color: var(--ink); }
+.nav-item:hover { background: color-mix(in srgb, var(--paper-3) 55%, transparent); color: var(--ink); }
 .nav-item.is-active {
-    background: var(--ink);
-    color: var(--paper);
+    background: var(--paper-3);
+    color: var(--ink);
     font-weight: 500;
 }
 
@@ -160,7 +160,7 @@
     padding: 0.1rem 0.4rem;
     border-radius: 100px;
 }
-.nav-item.is-active .nav-count { background: rgb(255 255 255 / 0.18); color: var(--paper); }
+.nav-item.is-active .nav-count { background: var(--card); color: var(--ink-2); }
 .nav-count.is-urgent { background: var(--accent); color: var(--paper); }
 
 .nav-item.is-collapsed {
@@ -181,7 +181,6 @@
     border-radius: 50%;
     background: var(--ink-3);
 }
-.nav-item.is-active .nav-pip { background: var(--paper); }
 .nav-pip.is-urgent { background: var(--accent); }
 
 /* Collapsed hides the "Projects" heading, so the rule carries the break. */
@@ -296,14 +295,6 @@
     padding: 0.75rem 0.9rem;
 }
 
-.qa-plus {
-    font-size: 1.25rem;
-    font-weight: 300;
-    color: var(--accent);
-    line-height: 1;
-    flex: none;
-}
-
 /*
  * Highlight overlay. The mirrored div and the input must share every metric
  * that affects text layout, or the coloured runs drift away from the glyphs.
@@ -349,14 +340,12 @@
 
 .tok { color: inherit; }
 .qa-highlight .tok-project  { background: var(--sage-soft);   color: var(--sage-soft); }
-.qa-highlight .tok-label    { background: var(--indigo-soft); color: var(--indigo-soft); }
 .qa-highlight .tok-priority { background: var(--accent-soft); color: var(--accent-soft); }
 .qa-highlight .tok-date,
 .qa-highlight .tok-time,
 .qa-highlight .tok-recurrence { background: var(--amber-soft); color: var(--amber-soft); }
 .qa-highlight .tok-duration,
-.qa-highlight .tok-deadline,
-.qa-highlight .tok-assignee { background: var(--paper-3); color: var(--paper-3); }
+.qa-highlight .tok-deadline { background: var(--paper-3); color: var(--paper-3); }
 
 .qa-submit {
     flex: none;
@@ -379,7 +368,7 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 0.4rem;
-    padding: 0.7rem 0.9rem 0.8rem 2.3rem;
+    padding: 0.7rem 0.9rem 0.8rem;
     border-top: 1px dashed var(--rule);
     animation: slip 0.28s var(--ease);
 }
@@ -406,14 +395,13 @@
 .pill-date     { background: var(--amber-soft);  color: var(--amber); }
 .pill-deadline { background: var(--accent-soft); color: var(--accent); }
 .pill-project  { background: var(--sage-soft);   color: var(--sage); }
-.pill-label    { background: var(--indigo-soft); color: var(--indigo); }
 .pill-priority[data-p="1"] { background: var(--accent-soft); color: var(--p1); }
 .pill-priority[data-p="2"] { background: var(--amber-soft);  color: var(--p2); }
 .pill-priority[data-p="3"] { background: var(--indigo-soft); color: var(--p3); }
 
 .qa-error {
     margin: 0;
-    padding: 0.6rem 0.9rem 0.75rem 2.3rem;
+    padding: 0.6rem 0.9rem 0.75rem;
     font-size: 0.82rem;
     color: var(--accent);
     border-top: 1px dashed var(--rule);
@@ -458,6 +446,7 @@
     width: 18px;
     height: 18px;
     margin-top: 0.15rem;
+    padding: 0;
     border-radius: 50%;
     border: 1.5px solid var(--p4);
     background: transparent;
@@ -496,7 +485,6 @@
 .meta-due { color: var(--amber); font-family: var(--mono); font-size: 0.72rem; }
 .meta-deadline { color: var(--accent); font-family: var(--mono); font-size: 0.72rem; }
 .meta-project { color: var(--sage); }
-.meta-label { color: var(--indigo); }
 
 .task-delete {
     flex: none;
@@ -524,13 +512,17 @@
 
 /* ---- Calendar ----------------------------------------------------------- */
 
+/* The calendar is the whole page, not a card inside it. */
+.main-full { max-width: none; padding: 0; }
+
 .cal-wrap {
-    background: var(--card);
-    border: 1px solid var(--rule);
-    border-radius: var(--r-lg);
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
     overflow: hidden;
-    box-shadow: var(--shadow-sm);
-    margin-top: 0.5rem;
+}
+@media (max-width: 780px) {
+    .cal-wrap { height: 85vh; }
 }
 
 .cal-head {
@@ -622,7 +614,8 @@
 .cal-grid {
     display: grid;
     grid-template-columns: 3.2rem repeat(7, minmax(0, 1fr));
-    max-height: 62vh;
+    flex: 1;
+    min-height: 0;
     overflow-y: auto;
     position: relative;
 }
@@ -737,6 +730,59 @@
 .main > .banner { cursor: pointer; }
 .banner-ok  { background: var(--sage-soft);   color: var(--sage); }
 .banner-bad { background: var(--accent-soft); color: var(--accent); }
+.banner-info { background: var(--amber-soft); color: var(--amber); }
+
+.tz-notice {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem 1rem;
+}
+.main-full > .tz-notice { margin: 0; border-radius: 0; }
+.tz-notice-actions { display: flex; gap: 0.4rem; }
+
+/* ---- Time zone dropdown -------------------------------------------------- */
+
+.tz-select { position: relative; }
+.tz-select input { width: 100%; }
+.tz-list {
+    position: absolute;
+    z-index: 20;
+    left: 0;
+    right: 0;
+    margin: 0.25rem 0 0;
+    padding: 0.25rem;
+    list-style: none;
+    max-height: 16rem;
+    overflow-y: auto;
+    background: var(--card);
+    border: 1px solid var(--rule-2);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-md);
+}
+.tz-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    padding: 0.4rem 0.55rem;
+    border-radius: var(--r-sm);
+    font-size: 0.88rem;
+    cursor: pointer;
+}
+.tz-option.is-active { background: var(--paper-2); }
+.tz-option.is-current { font-weight: 500; }
+.tz-tag {
+    flex: none;
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--ink-3);
+    background: var(--paper-3);
+    padding: 0.1rem 0.4rem;
+    border-radius: 100px;
+}
+.tz-none { padding: 0.5rem 0.55rem; font-size: 0.86rem; color: var(--ink-3); }
 
 .kv { display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 1.2rem; margin: 0; font-size: 0.88rem; }
 .kv dt { color: var(--ink-3); }
@@ -796,6 +842,8 @@
 .btn-primary:hover { background: var(--accent); }
 .btn-quiet { background: transparent; border-color: var(--rule-2); color: var(--ink-2); }
 .btn-quiet:hover { border-color: var(--accent); color: var(--accent); }
+.btn-danger { background: var(--accent); color: var(--paper); }
+.btn-danger:hover { background: var(--ink); }
 
 .field { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 1.1rem; }
 .field > span { font-size: 0.84rem; font-weight: 500; }
@@ -940,6 +988,65 @@
     cursor: pointer;
     color: inherit;
 }
+
+/* ---- Confirm dialog + Trash -------------------------------------------- */
+
+.confirm-modal { width: min(24rem, 100%); }
+.confirm-title {
+    margin: 0 0 0.5rem;
+    font-family: var(--display);
+    font-size: 1.25rem;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+}
+.confirm-message { margin: 0; font-size: 0.9rem; line-height: 1.5; color: var(--ink-2); }
+
+.trash-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.trash-empty { color: var(--ink-3); font-size: 0.9rem; }
+.trash-list { list-style: none; margin: 0; padding: 0; }
+.trash-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.7rem 0;
+    border-bottom: 1px solid var(--rule);
+}
+.trash-info { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.trash-name { font-weight: 500; overflow-wrap: anywhere; }
+.trash-meta { font-family: var(--mono); font-size: 0.72rem; color: var(--ink-3); }
+.trash-actions { display: flex; flex: none; gap: 0.4rem; }
+.btn-quiet-danger:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ---- Import ------------------------------------------------------------- */
+
+.import-modal { width: min(44rem, 100%); }
+.import-input { font-family: var(--mono); font-size: 0.82rem; margin: 0.8rem 0 0.9rem; }
+.import-summary {
+    font-size: 0.78rem;
+    color: var(--ink-3);
+    margin: 0 0 0.5rem;
+}
+.import-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 18rem;
+    overflow-y: auto;
+    border: 1px solid var(--rule);
+    border-radius: var(--r-sm);
+}
+.import-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 0.7rem;
+    border-bottom: 1px solid var(--rule);
+}
+.import-row:last-child { border-bottom: 0; }
+.import-row.is-skipped { opacity: 0.55; }
+.import-content { font-size: 0.9rem; font-weight: 500; margin-right: 0.2rem; }
 
 /* ---- Project search (⌘K) ------------------------------------------------- */
 

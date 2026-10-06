@@ -9,6 +9,25 @@ const utcDate = (c: { y: number; m: number; d: number }) =>
 export const priorityName = (p: Priority) =>
     ["Urgent", "High", "Medium", "Normal"][p - 1];
 
+/** The browser's own IANA zone. */
+export const deviceTimeZone = (): string =>
+    Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+/** Resolves aliases ("Asia/Calcutta" vs "Asia/Kolkata") so equal zones compare equal. */
+export function canonicalTimeZone(tz: string): string {
+    try {
+        return new Intl.DateTimeFormat("en-US", { timeZone: tz }).resolvedOptions().timeZone;
+    } catch {
+        return tz;
+    }
+}
+
+/** Every zone the browser knows, plus any that must be present (browsers omit "UTC"). */
+export function timeZoneList(extra: string[]): string[] {
+    const known = Intl.supportedValuesOf?.("timeZone") ?? [];
+    return [...new Set([...extra, "UTC", ...known])].sort();
+}
+
 export const todayKey = (timeZone: string) =>
     civilKey(civilFromDate(new Date(), timeZone));
 

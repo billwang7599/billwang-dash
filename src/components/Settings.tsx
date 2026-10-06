@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import type { GoogleAccountStatus } from "../../shared/types.ts";
 import { api, type Preferences } from "../api.ts";
+import { deviceTimeZone } from "../format.ts";
+import { ConfirmDialog } from "./ConfirmDialog.tsx";
+import { TimeZoneSelect } from "./TimeZoneSelect.tsx";
 
 interface Props {
     preferences: Preferences;
@@ -12,6 +15,7 @@ export function Settings({ preferences, user, onPreferencesChange }: Props) {
     const [google, setGoogle] = useState<GoogleAccountStatus | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
+    const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
 
     useEffect(() => {
         api.googleStatus().then(setGoogle).catch((e: Error) => setError(e.message));
@@ -30,14 +34,18 @@ export function Settings({ preferences, user, onPreferencesChange }: Props) {
     }
 
     async function disconnect() {
-        if (!confirm("Disconnect Google Calendar? Your tasks are not affected.")) return;
         setGoogle(await api.disconnectGoogle());
         setNotice("Google Calendar disconnected.");
     }
 
     async function updatePrefs(patch: Partial<Preferences>) {
-        const { preferences: next } = await api.setPreferences(patch);
-        onPreferencesChange(next);
+        setError(null);
+        try {
+            const { preferences: next } = await api.setPreferences(patch);
+            onPreferencesChange(next);
+        } catch (e) {
+            setError((e as Error).message);
+        }
     }
 
     return (
@@ -74,7 +82,7 @@ export function Settings({ preferences, user, onPreferencesChange }: Props) {
                                         : "not synced yet"}
                                 </span>
                             </div>
-                            <button className="btn btn-quiet" onClick={disconnect}>
+                            <button className="btn btn-quiet" onClick={() => setConfirmingDisconnect(true)}>
                                 Disconnect
                             </button>
                         </div>
@@ -106,22 +114,16 @@ export function Settings({ preferences, user, onPreferencesChange }: Props) {
             <section className="panel">
                 <h2>Dates &amp; times</h2>
 
-                <label className="field">
-                    <span>Timezone</span>
-                    <input
+                <div className="field">
+                    <span id="tz-label">Timezone</span>
+                    <TimeZoneSelect
                         value={preferences.timeZone}
-                        onChange={(e) => onPreferencesChange({ ...preferences, timeZone: e.target.value })}
-                        onBlur={(e) => updatePrefs({ timeZone: e.target.value })}
-                        list="tz-list"
-                        spellCheck={false}
+                        deviceZone={deviceTimeZone()}
+                        labelledBy="tz-label"
+                        onChange={(timeZone) => updatePrefs({ timeZone })}
                     />
-                    <datalist id="tz-list">
-                        {(Intl.supportedValuesOf?.("timeZone") ?? []).map((tz) => (
-                            <option key={tz} value={tz} />
-                        ))}
-                    </datalist>
-                    <small>New tasks are scheduled against this zone.</small>
-                </label>
+                    <small>Task times follow this zone. Change it when you move.</small>
+                </div>
 
                 <label className="field">
                     <span>Numeric date order</span>
@@ -135,6 +137,19 @@ export function Settings({ preferences, user, onPreferencesChange }: Props) {
                     <small>Only affects slash-separated dates like “3/5”.</small>
                 </label>
             </section>
+
+            {confirmingDisconnect && (
+                <ConfirmDialog
+                    title="Disconnect Google Calendar?"
+                    message="Your tasks are not affected. You can connect again at any time."
+                    confirmLabel="Disconnect"
+                    onConfirm={() => {
+                        setConfirmingDisconnect(false);
+                        void disconnect();
+                    }}
+                    onCancel={() => setConfirmingDisconnect(false)}
+                />
+            )}
         </div>
     );
 }

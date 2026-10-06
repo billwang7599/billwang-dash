@@ -4,6 +4,7 @@ import type {
     Preferences,
     Project,
     Task,
+    Trash,
 } from "../shared/types.ts";
 
 export type { Preferences };
@@ -51,6 +52,12 @@ export const api = {
             body: JSON.stringify({ text, timeZone }),
         }),
 
+    importTasks: (text: string, timeZone: string) =>
+        request<{ created: Task[]; skipped: { line: string; reason: string }[] }>(
+            "/api/tasks/import",
+            { method: "POST", body: JSON.stringify({ text, timeZone }) },
+        ),
+
     updateTask: (id: string, patch: Record<string, unknown>) =>
         request<{ task: Task }>(`/api/tasks/${id}`, {
             method: "PATCH",
@@ -65,6 +72,22 @@ export const api = {
 
     deleteTask: (id: string) =>
         request<void>(`/api/tasks/${id}`, { method: "DELETE" }),
+
+    getTrash: () => request<Trash>("/api/trash"),
+
+    restoreTrashedProject: (id: string) =>
+        request<{ project: Project }>(`/api/trash/projects/${id}/restore`, { method: "POST" }),
+
+    restoreTrashedTask: (id: string) =>
+        request<{ task: Task }>(`/api/trash/tasks/${id}/restore`, { method: "POST" }),
+
+    purgeTrashedProject: (id: string) =>
+        request<void>(`/api/trash/projects/${id}`, { method: "DELETE" }),
+
+    purgeTrashedTask: (id: string) =>
+        request<void>(`/api/trash/tasks/${id}`, { method: "DELETE" }),
+
+    emptyTrash: () => request<void>("/api/trash", { method: "DELETE" }),
 
     createProject: (name: string) =>
         request<{ project: Project }>("/api/projects", {

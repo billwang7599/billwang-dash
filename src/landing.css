@@ -185,7 +185,6 @@ h1 em {
     font-weight: 500;
 }
 .tok-project  { background: var(--sage-soft);   color: var(--sage); }
-.tok-label    { background: var(--indigo-soft); color: var(--indigo); }
 .tok-priority { background: var(--accent-soft); color: var(--accent); }
 .tok-date,
 .tok-time     { background: var(--amber-soft);  color: var(--amber); }

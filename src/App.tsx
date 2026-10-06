@@ -1,18 +1,23 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Task } from "../shared/types.ts";
 import { api, type AppState, type Preferences } from "./api.ts";
+import { ConfirmDialog } from "./components/ConfirmDialog.tsx";
+import { ImportModal } from "./components/ImportModal.tsx";
 import { QuickAdd } from "./components/QuickAdd.tsx";
 import { Settings } from "./components/Settings.tsx";
 import { Sidebar } from "./components/Sidebar.tsx";
+import { TimeZoneNotice } from "./components/TimeZoneNotice.tsx";
+import { Trash } from "./components/Trash.tsx";
 import { TaskList } from "./components/TaskList.tsx";
 import { TaskModal } from "./components/TaskModal.tsx";
 import { WeekCalendar } from "./components/WeekCalendar.tsx";
-import { todayKey } from "./format.ts";
+import { deviceTimeZone, todayKey } from "./format.ts";
 
 export type View =
     | { name: "inbox" }
     | { name: "calendar" }
     | { name: "settings" }
+    | { name: "trash" }
     | { name: "project"; id: string };
 
 function viewFromPath(pathname: string): View {
@@ -20,6 +25,7 @@ function viewFromPath(pathname: string): View {
     if (rest.startsWith("project/")) return { name: "project", id: rest.slice(8) };
     if (rest === "calendar") return { name: "calendar" };
     if (rest === "settings") return { name: "settings" };
+    if (rest === "trash") return { name: "trash" };
     // Old bookmarks to /app or /app/upcoming land here too; Inbox is the home view.
     return { name: "inbox" };
 }
@@ -29,6 +35,9 @@ export function App() {
     const [error, setError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
     const [editing, setEditing] = useState<Task | null>(null);
+    const [pendingTaskDelete, setPendingTaskDelete] = useState<Task | null>(null);
+    // Set when several lines are pasted into the quick-add bar; opens the import modal.
+    const [importText, setImportText] = useState<string | null>(null);
     const [view, setView] = useState<View>(() => viewFromPath(window.location.pathname));
     // Calendar data lives server-side; bump this to make it refetch after edits.
     const [revision, setRevision] = useState(0);
@@ -42,6 +51,19 @@ export function App() {
         window.addEventListener("popstate", onPop);
         return () => window.removeEventListener("popstate", onPop);
     }, []);
+
+    // A brand-new account defaults to UTC; adopt the browser's zone once, quietly.
+    const triedAutoZone = useRef(false);
+    useEffect(() => {
+        if (!state || state.preferences.timeZoneSet || triedAutoZone.current) return;
+        triedAutoZone.current = true;
+        api.setPreferences({ timeZone: deviceTimeZone() })
+            .then(({ preferences }) => {
+                setState((prev) => (prev ? { ...prev, preferences } : prev));
+                setRevision((r) => r + 1);
+            })
+            .catch(() => {}); // best effort: Settings still lets the user pick
+    }, [state]);
 
     const navigate = useCallback((path: string) => {
         window.history.pushState({}, "", path);
@@ -103,6 +125,23 @@ export function App() {
                 setRevision((r) => r + 1);
             })(),
         [run],
+    );
+
+    /** After the trash restores something, projects and tasks may both have changed. */
+    const reload = useCallback(async () => {
+        setState(await api.getState());
+        setRevision((r) => r + 1);
+    }, []);
+
+    const importTasks = useCallback(
+        async (text: string) => {
+            if (!state) return;
+            await api.importTasks(text, state.preferences.timeZone);
+            // Refetch: imported "#name" tokens may have created projects.
+            setState(await api.getState());
+            setRevision((r) => r + 1);
+        },
+        [state],
     );
 
     const togglePinProject = useCallback(
@@ -192,15 +231,31 @@ export function App() {
                 onDeleteProject={deleteProject}
             />
 
-            <main className="main">
+            <main className={`main${view.name === "calendar" ? " main-full" : ""}`}>
+                <TimeZoneNotice
+                    preferences={state.preferences}
+                    onSwitch={(timeZone) =>
+                        run(async () => {
+                            const { preferences } = await api.setPreferences({ timeZone });
+                            setState((prev) => (prev ? { ...prev, preferences } : prev));
+                            setRevision((r) => r + 1);
+                        })()
+                    }
+                />
+
                 {notice && (
                     <p className="banner banner-bad" role="alert" onClick={() => setNotice(null)}>
                         {notice}
                     </p>
                 )}
 
-                {view.name !== "settings" && view.name !== "calendar" && (
-                    <QuickAdd preferences={state.preferences} onSubmit={addTask} />
+                {view.name !== "settings" && view.name !== "calendar" && view.name !== "trash" && (
+                    <QuickAdd
+                        preferences={state.preferences}
+                        projects={state.projects}
+                        onSubmit={addTask}
+                        onPasteMany={setImportText}
+                    />
                 )}
 
                 {view.name === "settings" ? (
@@ -209,6 +264,8 @@ export function App() {
                         user={state.user}
                         onPreferencesChange={setPreferences}
                     />
+                ) : view.name === "trash" ? (
+                    <Trash projects={state.projects} onChanged={reload} />
                 ) : view.name === "calendar" ? (
                     <WeekCalendar timeZone={state.preferences.timeZone} revision={revision} />
                 ) : (
@@ -221,12 +278,37 @@ export function App() {
                             groupByDate={view.name !== "project"}
                             emptyMessage={emptyFor(view)}
                             onComplete={completeTask}
-                            onDelete={deleteTask}
+                            onDelete={(id) =>
+                                setPendingTaskDelete(state.tasks.find((t) => t.id === id) ?? null)
+                            }
                             onOpen={setEditing}
                         />
                     </>
                 )}
             </main>
+
+            {pendingTaskDelete && (
+                <ConfirmDialog
+                    title="Delete task?"
+                    message={`"${pendingTaskDelete.content}" will move to the Trash. You can restore it from there.`}
+                    confirmLabel="Delete"
+                    onConfirm={() => {
+                        deleteTask(pendingTaskDelete.id);
+                        setPendingTaskDelete(null);
+                    }}
+                    onCancel={() => setPendingTaskDelete(null)}
+                />
+            )}
+
+            {importText !== null && state && (
+                <ImportModal
+                    initialText={importText}
+                    preferences={state.preferences}
+                    projects={state.projects}
+                    onImport={importTasks}
+                    onClose={() => setImportText(null)}
+                />
+            )}
 
             {editing && state && (
                 <TaskModal

@@ -133,11 +133,6 @@ function TaskRow({
                     )}
                     {task.deadline && <span className="meta-deadline">deadline {task.deadline}</span>}
                     {project && !project.isInbox && <span className="meta-project">#{project.name}</span>}
-                    {task.labels.map((label) => (
-                        <span className="meta-label" key={label}>
-                            @{label}
-                        </span>
-                    ))}
                 </div>
             </button>
 
