@@ -247,3 +247,16 @@ rollover, the public/protected split, and calendar timezone placement.
 | `npm test` | Full suite |
 | `npm run deploy` | Build and `wrangler deploy` |
 | `npm run cf-typegen` | Regenerate `worker-configuration.d.ts` |
+
+---
+
+## Icons
+
+`public/favicon.svg` is the master: a "d." lettermark in Fraunces 600 (the
+wordmark's face), converted once to vector paths so no font is needed. It carries
+its own dark-mode colours. The `.ico`, Apple touch icon and manifest PNGs are
+generated from it:
+
+```bash
+npm i --no-save @resvg/resvg-js && node scripts/make-icons.mjs
+```
