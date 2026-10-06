@@ -122,7 +122,18 @@ export interface CalendarItem {
     location?: string;
 }
 
+export interface GooglePushStatus {
+    enabled: boolean;
+    /** Tasks waiting to be pushed. */
+    pending: number;
+    /** Why syncing stopped, if it did. */
+    error: string | null;
+}
+
 export interface GoogleAccountStatus {
+    /** Whether the grant includes write access to dash's own calendar. */
+    canWrite: boolean;
+    push: GooglePushStatus;
     connected: boolean;
     email: string | null;
     connectedAt: string | null;

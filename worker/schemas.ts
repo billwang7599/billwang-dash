@@ -77,6 +77,10 @@ export const calendarToggleBody = z.object({
     enabled: z.boolean(),
 });
 
+export const googlePushBody = z.object({
+    enabled: z.boolean(),
+});
+
 export const pinnedBody = z.object({
     pinned: z.boolean(),
 });

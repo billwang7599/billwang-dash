@@ -205,6 +205,31 @@ export async function setCalendarEnabled(
     return stub.getGoogleStatus();
 }
 
+/**
+ * Turns pushing tasks to Google on or off. The checks live here, not in the DO, so
+ * the user gets a clear 400 rather than an error thrown across the RPC boundary.
+ */
+export async function setGooglePush(
+    stub: Stub,
+    env: Env,
+    enabled: boolean,
+): Promise<GoogleAccountStatus> {
+    if (!enabled) return stub.setGooglePush(false);
+
+    if (!env.GOOGLE_CLIENT_ID) throw new ServiceError(503, "Google is not configured");
+    const status = await stub.getGoogleStatus();
+    if (!status.connected) throw new ServiceError(400, "Connect Google first");
+    if (!status.canWrite) {
+        throw new ServiceError(400, "Reconnect Google to grant access to the dash calendar");
+    }
+    try {
+        return await stub.setGooglePush(true);
+    } catch (err) {
+        console.error("Could not enable Google push", err);
+        throw new ServiceError(503, `Could not set up the dash calendar in Google: ${(err as Error).message}`);
+    }
+}
+
 export async function beginGoogleAuth(stub: Stub, env: Env): Promise<string> {
     if (!env.GOOGLE_CLIENT_ID) throw new ServiceError(503, "Google is not configured");
     return stub.beginGoogleAuth();

@@ -148,7 +148,7 @@ app.get("/api/calendar", async (c) =>
     }),
 );
 
-// ---- Google Calendar (read-only) -----------------------------------------
+// ---- Google Calendar -----------------------------------------------------
 
 app.get("/api/google/status", async (c) => c.json(await stub(c).getGoogleStatus()));
 
@@ -163,6 +163,11 @@ app.get("/api/google/callback", async (c) =>
 app.post("/api/google/disconnect", async (c) =>
     c.json(await service.disconnectGoogle(stub(c))),
 );
+
+app.post("/api/google/push", async (c) => {
+    const { enabled } = await body(c, schemas.googlePushBody);
+    return c.json(await service.setGooglePush(stub(c), c.env, enabled));
+});
 
 app.patch("/api/google/calendars/:id", async (c) => {
     const { enabled } = await body(c, schemas.calendarToggleBody);

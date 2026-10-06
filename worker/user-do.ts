@@ -7,11 +7,25 @@ import {
 } from "../shared/civil.ts";
 import { nextOccurrence } from "../shared/parser.ts";
 import {
+    GoogleApiError,
+    WRITE_SCOPE,
+    createCalendar,
+    deleteCalendar,
+    deleteEvent,
+    insertEvent,
     listCalendars,
     listEvents,
     refreshAccessToken,
+    updateEvent,
     type GoogleTokens,
 } from "./google.ts";
+import {
+    backoffMs,
+    classifyError,
+    eventForTask,
+    eventIdForTask,
+    fingerprint,
+} from "./google-sync.ts";
 import type {
     CalendarItem,
     DueDate,
@@ -32,6 +46,11 @@ import type {
  */
 
 const INBOX_ID = "inbox";
+
+/** Edits within this window share one push run. */
+const PUSH_DELAY_MS = 1500;
+/** Tasks pushed per alarm run, to stay inside Google's rate limits. */
+const PUSH_BATCH = 25;
 
 interface TaskRow extends Record<string, SqlStorageValue> {
     id: string;
@@ -73,6 +92,10 @@ const toProject = (r: ProjectRow): Project => ({
     createdAt: r.created_at,
     pinned: r.pinned === 1,
 });
+
+/** Whether Google granted write access to dash's own calendar. */
+const hasWriteScope = (scope: string | null | undefined): boolean =>
+    (scope ?? "").split(" ").includes(WRITE_SCOPE);
 
 export interface TaskInput {
     content: string;
@@ -273,6 +296,33 @@ export class UserDO extends DurableObject<Env> {
                 INSERT INTO _migrations (id) VALUES (10);
             `);
         }
+
+        if (version < 11) {
+            // Pushing tasks to a dash-owned Google calendar. google_task_events has no
+            // foreign key on purpose: a purged task must still be reconciled to a delete.
+            // rev bumps on every edit, so a run that finishes can tell its work is stale.
+            sql.exec(`
+                ALTER TABLE google_account ADD COLUMN scope TEXT;
+                ALTER TABLE google_account ADD COLUMN dash_calendar_id TEXT;
+                ALTER TABLE google_account ADD COLUMN push_enabled INTEGER NOT NULL DEFAULT 0;
+                ALTER TABLE google_account ADD COLUMN push_error TEXT;
+
+                CREATE TABLE google_task_events (
+                    task_id TEXT PRIMARY KEY,
+                    fingerprint TEXT NOT NULL,
+                    synced_at TEXT NOT NULL
+                );
+
+                CREATE TABLE google_outbox (
+                    task_id TEXT PRIMARY KEY,
+                    attempts INTEGER NOT NULL DEFAULT 0,
+                    next_try_at INTEGER NOT NULL,
+                    rev INTEGER NOT NULL DEFAULT 1
+                );
+
+                INSERT INTO _migrations (id) VALUES (11);
+            `);
+        }
     }
 
     // ---- Profile -----------------------------------------------------------
@@ -283,10 +333,13 @@ export class UserDO extends DurableObject<Env> {
 
     async setPreferences(prefs: Partial<Preferences>): Promise<void> {
         if (prefs.timeZone) {
+            const before = (await this.getPreferences()).timeZone;
             this.sql.exec(
                 "UPDATE profile SET time_zone = ?, time_zone_set = 1 WHERE id = 1",
                 prefs.timeZone,
             );
+            // Task times float with the zone, so Google's copies have to move too.
+            if (prefs.timeZone !== before && this.pushState().enabled) await this.queueAll();
         }
         if (prefs.dateFormat) {
             this.sql.exec("UPDATE profile SET date_format = ? WHERE id = 1", prefs.dateFormat);
@@ -356,6 +409,7 @@ export class UserDO extends DurableObject<Env> {
             "UPDATE projects SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
             now, id,
         );
+        await this.markDirty(this.taskIdsTrashedWith(id));
         return true;
     }
 
@@ -423,6 +477,7 @@ export class UserDO extends DurableObject<Env> {
             now,
         );
 
+        await this.markDirty([id]);
         return (await this.getTask(id))!;
     }
 
@@ -469,6 +524,7 @@ export class UserDO extends DurableObject<Env> {
             );
         }
 
+        await this.markDirty([id]);
         return this.getTask(id);
     }
 
@@ -494,6 +550,7 @@ export class UserDO extends DurableObject<Env> {
                     "UPDATE tasks SET due_date = ?, updated_at = ? WHERE id = ?",
                     civilKey(next), now, id,
                 );
+                await this.markDirty([id]);
                 return this.getTask(id);
             }
         }
@@ -502,6 +559,7 @@ export class UserDO extends DurableObject<Env> {
             "UPDATE tasks SET completed = 1, completed_at = ?, updated_at = ? WHERE id = ?",
             now, now, id,
         );
+        await this.markDirty([id]);
         return this.getTask(id);
     }
 
@@ -510,6 +568,7 @@ export class UserDO extends DurableObject<Env> {
             "UPDATE tasks SET completed = 0, completed_at = NULL, updated_at = ? WHERE id = ?",
             new Date().toISOString(), id,
         );
+        await this.markDirty([id]);
         return this.getTask(id);
     }
 
@@ -518,6 +577,7 @@ export class UserDO extends DurableObject<Env> {
             "UPDATE tasks SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
             new Date().toISOString(), id,
         );
+        await this.markDirty([id]);
     }
 
     async getTask(id: string): Promise<Task | null> {
@@ -581,11 +641,13 @@ export class UserDO extends DurableObject<Env> {
         if (!row) return { error: "not_found" };
         if (this.findProjectByName(row.name)) return { error: "name_taken", name: row.name };
 
+        const restored = this.taskIdsTrashedWith(id);
         this.sql.exec(
             "UPDATE tasks SET deleted_at = NULL, trashed_with = NULL WHERE trashed_with = ?",
             id,
         );
         this.sql.exec("UPDATE projects SET deleted_at = NULL WHERE id = ?", id);
+        await this.markDirty(restored);
         return { project: toProject({ ...row, deleted_at: null }) };
     }
 
@@ -597,6 +659,7 @@ export class UserDO extends DurableObject<Env> {
                AND project_id IN (SELECT id FROM projects WHERE deleted_at IS NULL)`,
             id,
         );
+        await this.markDirty([id]);
         return this.getTask(id);
     }
 
@@ -616,7 +679,7 @@ export class UserDO extends DurableObject<Env> {
         this.sql.exec("DELETE FROM tasks WHERE deleted_at IS NOT NULL");
     }
 
-    // ---- Google Calendar (read-only) ---------------------------------------
+    // ---- Google Calendar: reading events -----------------------------------
 
     /** Single-use CSRF token, stored so the callback can consume it exactly once. */
     async beginGoogleAuth(): Promise<string> {
@@ -647,13 +710,28 @@ export class UserDO extends DurableObject<Env> {
             );
         }
 
+        // Reconnecting (say, to grant write access) must not forget the dash
+        // calendar. A different Google account starts clean.
+        const [prev] = this.sql
+            .exec<{ email: string | null; dash_calendar_id: string | null; push_enabled: number }>(
+                "SELECT email, dash_calendar_id, push_enabled FROM google_account WHERE id = 1",
+            )
+            .toArray();
+        const sameAccount = prev !== undefined && prev.email === tokens.email;
+        const canWrite = hasWriteScope(tokens.scope);
+        if (prev && !sameAccount) this.clearPushState();
+
         this.sql.exec("DELETE FROM google_account");
         this.sql.exec(
             `INSERT INTO google_account
-               (id, email, refresh_token, access_token, expires_at, connected_at)
-           VALUES (1, ?, ?, ?, ?, ?)`,
+               (id, email, refresh_token, access_token, expires_at, connected_at,
+                scope, dash_calendar_id, push_enabled)
+           VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)`,
             tokens.email, tokens.refreshToken, tokens.accessToken, tokens.expiresAt,
             new Date().toISOString(),
+            tokens.scope,
+            sameAccount ? prev.dash_calendar_id : null,
+            sameAccount && canWrite ? prev.push_enabled : 0,
         );
 
         await this.refreshCalendarList(tokens.accessToken);
@@ -661,23 +739,48 @@ export class UserDO extends DurableObject<Env> {
     }
 
     async disconnectGoogle(): Promise<void> {
+        await this.removeDashCalendar();
         this.sql.exec("DELETE FROM google_account");
         this.sql.exec("DELETE FROM google_calendars");
     }
 
     async getGoogleStatus(): Promise<GoogleAccountStatus> {
         const rows = this.sql
-            .exec<{ email: string | null; connected_at: string; last_synced_at: string | null }>(
-                "SELECT email, connected_at, last_synced_at FROM google_account WHERE id = 1",
+            .exec<{
+                email: string | null;
+                connected_at: string;
+                last_synced_at: string | null;
+                scope: string | null;
+                push_enabled: number;
+                push_error: string | null;
+            }>(
+                `SELECT email, connected_at, last_synced_at, scope, push_enabled, push_error
+                 FROM google_account WHERE id = 1`,
             )
             .toArray();
 
         if (rows.length === 0) {
-            return { connected: false, email: null, connectedAt: null, lastSyncedAt: null, calendars: [] };
+            return {
+                connected: false,
+                canWrite: false,
+                push: { enabled: false, pending: 0, error: null },
+                email: null,
+                connectedAt: null,
+                lastSyncedAt: null,
+                calendars: [],
+            };
         }
 
         return {
             connected: true,
+            canWrite: hasWriteScope(rows[0].scope),
+            push: {
+                enabled: rows[0].push_enabled === 1,
+                pending: this.sql
+                    .exec<{ n: number }>("SELECT COUNT(*) AS n FROM google_outbox")
+                    .one().n,
+                error: rows[0].push_error,
+            },
             email: rows[0].email,
             connectedAt: rows[0].connected_at,
             lastSyncedAt: rows[0].last_synced_at,
@@ -715,6 +818,8 @@ export class UserDO extends DurableObject<Env> {
             if (result.status !== "fulfilled") return;
             const cal = enabled[i];
             for (const event of result.value) {
+                // Events dash wrote are the tasks themselves, already shown as tasks.
+                if (event.dashTaskId) continue;
                 items.push({
                     id: `gcal:${cal.id}:${event.id}`,
                     kind: "gcal",
@@ -802,7 +907,8 @@ export class UserDO extends DurableObject<Env> {
     }
 
     private async refreshCalendarList(accessToken: string): Promise<void> {
-        const calendars = await listCalendars(accessToken);
+        const dashId = this.pushState().calendarId;
+        const calendars = (await listCalendars(accessToken)).filter((c) => c.id !== dashId);
         // Preserve which calendars the user switched off across a re-sync.
         const disabled = new Set(
             this.storedCalendars().filter((c) => !c.enabled).map((c) => c.id),
@@ -856,6 +962,264 @@ export class UserDO extends DurableObject<Env> {
             console.error("Google token refresh failed", err);
             return null;
         }
+    }
+
+    // ---- Google push (tasks -> a dash-owned calendar in Google) -------------
+
+    private pushState(): { enabled: boolean; calendarId: string | null } {
+        const [row] = this.sql
+            .exec<{ push_enabled: number; dash_calendar_id: string | null }>(
+                "SELECT push_enabled, dash_calendar_id FROM google_account WHERE id = 1",
+            )
+            .toArray();
+        return { enabled: row?.push_enabled === 1, calendarId: row?.dash_calendar_id ?? null };
+    }
+
+    /** Turns syncing on (creating the dash calendar the first time) or off. */
+    async setGooglePush(enabled: boolean): Promise<GoogleAccountStatus> {
+        if (!enabled) {
+            await this.removeDashCalendar();
+            return this.getGoogleStatus();
+        }
+
+        const status = await this.getGoogleStatus();
+        if (!status.connected || !status.canWrite) {
+            throw new Error("Google is not connected with write access");
+        }
+
+        const token = await this.getValidAccessToken();
+        if (!token) throw new Error("Google needs to be reconnected");
+
+        let calendarId = this.pushState().calendarId;
+        if (!calendarId) {
+            const { timeZone } = await this.getPreferences();
+            calendarId = await createCalendar(token, "dash", timeZone);
+        }
+        this.sql.exec(
+            "UPDATE google_account SET push_enabled = 1, push_error = NULL, dash_calendar_id = ? WHERE id = 1",
+            calendarId,
+        );
+        await this.queueAll();
+        return this.getGoogleStatus();
+    }
+
+    /** Queue tasks for the next run. A no-op unless push is on. */
+    private async markDirty(taskIds: string[]): Promise<void> {
+        if (taskIds.length === 0 || !this.pushState().enabled) return;
+        const now = Date.now();
+        for (const id of taskIds) {
+            this.sql.exec(
+                `INSERT INTO google_outbox (task_id, attempts, next_try_at, rev)
+                 VALUES (?, 0, ?, 1)
+                 ON CONFLICT(task_id) DO UPDATE
+                   SET attempts = 0, next_try_at = excluded.next_try_at, rev = rev + 1`,
+                id, now,
+            );
+        }
+        await this.scheduleAlarm(now + PUSH_DELAY_MS);
+    }
+
+    /** Every task that has, or should have, a Google event. */
+    private async queueAll(): Promise<void> {
+        const now = Date.now();
+        // "WHERE true" stops SQLite reading ON CONFLICT as a join constraint.
+        this.sql.exec(
+            `INSERT INTO google_outbox (task_id, attempts, next_try_at, rev)
+             SELECT id, 0, ?, 1 FROM tasks
+              WHERE deleted_at IS NULL AND completed = 0 AND due_date IS NOT NULL
+             UNION
+             SELECT task_id, 0, ?, 1 FROM google_task_events WHERE true
+             ON CONFLICT(task_id) DO UPDATE
+               SET attempts = 0, next_try_at = excluded.next_try_at, rev = rev + 1`,
+            now, now,
+        );
+        await this.scheduleAlarm(now + PUSH_DELAY_MS);
+    }
+
+    private async scheduleAlarm(at: number): Promise<void> {
+        const current = await this.ctx.storage.getAlarm();
+        if (current === null || at < current) await this.ctx.storage.setAlarm(at);
+    }
+
+    private taskIdsTrashedWith(projectId: string): string[] {
+        return this.sql
+            .exec<{ id: string }>("SELECT id FROM tasks WHERE trashed_with = ?", projectId)
+            .toArray()
+            .map((r) => r.id);
+    }
+
+    /** Pushes one batch of queued tasks to Google, then re-arms itself if more remain. */
+    async alarm(): Promise<void> {
+        const { enabled, calendarId } = this.pushState();
+        if (!enabled || !calendarId) {
+            this.sql.exec("DELETE FROM google_outbox");
+            return;
+        }
+
+        const now = Date.now();
+        const batch = this.sql
+            .exec<{ task_id: string; attempts: number; rev: number }>(
+                `SELECT task_id, attempts, rev FROM google_outbox
+                 WHERE next_try_at <= ? ORDER BY next_try_at LIMIT ?`,
+                now, PUSH_BATCH,
+            )
+            .toArray();
+
+        if (batch.length > 0) {
+            const token = await this.getValidAccessToken();
+            if (!token) {
+                this.stopPush("Google needs to be reconnected. Reconnect, then turn syncing on again.");
+                return;
+            }
+            const { timeZone } = await this.getPreferences();
+
+            for (const row of batch) {
+                try {
+                    await this.reconcileTask(token, calendarId, row.task_id, timeZone);
+                    // Only if nothing edited the task while we were talking to Google.
+                    this.sql.exec(
+                        "DELETE FROM google_outbox WHERE task_id = ? AND rev = ?",
+                        row.task_id, row.rev,
+                    );
+                } catch (err) {
+                    const kind = classifyError(err);
+                    if (kind === "reauth") {
+                        this.stopPush("Google denied access. Reconnect Google, then turn syncing on again.");
+                        return;
+                    }
+                    if (kind === "gone") {
+                        this.stopPush(
+                            "The dash calendar was deleted in Google. Turn syncing on again to recreate it.",
+                            { calendarGone: true },
+                        );
+                        return;
+                    }
+                    if (kind === "fatal") {
+                        // One task Google won't take must not stall the rest.
+                        console.error("Google push gave up on a task", row.task_id, err);
+                        this.sql.exec(
+                            "DELETE FROM google_outbox WHERE task_id = ? AND rev = ?",
+                            row.task_id, row.rev,
+                        );
+                        continue;
+                    }
+                    console.warn("Google push will retry", row.task_id, err);
+                    this.sql.exec(
+                        `UPDATE google_outbox SET attempts = attempts + 1, next_try_at = ?
+                         WHERE task_id = ? AND rev = ?`,
+                        Date.now() + backoffMs(row.attempts), row.task_id, row.rev,
+                    );
+                    if (err instanceof GoogleApiError && err.status === 429) break;
+                }
+            }
+        }
+
+        const [next] = this.sql
+            .exec<{ at: number | null }>("SELECT MIN(next_try_at) AS at FROM google_outbox")
+            .toArray();
+        if (next?.at != null) await this.scheduleAlarm(Math.max(next.at, Date.now() + 1000));
+    }
+
+    /** Makes Google's copy of one task match what it should be now. Idempotent. */
+    private async reconcileTask(
+        token: string,
+        calendarId: string,
+        taskId: string,
+        timeZone: string,
+    ): Promise<void> {
+        const task = this.taskForSync(taskId);
+        const desired = task ? eventForTask(task, timeZone, this.env.APP_ORIGIN) : null;
+        const [mapped] = this.sql
+            .exec<{ fingerprint: string }>(
+                "SELECT fingerprint FROM google_task_events WHERE task_id = ?",
+                taskId,
+            )
+            .toArray();
+        const eventId = eventIdForTask(taskId);
+
+        if (!desired) {
+            if (!mapped) return;
+            try {
+                await deleteEvent(token, calendarId, eventId);
+            } catch (err) {
+                if (classifyError(err) !== "gone") throw err;
+            }
+            this.sql.exec("DELETE FROM google_task_events WHERE task_id = ?", taskId);
+            return;
+        }
+
+        const fp = await fingerprint(desired);
+        if (mapped?.fingerprint === fp) return;
+
+        if (mapped) {
+            try {
+                await updateEvent(token, calendarId, eventId, desired);
+            } catch (err) {
+                if (classifyError(err) !== "gone") throw err;
+                await insertEvent(token, calendarId, eventId, desired);
+            }
+        } else {
+            try {
+                await insertEvent(token, calendarId, eventId, desired);
+            } catch (err) {
+                // The id exists (a retry, or a deleted event): replace it, which also revives it.
+                if (classifyError(err) !== "conflict") throw err;
+                await updateEvent(token, calendarId, eventId, desired);
+            }
+        }
+
+        this.sql.exec(
+            `INSERT INTO google_task_events (task_id, fingerprint, synced_at) VALUES (?, ?, ?)
+             ON CONFLICT(task_id) DO UPDATE
+               SET fingerprint = excluded.fingerprint, synced_at = excluded.synced_at`,
+            taskId, fp, new Date().toISOString(),
+        );
+    }
+
+    /** The task, only if it can have an event: not trashed, and its project isn't either. */
+    private taskForSync(taskId: string): Task | null {
+        const rows = this.sql
+            .exec<TaskRow>(
+                `SELECT t.* FROM tasks t JOIN projects p ON p.id = t.project_id
+                 WHERE t.id = ? AND t.deleted_at IS NULL AND p.deleted_at IS NULL`,
+                taskId,
+            )
+            .toArray();
+        return rows.length === 0 ? null : this.hydrate(rows)[0];
+    }
+
+    /** Syncing stopped on its own; keep the reason for Settings. */
+    private stopPush(reason: string, options: { calendarGone?: boolean } = {}): void {
+        this.sql.exec("UPDATE google_account SET push_enabled = 0, push_error = ? WHERE id = 1", reason);
+        this.sql.exec("DELETE FROM google_outbox");
+        if (options.calendarGone) {
+            this.sql.exec("UPDATE google_account SET dash_calendar_id = NULL WHERE id = 1");
+            this.sql.exec("DELETE FROM google_task_events");
+        }
+    }
+
+    private clearPushState(): void {
+        this.sql.exec("DELETE FROM google_outbox");
+        this.sql.exec("DELETE FROM google_task_events");
+    }
+
+    /** Off, or disconnecting: delete the dash calendar (best effort) and forget the sync state. */
+    private async removeDashCalendar(): Promise<void> {
+        const { calendarId } = this.pushState();
+        if (calendarId) {
+            try {
+                const token = await this.getValidAccessToken();
+                if (token) await deleteCalendar(token, calendarId);
+            } catch (err) {
+                // Already gone is fine; anything else leaves an orphan the user can delete in Google.
+                if (classifyError(err) !== "gone") console.error("Could not delete the dash calendar", err);
+            }
+        }
+        this.sql.exec(
+            "UPDATE google_account SET push_enabled = 0, push_error = NULL, dash_calendar_id = NULL WHERE id = 1",
+        );
+        this.clearPushState();
+        await this.ctx.storage.deleteAlarm();
     }
 
     // ---- Helpers -----------------------------------------------------------
