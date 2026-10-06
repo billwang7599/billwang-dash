@@ -118,6 +118,26 @@ export function App() {
     [run],
   );
 
+  const deleteProject = useCallback(
+    (id: string) =>
+      run(async () => {
+        await api.deleteProject(id);
+        // The server cascades to the project's tasks, so drop them here too.
+        setState((prev) =>
+          prev
+            ? {
+                ...prev,
+                projects: prev.projects.filter((p) => p.id !== id),
+                tasks: prev.tasks.filter((t) => t.projectId !== id),
+              }
+            : prev,
+        );
+        if (view.name === "project" && view.id === id) navigate("/app");
+        setRevision((r) => r + 1);
+      })(),
+    [run, view, navigate],
+  );
+
   const saveTask = useCallback(
     async (patch: Record<string, unknown>) => {
       if (!editing) return;
@@ -169,6 +189,7 @@ export function App() {
         overdueCount={overdueCount}
         navigate={navigate}
         onTogglePin={togglePinProject}
+        onDeleteProject={deleteProject}
       />
 
       <main className="main">

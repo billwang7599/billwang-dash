@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AppState } from "../api.ts";
 import type { View } from "../App.tsx";
+import type { Project } from "../../shared/types.ts";
 import { ProjectSearch } from "./ProjectSearch.tsx";
 
 type ProjectSort = "alphabetical" | "recent";
@@ -22,6 +23,7 @@ interface Props {
   overdueCount: number;
   navigate: (path: string) => void;
   onTogglePin: (id: string, pinned: boolean) => void;
+  onDeleteProject: (id: string) => void;
 }
 
 /** The two fixed views. Order is fixed too -- not user-reorderable. */
@@ -37,6 +39,7 @@ export function Sidebar({
   overdueCount,
   navigate,
   onTogglePin,
+  onDeleteProject,
 }: Props) {
   // Not persisted: collapsing is a session-only UI preference, not a saved one.
   const [collapsed, setCollapsed] = useState(false);
@@ -55,6 +58,14 @@ export function Sidebar({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  const confirmDelete = (project: Project) => {
+    const n = state.tasks.filter((t) => t.projectId === project.id).length;
+    const detail = n > 0 ? ` and its ${n} open task${n === 1 ? "" : "s"}` : "";
+    if (window.confirm(`Delete "${project.name}"${detail}? This can't be undone.`)) {
+      onDeleteProject(project.id);
+    }
+  };
 
   const { pinned, unpinned } = useMemo(() => {
     const others = state.projects.filter((p) => !p.isInbox);
@@ -114,6 +125,7 @@ export function Sidebar({
                   pinned
                   onClick={() => navigate(`/app/project/${project.id}`)}
                   onTogglePin={() => onTogglePin(project.id, false)}
+                  onDelete={() => confirmDelete(project)}
                 />
               ))}
             </nav>
@@ -155,6 +167,7 @@ export function Sidebar({
                   pinned={false}
                   onClick={() => navigate(`/app/project/${project.id}`)}
                   onTogglePin={() => onTogglePin(project.id, true)}
+                  onDelete={() => confirmDelete(project)}
                 />
               ))}
             </nav>
@@ -244,6 +257,7 @@ function ProjectRow({
   pinned,
   onClick,
   onTogglePin,
+  onDelete,
 }: {
   label: string;
   count: number;
@@ -252,19 +266,30 @@ function ProjectRow({
   pinned: boolean;
   onClick: () => void;
   onTogglePin: () => void;
+  onDelete: () => void;
 }) {
   return (
     <div className="nav-row">
       <NavItem label={label} count={count} active={active} collapsed={collapsed} onClick={onClick} />
       {!collapsed && (
-        <button
-          className="pin-toggle"
-          onClick={onTogglePin}
-          title={pinned ? "Unpin project" : "Pin project"}
-          aria-label={pinned ? "Unpin project" : "Pin project"}
-        >
-          {pinned ? "Unpin" : "Pin"}
-        </button>
+        <div className="row-actions">
+          <button
+            className="row-action"
+            onClick={onTogglePin}
+            title={pinned ? "Unpin project" : "Pin project"}
+            aria-label={pinned ? "Unpin project" : "Pin project"}
+          >
+            {pinned ? "Unpin" : "Pin"}
+          </button>
+          <button
+            className="row-action row-action-danger"
+            onClick={onDelete}
+            title="Delete project"
+            aria-label="Delete project"
+          >
+            Delete
+          </button>
+        </div>
       )}
     </div>
   );

@@ -195,11 +195,17 @@
 
 /* Sits in the same slot as the count badge, revealed on hover instead of
    stacking beside it -- there isn't room for both in a narrow sidebar. */
-.pin-toggle {
+.row-actions {
   position: absolute;
   top: 50%;
   right: 0.5rem;
   transform: translateY(-50%);
+  display: flex;
+  gap: 0.25rem;
+  opacity: 0;
+  transition: opacity 0.12s var(--ease);
+}
+.row-action {
   border: 0;
   background: var(--paper-3);
   font-family: var(--mono);
@@ -208,11 +214,11 @@
   padding: 0.15rem 0.4rem;
   border-radius: 100px;
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.12s var(--ease);
 }
-.nav-row:hover .pin-toggle,
-.pin-toggle:focus-visible { opacity: 1; }
+.row-action-danger:hover,
+.row-action-danger:focus-visible { color: var(--accent); }
+.nav-row:hover .row-actions,
+.row-actions:focus-within { opacity: 1; }
 .nav-row:hover .nav-count { opacity: 0; }
 
 .sidebar-foot { margin-top: auto; }
