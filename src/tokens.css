@@ -27,6 +27,9 @@
     --amber-soft: #f6ecd8;
     --indigo: #3f4f7a;
     --indigo-soft: #e2e6f0;
+    /* dash's own calendar events: solid, so they read apart from tinted Google events and outlined tasks. */
+    --teal: #2c6e75;
+    --teal-soft: #dcebec;
 
     --p1: #c4462a;
     --p2: #b8860b;

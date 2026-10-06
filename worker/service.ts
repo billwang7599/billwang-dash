@@ -6,7 +6,9 @@ import { exchangeCode } from "./google.ts";
 import type { UserDO } from "./user-do.ts";
 import type { AuthedUser } from "./auth.ts";
 import type {
+    CalEvent,
     CalendarItem,
+    EventInput,
     GoogleAccountStatus,
     ParsedQuickAdd,
     Preferences,
@@ -158,6 +160,19 @@ export async function restoreTask(stub: Stub, id: string): Promise<Task> {
 export const purgeProject = (stub: Stub, id: string): Promise<void> => stub.purgeProject(id);
 export const purgeTask = (stub: Stub, id: string): Promise<void> => stub.purgeTask(id);
 export const emptyTrash = (stub: Stub): Promise<void> => stub.emptyTrash();
+
+// ---- Calendar events -------------------------------------------------------
+
+export const createEvent = (stub: Stub, input: EventInput): Promise<CalEvent> =>
+    stub.createEvent(input);
+
+export async function updateEvent(stub: Stub, id: string, input: EventInput): Promise<CalEvent> {
+    const event = await stub.updateEvent(id, input);
+    if (!event) throw new ServiceError(404, "not found");
+    return event;
+}
+
+export const deleteEvent = (stub: Stub, id: string): Promise<void> => stub.deleteEvent(id);
 
 // ---- Habits ----------------------------------------------------------------
 

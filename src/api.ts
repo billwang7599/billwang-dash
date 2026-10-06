@@ -1,5 +1,7 @@
 import type {
+    CalEvent,
     CalendarItem,
+    EventInput,
     GoogleAccountStatus,
     Preferences,
     Project,
@@ -74,6 +76,14 @@ export const api = {
 
     deleteTask: (id: string) =>
         request<void>(`/api/tasks/${id}`, { method: "DELETE" }),
+
+    createEvent: (input: EventInput) =>
+        request<{ event: CalEvent }>("/api/events", { method: "POST", body: JSON.stringify(input) }),
+
+    updateEvent: (id: string, input: EventInput) =>
+        request<{ event: CalEvent }>(`/api/events/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
+
+    deleteEvent: (id: string) => request<void>(`/api/events/${id}`, { method: "DELETE" }),
 
     getHabit: (id: string, month?: string) =>
         request<HabitDetail>(`/api/habits/${id}${month ? `?month=${month}` : ""}`),

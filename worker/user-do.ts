@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import {
+    addDays,
     civilFromDate,
     civilFromKey,
     civilKey,
@@ -32,12 +33,15 @@ import {
 import {
     backoffMs,
     classifyError,
+    eventForCalEvent,
     eventForTask,
     eventIdForTask,
     fingerprint,
 } from "./google-sync.ts";
 import type {
+    CalEvent,
     CalendarItem,
+    EventInput,
     DueDate,
     GoogleAccountStatus,
     GoogleCalendarSummary,
@@ -92,6 +96,30 @@ interface HabitRow extends Record<string, SqlStorageValue> {
     created_at: string;
     start_date: string;
 }
+
+interface EventRow extends Record<string, SqlStorageValue> {
+    id: string;
+    title: string;
+    description: string;
+    start_date: string;
+    start_time: string | null;
+    end_date: string;
+    end_time: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
+const toCalEvent = (r: EventRow): CalEvent => ({
+    id: r.id,
+    title: r.title,
+    description: r.description,
+    startDate: r.start_date,
+    startTime: r.start_time,
+    endDate: r.end_date,
+    endTime: r.end_time,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+});
 
 interface ProjectRow extends Record<string, SqlStorageValue> {
     id: string;
@@ -371,6 +399,28 @@ export class UserDO extends DurableObject<Env> {
                 );
 
                 INSERT INTO _migrations (id) VALUES (12);
+            `);
+        }
+
+        if (version < 13) {
+            // dash's own calendar events. Wall-clock like tasks; null times mean all-day,
+            // and end_date is the last day (inclusive).
+            sql.exec(`
+                CREATE TABLE events (
+                    id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    description TEXT NOT NULL DEFAULT '',
+                    start_date TEXT NOT NULL,
+                    start_time TEXT,
+                    end_date TEXT NOT NULL,
+                    end_time TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE INDEX idx_events_range ON events(start_date, end_date);
+
+                INSERT INTO _migrations (id) VALUES (13);
             `);
         }
     }
@@ -729,6 +779,87 @@ export class UserDO extends DurableObject<Env> {
         this.sql.exec("DELETE FROM tasks WHERE deleted_at IS NOT NULL");
     }
 
+    // ---- Calendar events ---------------------------------------------------
+
+    async createEvent(input: EventInput): Promise<CalEvent> {
+        const id = crypto.randomUUID();
+        const now = new Date().toISOString();
+        this.sql.exec(
+            `INSERT INTO events
+               (id, title, description, start_date, start_time, end_date, end_time, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            id, input.title, input.description, input.startDate, input.startTime,
+            input.endDate, input.endTime, now, now,
+        );
+        await this.markDirty([id]);
+        return this.eventById(id)!;
+    }
+
+    async updateEvent(id: string, input: EventInput): Promise<CalEvent | null> {
+        this.sql.exec(
+            `UPDATE events SET title = ?, description = ?, start_date = ?, start_time = ?,
+                               end_date = ?, end_time = ?, updated_at = ?
+             WHERE id = ?`,
+            input.title, input.description, input.startDate, input.startTime,
+            input.endDate, input.endTime, new Date().toISOString(), id,
+        );
+        await this.markDirty([id]);
+        return this.eventById(id);
+    }
+
+    /** Permanent. The Google copy is removed by the next push. */
+    async deleteEvent(id: string): Promise<void> {
+        this.sql.exec("DELETE FROM events WHERE id = ?", id);
+        await this.markDirty([id]);
+    }
+
+    private eventById(id: string): CalEvent | null {
+        const [row] = this.sql.exec<EventRow>("SELECT * FROM events WHERE id = ?", id).toArray();
+        return row ? toCalEvent(row) : null;
+    }
+
+    /** Events overlapping the window, placed on the timeline in the user's zone. */
+    private eventCalendarItems(startISO: string, endISO: string, timeZone: string): CalendarItem[] {
+        const startMs = Date.parse(startISO);
+        const endMs = Date.parse(endISO);
+        // Dates are floating, so widen by a day each way, then filter on real instants.
+        const from = civilFromKey(startISO.slice(0, 10));
+        const to = civilFromKey(endISO.slice(0, 10));
+        if (!from || !to) return [];
+
+        const rows = this.sql
+            .exec<EventRow>(
+                "SELECT * FROM events WHERE start_date <= ? AND end_date >= ?",
+                civilKey(addDays(to, 1)), civilKey(addDays(from, -1)),
+            )
+            .toArray();
+
+        const items: CalendarItem[] = [];
+        for (const row of rows) {
+            const first = civilFromKey(row.start_date);
+            const last = civilFromKey(row.end_date);
+            if (!first || !last) continue;
+
+            const allDay = row.start_time === null || row.end_time === null;
+            const eventStart = zonedToUtcMs(first, allDay ? 0 : parseTimeToMinutes(row.start_time!), timeZone);
+            const eventEnd = allDay
+                ? zonedToUtcMs(addDays(last, 1), 0, timeZone)
+                : zonedToUtcMs(last, parseTimeToMinutes(row.end_time!), timeZone);
+            if (eventEnd <= startMs || eventStart >= endMs) continue;
+
+            items.push({
+                id: `event:${row.id}`,
+                kind: "event",
+                title: row.title,
+                start: new Date(eventStart).toISOString(),
+                end: new Date(eventEnd).toISOString(),
+                allDay,
+                event: toCalEvent(row),
+            });
+        }
+        return items;
+    }
+
     // ---- Habits ------------------------------------------------------------
 
     /** Today's date in the user's zone, which is the day a check-in belongs to. */
@@ -980,13 +1111,17 @@ export class UserDO extends DurableObject<Env> {
      */
     async getCalendarItems(startISO: string, endISO: string): Promise<CalendarItem[]> {
         const { timeZone } = await this.getPreferences();
-        const items = this.taskCalendarItems(startISO, endISO, timeZone);
+        const items = [
+            ...this.taskCalendarItems(startISO, endISO, timeZone),
+            ...this.eventCalendarItems(startISO, endISO, timeZone),
+        ];
+        const bySoonest = (list: CalendarItem[]) => list.sort((a, b) => a.start.localeCompare(b.start));
 
         const accessToken = await this.getValidAccessToken();
-        if (!accessToken) return items;
+        if (!accessToken) return bySoonest(items);
 
         const enabled = this.storedCalendars().filter((c) => c.enabled);
-        if (enabled.length === 0) return items;
+        if (enabled.length === 0) return bySoonest(items);
 
         // One bad calendar shouldn't blank the whole view.
         const results = await Promise.allSettled(
@@ -1021,7 +1156,7 @@ export class UserDO extends DurableObject<Env> {
             new Date().toISOString(),
         );
 
-        return items.sort((a, b) => a.start.localeCompare(b.start));
+        return bySoonest(items);
     }
 
     /** Scheduled tasks in the window, projected onto the timeline. */
@@ -1209,10 +1344,12 @@ export class UserDO extends DurableObject<Env> {
              SELECT id, 0, ?, 1 FROM tasks
               WHERE deleted_at IS NULL AND completed = 0 AND due_date IS NOT NULL
              UNION
+             SELECT id, 0, ?, 1 FROM events
+             UNION
              SELECT task_id, 0, ?, 1 FROM google_task_events WHERE true
              ON CONFLICT(task_id) DO UPDATE
                SET attempts = 0, next_try_at = excluded.next_try_at, rev = rev + 1`,
-            now, now,
+            now, now, now,
         );
         await this.scheduleAlarm(now + PUSH_DELAY_MS);
     }
@@ -1256,7 +1393,7 @@ export class UserDO extends DurableObject<Env> {
 
             for (const row of batch) {
                 try {
-                    await this.reconcileTask(token, calendarId, row.task_id, timeZone);
+                    await this.reconcileItem(token, calendarId, row.task_id, timeZone);
                     // Only if nothing edited the task while we were talking to Google.
                     this.sql.exec(
                         "DELETE FROM google_outbox WHERE task_id = ? AND rev = ?",
@@ -1301,15 +1438,24 @@ export class UserDO extends DurableObject<Env> {
         if (next?.at != null) await this.scheduleAlarm(Math.max(next.at, Date.now() + 1000));
     }
 
-    /** Makes Google's copy of one task match what it should be now. Idempotent. */
-    private async reconcileTask(
+    /**
+     * Makes Google's copy of one task or dash event match what it should be now.
+     * Idempotent. Task and event ids are both UUIDs, so one id space (and one outbox)
+     * serves both; an id that is neither means it was deleted.
+     */
+    private async reconcileItem(
         token: string,
         calendarId: string,
         taskId: string,
         timeZone: string,
     ): Promise<void> {
         const task = this.taskForSync(taskId);
-        const desired = task ? eventForTask(task, timeZone, this.env.APP_ORIGIN) : null;
+        const event = task ? null : this.eventById(taskId);
+        const desired = task
+            ? eventForTask(task, timeZone, this.env.APP_ORIGIN)
+            : event
+              ? eventForCalEvent(event, timeZone, this.env.APP_ORIGIN)
+              : null;
         const [mapped] = this.sql
             .exec<{ fingerprint: string }>(
                 "SELECT fingerprint FROM google_task_events WHERE task_id = ?",

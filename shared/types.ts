@@ -102,9 +102,31 @@ export interface ParsedQuickAdd {
 }
 
 /** A task or a Google Calendar event, normalised for the calendar view. */
+/**
+ * An event owned by dash, drawn on the calendar next to tasks and Google events.
+ * Like tasks, times are floating wall-clock in the user's zone. All-day events have
+ * null times and an inclusive end date; timed events may end on a later day.
+ */
+export interface CalEvent {
+    id: string;
+    title: string;
+    description: string;
+    startDate: string;
+    startTime: string | null;
+    endDate: string;
+    endTime: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export type EventInput = Pick<
+    CalEvent,
+    "title" | "description" | "startDate" | "startTime" | "endDate" | "endTime"
+>;
+
 export interface CalendarItem {
     id: string;
-    kind: "task" | "gcal";
+    kind: "task" | "gcal" | "event";
     title: string;
     /** ISO instant. */
     start: string;
@@ -123,6 +145,8 @@ export interface CalendarItem {
     description?: string;
     /** The Google calendar's name, for the details view. */
     calendarName?: string;
+    /** Present on dash events: the wall-clock fields the editor needs. */
+    event?: CalEvent;
 }
 
 export interface GooglePushStatus {

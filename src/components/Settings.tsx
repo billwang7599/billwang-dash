@@ -90,7 +90,7 @@ export function Settings({ preferences, user, onPreferencesChange }: Props) {
                 <h2>Google Calendar</h2>
                 <p className="panel-note">
                     Your Google events appear beside scheduled tasks in the calendar view.
-                    dash can also add your tasks to a separate &ldquo;dash&rdquo; calendar
+                    dash can also add your tasks and its own events to a separate &ldquo;dash&rdquo; calendar
                     in Google. It only ever changes that calendar, never your others.
                 </p>
 
@@ -123,20 +123,20 @@ export function Settings({ preferences, user, onPreferencesChange }: Props) {
                                         }
                                     />
                                     <span>
-                                        <strong>Show my tasks in Google Calendar</strong>
+                                        <strong>Show my tasks and events in Google Calendar</strong>
                                         <small>
                                             {google.push.enabled
                                                 ? google.push.pending > 0
                                                     ? `Syncing, ${google.push.pending} waiting…`
-                                                    : "Up to date. Tasks with a due date are in your dash calendar."
-                                                : "Adds tasks with a due date to a calendar called \u201Cdash\u201D."}
+                                                    : "Up to date. Your tasks and events are in your dash calendar."
+                                                : "Adds tasks with a due date, and your dash events, to a calendar called \u201Cdash\u201D."}
                                         </small>
                                     </span>
                                 </label>
                             ) : (
                                 <div className="push-grant">
                                     <p>
-                                        To show your tasks in Google, dash needs permission to create its
+                                        To show your tasks and events in Google, dash needs permission to create its
                                         own calendar. You'll be asked to approve again.
                                     </p>
                                     <a className="btn btn-quiet" href="/api/google/connect">
@@ -156,7 +156,7 @@ export function Settings({ preferences, user, onPreferencesChange }: Props) {
                                             checked={cal.enabled}
                                             onChange={(e) => toggleCalendar(cal.id, e.target.checked)}
                                         />
-                                        <span className="swatch" aria-hidden="true" />
+                                        <span className="swatch" style={{ background: cal.color }} aria-hidden="true" />
                                         <span className="cal-name">{cal.summary}</span>
                                         {cal.primary && <span className="tag">primary</span>}
                                     </label>
@@ -200,7 +200,7 @@ export function Settings({ preferences, user, onPreferencesChange }: Props) {
 
             {confirmingPushOff && (
                 <ConfirmDialog
-                    title="Stop showing tasks in Google?"
+                    title="Stop showing tasks and events in Google?"
                     message="This deletes the dash calendar from your Google account. Your tasks are not affected, and you can turn it back on."
                     confirmLabel="Turn off"
                     onConfirm={() => {

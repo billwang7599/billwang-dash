@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { eventProblem } from "../shared/events.ts";
 
 /**
  * Request body shapes for /api. Hono's `c.req.json<T>()` only casts, so a body
@@ -102,6 +103,22 @@ export const habitBody = z
         perWeek: h.freq === "weekly_count" ? (h.perWeek ?? null) : null,
         weekdays: h.freq === "weekdays" ? [...new Set(h.weekdays)].sort((a, b) => a - b) : [],
     }));
+
+/** The shape rules live in shared/events.ts so the editor applies the same ones. */
+export const eventBody = z
+    .object({
+        title: z.string().max(200),
+        description: z.string().max(5000).optional(),
+        startDate: z.string(),
+        startTime: z.string().nullable(),
+        endDate: z.string(),
+        endTime: z.string().nullable(),
+    })
+    .transform((e) => ({ ...e, title: e.title.trim(), description: e.description ?? "" }))
+    .superRefine((e, ctx) => {
+        const problem = eventProblem(e);
+        if (problem) ctx.addIssue({ code: "custom", message: problem });
+    });
 
 export const habitCheckinBody = z.object({
     status: z.enum(["done", "skipped"]).nullable(),

@@ -108,8 +108,8 @@ account. Do not move `DEV_USER` into `vars`.
 
 Two directions, with a hard limit on the second:
 
-- **Google to dash.** Your events show up beside scheduled tasks, in their own
-  colour (sage) so they don't blend with tasks. This uses `calendar.readonly`.
+- **Google to dash.** Your events show up beside scheduled tasks, each in its
+  own Google calendar's colour (sage if it has none). This uses `calendar.readonly`.
 - **dash to Google.** Optional, off until you switch it on in Settings. Tasks
   with a due date are written to a separate calendar called "dash". This uses
   `calendar.app.created`, which only reaches calendars dash created itself, so
@@ -140,6 +140,8 @@ sensitive scopes.
 
 ### How tasks reach Google
 
+- dash's own calendar events are pushed too, as written. Everything below about
+  times, zones and one-way sync applies to them as well.
 - A timed task becomes an event (its duration, or 30 minutes); a date-only task
   becomes an all-day event marked free. Done, deleted, trashed or undated tasks
   have no event. A recurring task is one event that moves forward when you
@@ -198,6 +200,25 @@ day-first in Settings, or change the `dateFormat` default in the same file.
 
 ---
 
+## Calendar events
+
+dash has its own events, drawn on the week calendar next to tasks and Google
+events (solid teal, so the three read apart). **Press and drag on an empty slot** to
+draw one, snapping to 15 minutes; a plain click makes a one-hour block. Type a title
+and save. **Click an event** to edit it, or use **+ New event** (the way to add one
+on a touch screen, where dragging scrolls the grid).
+
+- Events are wall-clock in your Settings zone, like tasks, so they float with it.
+- They can be all-day, span several days, or run past midnight (set the end date
+  in the editor; a drag stays within one day).
+- Rules live in `shared/events.ts`, so the editor and the API refuse the same things.
+- With Google sync on, events are pushed to the dash calendar along with tasks,
+  through the same outbox, and removed from it when deleted.
+- Deleting an event is permanent (after a confirm). There is no Trash for events.
+- Not yet: repeating events, and dragging an existing event to move or resize it.
+
+---
+
 ## Habits
 
 A separate feature from tasks, modelled on TickTick's. Habits live in a sidebar
@@ -238,6 +259,8 @@ Google, and calendar timezone placement.
 
 ## Known gaps
 
+- **Calendar events don't repeat** and can't be moved or resized by dragging, only
+  edited in the editor. Deleting one is permanent.
 - **Habits are yes/no only.** No numeric goals ("8 glasses"), no "every N days"
   interval, no archive, and no reminders. They don't appear on the calendar or sync
   to Google. The sidebar's Habits section is hidden while the sidebar is collapsed.

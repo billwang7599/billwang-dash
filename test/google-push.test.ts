@@ -389,3 +389,87 @@ describe("google push: no double display", () => {
         expect(g.calls.length).toBeGreaterThan(0);
     });
 });
+
+describe("google push: dash events", () => {
+    const meeting = (title = "Standup") => ({
+        title,
+        description: "",
+        startDate: "2026-08-04",
+        startTime: "10:00",
+        endDate: "2026-08-04",
+        endTime: "10:30",
+    });
+
+    async function enabled(name: string) {
+        const g = fakeGoogle();
+        const stub = await connected(name);
+        await stub.setGooglePush(true);
+        await runDurableObjectAlarm(stub);
+        return { g, stub };
+    }
+
+    it("pushes an event, follows edits, and removes it when deleted", async () => {
+        const { g, stub } = await enabled("gpe-flow");
+        const e = await stub.createEvent(meeting());
+        await runDurableObjectAlarm(stub);
+        expect(g.event(e.id)!.body).toMatchObject({
+            summary: "Standup",
+            start: { dateTime: "2026-08-04T10:00:00", timeZone: "UTC" },
+            extendedProperties: { private: { dashTaskId: e.id } },
+        });
+
+        await stub.updateEvent(e.id, { ...meeting("Retro"), startTime: "11:00", endTime: "12:00" });
+        await runDurableObjectAlarm(stub);
+        expect(g.event(e.id)!.body).toMatchObject({ summary: "Retro", start: { dateTime: "2026-08-04T11:00:00" } });
+
+        await stub.deleteEvent(e.id);
+        await runDurableObjectAlarm(stub);
+        expect(g.live()).toHaveLength(0);
+        expect(g.event(e.id)!.status).toBe("cancelled");
+    });
+
+    it("sends an all-day event with Google's exclusive end date", async () => {
+        const { g, stub } = await enabled("gpe-allday");
+        const e = await stub.createEvent({ ...meeting("Trip"), startTime: null, endTime: null, endDate: "2026-08-06" });
+        await runDurableObjectAlarm(stub);
+        expect(g.event(e.id)!.body).toMatchObject({ start: { date: "2026-08-04" }, end: { date: "2026-08-07" } });
+    });
+
+    it("backfills events that already existed when syncing was turned on", async () => {
+        const g = fakeGoogle();
+        const stub = await connected("gpe-backfill");
+        const e = await stub.createEvent(meeting());
+        const t = await stub.createTask({ content: "A task", due: { date: "2026-08-05", time: null, recurrence: null } });
+
+        await stub.setGooglePush(true);
+        await runDurableObjectAlarm(stub);
+        expect(g.live().map(([id]) => id).sort()).toEqual([eventIdForTask(e.id), eventIdForTask(t.id)].sort());
+    });
+
+    it("moves events when the time zone changes", async () => {
+        const { g, stub } = await enabled("gpe-zone");
+        const e = await stub.createEvent(meeting());
+        await runDurableObjectAlarm(stub);
+        await stub.setPreferences({ timeZone: "Asia/Tokyo" });
+        await runDurableObjectAlarm(stub);
+        expect(g.event(e.id)!.body.start).toEqual({ dateTime: "2026-08-04T10:00:00", timeZone: "Asia/Tokyo" });
+    });
+
+    it("never shows the pushed event twice in the in-app calendar", async () => {
+        fakeGoogle({
+            eventsList: [
+                {
+                    id: "mirror",
+                    summary: "Mirrored",
+                    start: { dateTime: "2026-08-04T10:00:00Z" },
+                    end: { dateTime: "2026-08-04T10:30:00Z" },
+                    extendedProperties: { private: { dashTaskId: "any-dash-id" } },
+                },
+            ],
+        });
+        const stub = await connected("gpe-nodup");
+        await stub.createEvent(meeting());
+        const items = await stub.getCalendarItems("2026-08-03T00:00:00Z", "2026-08-10T00:00:00Z");
+        expect(items.map((i) => i.kind)).toEqual(["event"]);
+    });
+});

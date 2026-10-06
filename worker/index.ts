@@ -118,6 +118,21 @@ app.delete("/api/trash", async (c) => {
     return c.body(null, 204);
 });
 
+app.post("/api/events", async (c) => {
+    const input = await body(c, schemas.eventBody);
+    return c.json({ event: await service.createEvent(stub(c), input) }, 201);
+});
+
+app.patch("/api/events/:id", async (c) => {
+    const input = await body(c, schemas.eventBody);
+    return c.json({ event: await service.updateEvent(stub(c), c.req.param("id"), input) });
+});
+
+app.delete("/api/events/:id", async (c) => {
+    await service.deleteEvent(stub(c), c.req.param("id"));
+    return c.body(null, 204);
+});
+
 app.post("/api/habits", async (c) => {
     const input = await body(c, schemas.habitBody);
     return c.json({ habit: await service.createHabit(stub(c), input) }, 201);

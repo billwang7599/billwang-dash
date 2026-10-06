@@ -1,5 +1,5 @@
 import { addDays, civilFromKey, civilKey, minutesToTime, parseTimeToMinutes } from "../shared/civil.ts";
-import type { Task } from "../shared/types.ts";
+import type { CalEvent, Task } from "../shared/types.ts";
 import { GoogleApiError, type GoogleEventPayload } from "./google.ts";
 
 /**
@@ -70,6 +70,39 @@ export function eventForTask(
             dateTime: `${civilKey(endDay)}T${minutesToTime(endTotal % 1440)}:00`,
             timeZone,
         },
+    };
+}
+
+/**
+ * The Google event for a dash event. Like a task it is wall-clock in the profile zone,
+ * so a zone change rewrites it. All-day events carry an inclusive end date, which
+ * Google wants exclusive.
+ */
+export function eventForCalEvent(
+    ev: CalEvent,
+    timeZone: string,
+    appOrigin: string,
+): GoogleEventPayload {
+    const link = `${appOrigin.replace(/\/+$/, "")}/app/calendar`;
+    const base = {
+        summary: ev.title,
+        description: [ev.description.trim(), `Open in dash: ${link}`].filter(Boolean).join("\n\n"),
+        // Same key as tasks: ids never collide, and either way the item must not show twice.
+        extendedProperties: { private: { dashTaskId: ev.id } },
+    };
+
+    if (ev.startTime === null || ev.endTime === null) {
+        const last = civilFromKey(ev.endDate);
+        return {
+            ...base,
+            start: { date: ev.startDate },
+            end: { date: last ? civilKey(addDays(last, 1)) : ev.endDate },
+        };
+    }
+    return {
+        ...base,
+        start: { dateTime: `${ev.startDate}T${ev.startTime}:00`, timeZone },
+        end: { dateTime: `${ev.endDate}T${ev.endTime}:00`, timeZone },
     };
 }
 
