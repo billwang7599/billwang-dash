@@ -1,10 +1,20 @@
 import { DurableObject } from "cloudflare:workers";
 import {
+    civilFromDate,
     civilFromKey,
     civilKey,
     parseTimeToMinutes,
     zonedToUtcMs,
 } from "../shared/civil.ts";
+import {
+    computeStats,
+    type DayStatus,
+    type Habit,
+    type HabitDetail,
+    type HabitFreq,
+    type HabitInput,
+    type HabitSummary,
+} from "../shared/habits.ts";
 import { nextOccurrence } from "../shared/parser.ts";
 import {
     GoogleApiError,
@@ -70,6 +80,17 @@ interface TaskRow extends Record<string, SqlStorageValue> {
     updated_at: string;
     deleted_at: string | null;
     trashed_with: string | null;
+}
+
+interface HabitRow extends Record<string, SqlStorageValue> {
+    id: string;
+    name: string;
+    freq: string;
+    per_week: number | null;
+    weekdays: string;
+    sort_order: number;
+    created_at: string;
+    start_date: string;
 }
 
 interface ProjectRow extends Record<string, SqlStorageValue> {
@@ -321,6 +342,35 @@ export class UserDO extends DurableObject<Env> {
                 );
 
                 INSERT INTO _migrations (id) VALUES (11);
+            `);
+        }
+
+        if (version < 12) {
+            // Habits. A day with no check-in row is simply not done; "skipped" is an
+            // excused day. start_date is when counting begins (a later check-in on an
+            // earlier day moves it back, see summarizeHabits).
+            sql.exec(`
+                CREATE TABLE habits (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    freq TEXT NOT NULL CHECK (freq IN ('daily', 'weekly_count', 'weekdays')),
+                    per_week INTEGER,
+                    weekdays TEXT NOT NULL DEFAULT '[]',
+                    sort_order INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    start_date TEXT NOT NULL
+                );
+
+                CREATE TABLE habit_checkins (
+                    habit_id TEXT NOT NULL REFERENCES habits(id) ON DELETE CASCADE,
+                    day TEXT NOT NULL,
+                    status TEXT NOT NULL CHECK (status IN ('done', 'skipped')),
+                    note TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY (habit_id, day)
+                );
+
+                INSERT INTO _migrations (id) VALUES (12);
             `);
         }
     }
@@ -677,6 +727,135 @@ export class UserDO extends DurableObject<Env> {
     async emptyTrash(): Promise<void> {
         this.sql.exec("DELETE FROM projects WHERE deleted_at IS NOT NULL");
         this.sql.exec("DELETE FROM tasks WHERE deleted_at IS NOT NULL");
+    }
+
+    // ---- Habits ------------------------------------------------------------
+
+    /** Today's date in the user's zone, which is the day a check-in belongs to. */
+    private todayKey(): string {
+        const { time_zone } = this.sql
+            .exec<{ time_zone: string }>("SELECT time_zone FROM profile WHERE id = 1")
+            .one();
+        return civilKey(civilFromDate(new Date(), time_zone));
+    }
+
+    async listHabits(): Promise<HabitSummary[]> {
+        return this.summarizeHabits(
+            this.sql
+                .exec<HabitRow>("SELECT * FROM habits ORDER BY sort_order, created_at")
+                .toArray(),
+        );
+    }
+
+    async createHabit(input: HabitInput): Promise<HabitSummary> {
+        const id = crypto.randomUUID();
+        const now = new Date().toISOString();
+        this.sql.exec(
+            `INSERT INTO habits (id, name, freq, per_week, weekdays, sort_order, created_at, start_date)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            id, input.name, input.freq, input.perWeek, JSON.stringify(input.weekdays),
+            this.nextOrder("habits"), now, this.todayKey(),
+        );
+        return (await this.habitSummary(id))!;
+    }
+
+    async updateHabit(id: string, input: HabitInput): Promise<HabitSummary | null> {
+        this.sql.exec(
+            "UPDATE habits SET name = ?, freq = ?, per_week = ?, weekdays = ? WHERE id = ?",
+            input.name, input.freq, input.perWeek, JSON.stringify(input.weekdays), id,
+        );
+        return this.habitSummary(id);
+    }
+
+    /** Check-ins go with it (ON DELETE CASCADE). */
+    async deleteHabit(id: string): Promise<void> {
+        this.sql.exec("DELETE FROM habits WHERE id = ?", id);
+    }
+
+    /** The habit and the check-ins in one month (YYYY-MM), for the monthly grid. */
+    async getHabitDetail(id: string, month: string): Promise<HabitDetail | null> {
+        const habit = await this.habitSummary(id);
+        if (!habit) return null;
+        const days = this.sql
+            .exec<{ day: string; status: string; note: string }>(
+                `SELECT day, status, note FROM habit_checkins
+                 WHERE habit_id = ? AND day >= ? AND day <= ? ORDER BY day`,
+                id, `${month}-01`, `${month}-31`,
+            )
+            .toArray()
+            .map((r) => ({ day: r.day, status: r.status as DayStatus, note: r.note }));
+        return { habit, month, days };
+    }
+
+    /**
+     * Sets or clears one day. `note` undefined keeps the existing note. The caller has
+     * checked the day is real and not in the future.
+     */
+    async setHabitCheckin(
+        id: string,
+        day: string,
+        status: DayStatus | null,
+        note: string | undefined,
+    ): Promise<HabitSummary | null> {
+        if (!(await this.habitSummary(id))) return null;
+
+        if (status === null) {
+            this.sql.exec("DELETE FROM habit_checkins WHERE habit_id = ? AND day = ?", id, day);
+        } else {
+            const [existing] = this.sql
+                .exec<{ note: string }>(
+                    "SELECT note FROM habit_checkins WHERE habit_id = ? AND day = ?",
+                    id, day,
+                )
+                .toArray();
+            this.sql.exec(
+                `INSERT INTO habit_checkins (habit_id, day, status, note, created_at)
+                 VALUES (?, ?, ?, ?, ?)
+                 ON CONFLICT(habit_id, day) DO UPDATE SET status = excluded.status, note = excluded.note`,
+                id, day, status, note ?? existing?.note ?? "", new Date().toISOString(),
+            );
+        }
+        return this.habitSummary(id);
+    }
+
+    private async habitSummary(id: string): Promise<HabitSummary | null> {
+        const rows = this.sql.exec<HabitRow>("SELECT * FROM habits WHERE id = ?", id).toArray();
+        return rows.length === 0 ? null : this.summarizeHabits(rows)[0];
+    }
+
+    /** Stats for a batch of habits, reading every check-in in one query. */
+    private summarizeHabits(rows: HabitRow[]): HabitSummary[] {
+        if (rows.length === 0) return [];
+        const today = this.todayKey();
+
+        const byHabit = new Map<string, Map<string, DayStatus>>();
+        for (const c of this.sql
+            .exec<{ habit_id: string; day: string; status: string }>(
+                "SELECT habit_id, day, status FROM habit_checkins",
+            )
+            .toArray()) {
+            let days = byHabit.get(c.habit_id);
+            if (!days) byHabit.set(c.habit_id, (days = new Map()));
+            days.set(c.day, c.status as DayStatus);
+        }
+
+        return rows.map((r) => {
+            const checkins = byHabit.get(r.id) ?? new Map<string, DayStatus>();
+            // Logging a day before the habit began moves the start back to it.
+            const earliest = [...checkins.keys()].sort()[0];
+            const startDate = earliest !== undefined && earliest < r.start_date ? earliest : r.start_date;
+            const habit: Habit = {
+                id: r.id,
+                name: r.name,
+                freq: r.freq as HabitFreq,
+                perWeek: r.per_week,
+                weekdays: JSON.parse(r.weekdays) as number[],
+                order: r.sort_order,
+                createdAt: r.created_at,
+                startDate,
+            };
+            return { ...habit, stats: computeStats(habit, startDate, checkins, today), today: checkins.get(today) ?? null };
+        });
     }
 
     // ---- Google Calendar: reading events -----------------------------------
@@ -1252,7 +1431,7 @@ export class UserDO extends DurableObject<Env> {
         }));
     }
 
-    private nextOrder(table: "tasks" | "projects"): number {
+    private nextOrder(table: "tasks" | "projects" | "habits"): number {
         return (
             this.sql
                 .exec<{ next: number }>(

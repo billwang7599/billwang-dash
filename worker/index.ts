@@ -118,6 +118,32 @@ app.delete("/api/trash", async (c) => {
     return c.body(null, 204);
 });
 
+app.post("/api/habits", async (c) => {
+    const input = await body(c, schemas.habitBody);
+    return c.json({ habit: await service.createHabit(stub(c), input) }, 201);
+});
+
+app.get("/api/habits/:id", async (c) =>
+    c.json(await service.getHabit(stub(c), c.req.param("id"), c.req.query("month"))),
+);
+
+app.patch("/api/habits/:id", async (c) => {
+    const input = await body(c, schemas.habitBody);
+    return c.json({ habit: await service.updateHabit(stub(c), c.req.param("id"), input) });
+});
+
+app.delete("/api/habits/:id", async (c) => {
+    await service.deleteHabit(stub(c), c.req.param("id"));
+    return c.body(null, 204);
+});
+
+app.put("/api/habits/:id/checkins/:day", async (c) => {
+    const { status, note } = await body(c, schemas.habitCheckinBody);
+    return c.json({
+        habit: await service.setHabitCheckin(stub(c), c.req.param("id"), c.req.param("day"), status, note),
+    });
+});
+
 app.post("/api/projects", async (c) => {
     const { name, color } = await body(c, schemas.createProjectBody);
     return c.json({ project: await service.createProject(stub(c), name, color) }, 201);

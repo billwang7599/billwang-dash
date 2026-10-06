@@ -1,4 +1,5 @@
-import { civilFromDate, civilKey } from "../shared/civil.ts";
+import { civilFromDate, civilFromKey, civilKey } from "../shared/civil.ts";
+import type { DayStatus, HabitDetail, HabitInput, HabitSummary } from "../shared/habits.ts";
 import { MAX_IMPORT_LINES, splitImportLines } from "../shared/import.ts";
 import { parseQuickAdd } from "../shared/parser.ts";
 import { exchangeCode } from "./google.ts";
@@ -32,6 +33,7 @@ export interface AppState {
     projects: Project[];
     tasks: Task[];
     preferences: Preferences;
+    habits: HabitSummary[];
     user: AuthedUser;
 }
 
@@ -41,13 +43,14 @@ export async function loadState(
     user: AuthedUser,
     includeCompleted: boolean,
 ): Promise<AppState> {
-    const [projects, tasks, preferences] = await Promise.all([
+    const [projects, tasks, preferences, habits] = await Promise.all([
         stub.listProjects(),
         stub.listTasks({ includeCompleted }),
         stub.getPreferences(),
+        stub.listHabits(),
         stub.syncProfile(user.email, user.name),
     ]);
-    return { projects, tasks, preferences, user };
+    return { projects, tasks, preferences, habits, user };
 }
 
 /** Re-parses server-side so what is stored cannot disagree with the preview. */
@@ -155,6 +158,54 @@ export async function restoreTask(stub: Stub, id: string): Promise<Task> {
 export const purgeProject = (stub: Stub, id: string): Promise<void> => stub.purgeProject(id);
 export const purgeTask = (stub: Stub, id: string): Promise<void> => stub.purgeTask(id);
 export const emptyTrash = (stub: Stub): Promise<void> => stub.emptyTrash();
+
+// ---- Habits ----------------------------------------------------------------
+
+export const createHabit = (stub: Stub, input: HabitInput): Promise<HabitSummary> =>
+    stub.createHabit(input);
+
+export async function updateHabit(stub: Stub, id: string, input: HabitInput): Promise<HabitSummary> {
+    const habit = await stub.updateHabit(id, input);
+    if (!habit) throw new ServiceError(404, "not found");
+    return habit;
+}
+
+export const deleteHabit = (stub: Stub, id: string): Promise<void> => stub.deleteHabit(id);
+
+/** `month` is YYYY-MM; omitted means the current month in the user's zone. */
+export async function getHabit(
+    stub: Stub,
+    id: string,
+    month: string | undefined,
+): Promise<HabitDetail> {
+    if (month !== undefined && !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+        throw new ServiceError(400, "month must look like 2026-08");
+    }
+    const resolved = month ?? (await todayKey(stub)).slice(0, 7);
+    const detail = await stub.getHabitDetail(id, resolved);
+    if (!detail) throw new ServiceError(404, "not found");
+    return detail;
+}
+
+/** Past days are fine to log; the future is not. */
+export async function setHabitCheckin(
+    stub: Stub,
+    id: string,
+    day: string,
+    status: DayStatus | null,
+    note: string | undefined,
+): Promise<HabitSummary> {
+    if (!civilFromKey(day)) throw new ServiceError(400, "day must look like 2026-08-04");
+    if (day > (await todayKey(stub))) throw new ServiceError(400, "can't check in a day that hasn't happened");
+    const habit = await stub.setHabitCheckin(id, day, status, note);
+    if (!habit) throw new ServiceError(404, "not found");
+    return habit;
+}
+
+async function todayKey(stub: Stub): Promise<string> {
+    const { timeZone } = await stub.getPreferences();
+    return civilKey(civilFromDate(new Date(), timeZone));
+}
 
 export async function setProjectPinned(
     stub: Stub,

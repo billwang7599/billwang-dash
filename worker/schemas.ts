@@ -77,6 +77,37 @@ export const calendarToggleBody = z.object({
     enabled: z.boolean(),
 });
 
+/**
+ * One shape for create and edit. weekly_count needs perWeek and weekdays needs at
+ * least one day; whatever doesn't apply to the chosen frequency is dropped.
+ */
+export const habitBody = z
+    .object({
+        name: nonEmpty.max(100),
+        freq: z.enum(["daily", "weekly_count", "weekdays"]),
+        perWeek: z.int().min(1).max(7).nullable().optional(),
+        weekdays: z.array(z.int().min(0).max(6)).optional(),
+    })
+    .superRefine((h, ctx) => {
+        if (h.freq === "weekly_count" && h.perWeek == null) {
+            ctx.addIssue({ code: "custom", path: ["perWeek"], message: "is required" });
+        }
+        if (h.freq === "weekdays" && !h.weekdays?.length) {
+            ctx.addIssue({ code: "custom", path: ["weekdays"], message: "pick at least one day" });
+        }
+    })
+    .transform((h) => ({
+        name: h.name,
+        freq: h.freq,
+        perWeek: h.freq === "weekly_count" ? (h.perWeek ?? null) : null,
+        weekdays: h.freq === "weekdays" ? [...new Set(h.weekdays)].sort((a, b) => a - b) : [],
+    }));
+
+export const habitCheckinBody = z.object({
+    status: z.enum(["done", "skipped"]).nullable(),
+    note: z.string().max(500).optional(),
+});
+
 export const googlePushBody = z.object({
     enabled: z.boolean(),
 });
