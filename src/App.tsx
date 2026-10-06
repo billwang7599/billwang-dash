@@ -211,7 +211,6 @@ export function App() {
         <TaskModal
           task={editing}
           projects={state.projects}
-          timeZone={state.preferences.timeZone}
           onSave={saveTask}
           onClose={() => setEditing(null)}
         />

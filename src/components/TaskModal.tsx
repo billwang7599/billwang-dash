@@ -5,14 +5,13 @@ import { formatRecurrence } from "../format.ts";
 interface Props {
   task: Task;
   projects: Project[];
-  timeZone: string;
   onSave: (patch: Record<string, unknown>) => Promise<void>;
   onClose: () => void;
 }
 
 const FREQS = ["daily", "weekly", "monthly", "yearly"] as const;
 
-export function TaskModal({ task, projects, timeZone, onSave, onClose }: Props) {
+export function TaskModal({ task, projects, onSave, onClose }: Props) {
   const [content, setContent] = useState(task.content);
   const [description, setDescription] = useState(task.description);
   const [projectId, setProjectId] = useState(task.projectId);
@@ -77,7 +76,6 @@ export function TaskModal({ task, projects, timeZone, onSave, onClose }: Props) 
               date: dueDate,
               time: dueTime || null,
               recurrence: buildRecurrence(),
-              timeZone: task.due?.timeZone ?? timeZone,
             }
           : null,
       });

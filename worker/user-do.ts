@@ -40,7 +40,6 @@ interface TaskRow extends Record<string, SqlStorageValue> {
   priority: number;
   due_date: string | null;
   due_time: string | null;
-  due_tz: string | null;
   recurrence: string | null;
   deadline: string | null;
   duration_minutes: number | null;
@@ -197,9 +196,7 @@ export class UserDO extends DurableObject<Env> {
     }
 
     if (version < 3) {
-      // nav_order held a user-reordered nav sequence. Nav is two fixed items
-      // now, so nothing reads this column anymore -- left in place rather
-      // than risking a DROP COLUMN for a column with no live data need.
+      // Dropped again in migration 6; nav is two fixed items now.
       sql.exec(`
         ALTER TABLE profile ADD COLUMN nav_order TEXT NOT NULL DEFAULT '';
 
@@ -222,6 +219,24 @@ export class UserDO extends DurableObject<Env> {
         ALTER TABLE projects ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
 
         INSERT INTO _migrations (id) VALUES (5);
+      `);
+    }
+
+    if (version < 6) {
+      sql.exec(`
+        ALTER TABLE profile DROP COLUMN nav_order;
+
+        INSERT INTO _migrations (id) VALUES (6);
+      `);
+    }
+
+    if (version < 7) {
+      // Due times are floating: read in the profile's zone, so a per-task zone
+      // would only ever be stale.
+      sql.exec(`
+        ALTER TABLE tasks DROP COLUMN due_tz;
+
+        INSERT INTO _migrations (id) VALUES (7);
       `);
     }
   }
@@ -286,10 +301,13 @@ export class UserDO extends DurableObject<Env> {
   /** False if the Inbox was targeted; it is the fallback for untagged tasks. */
   async deleteProject(id: string): Promise<boolean> {
     if (id === INBOX_ID) return false;
-    // Tasks cascade, but only once foreign keys are on for this connection.
-    this.sql.exec("DELETE FROM tasks WHERE project_id = ?", id);
+    // Tasks and their labels go via ON DELETE CASCADE (foreign keys are on).
     this.sql.exec("DELETE FROM projects WHERE id = ?", id);
     return true;
+  }
+
+  async hasProject(id: string): Promise<boolean> {
+    return this.sql.exec("SELECT 1 FROM projects WHERE id = ?", id).toArray().length > 0;
   }
 
   private findProjectByName(name: string): Project | null {
@@ -328,9 +346,9 @@ export class UserDO extends DurableObject<Env> {
     this.sql.exec(
       `INSERT INTO tasks (
          id, content, description, project_id, priority,
-         due_date, due_time, due_tz, recurrence, deadline, duration_minutes,
+         due_date, due_time, recurrence, deadline, duration_minutes,
          completed, completed_at, sort_order, created_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, ?, ?)`,
       id,
       input.content,
       input.description ?? "",
@@ -338,7 +356,6 @@ export class UserDO extends DurableObject<Env> {
       input.priority ?? 4,
       due?.date ?? null,
       due?.time ?? null,
-      due?.timeZone ?? null,
       due?.recurrence ? JSON.stringify(due.recurrence) : null,
       input.deadline ?? null,
       input.durationMinutes ?? null,
@@ -375,7 +392,6 @@ export class UserDO extends DurableObject<Env> {
     if (patch.due !== undefined) {
       set("due_date", patch.due?.date ?? null);
       set("due_time", patch.due?.time ?? null);
-      set("due_tz", patch.due?.timeZone ?? null);
       set("recurrence", patch.due?.recurrence ? JSON.stringify(patch.due.recurrence) : null);
     }
 
@@ -434,7 +450,6 @@ export class UserDO extends DurableObject<Env> {
   }
 
   async deleteTask(id: string): Promise<void> {
-    this.sql.exec("DELETE FROM task_labels WHERE task_id = ?", id);
     this.sql.exec("DELETE FROM tasks WHERE id = ?", id);
   }
 
@@ -591,13 +606,11 @@ export class UserDO extends DurableObject<Env> {
       const civil = civilFromKey(task.due.date);
       if (!civil) continue;
 
-      // Tasks keep the zone they were created in.
-      const zone = task.due.timeZone || timeZone;
       const allDay = task.due.time === null;
       const startMinutes = allDay ? 0 : parseTimeToMinutes(task.due.time!);
-      const taskStart = zonedToUtcMs(civil, startMinutes, zone);
+      const taskStart = zonedToUtcMs(civil, startMinutes, timeZone);
       const taskEnd = allDay
-        ? zonedToUtcMs(civil, 24 * 60, zone)
+        ? zonedToUtcMs(civil, 24 * 60, timeZone)
         : taskStart + (task.durationMinutes ?? 30) * 60_000;
 
       if (taskEnd < startMs || taskStart > endMs) continue;
@@ -724,7 +737,6 @@ export class UserDO extends DurableObject<Env> {
             recurrence: r.recurrence
               ? (JSON.parse(r.recurrence) as Recurrence)
               : null,
-            timeZone: r.due_tz ?? "UTC",
           }
         : null,
       deadline: r.deadline,

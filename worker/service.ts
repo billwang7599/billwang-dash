@@ -5,6 +5,7 @@ import type { UserDO } from "./user-do.ts";
 import type { AuthedUser } from "./auth.ts";
 import type {
   CalendarItem,
+  GoogleAccountStatus,
   ParsedQuickAdd,
   Preferences,
   Project,
@@ -50,13 +51,11 @@ export async function loadState(
 /** Re-parses server-side so what is stored cannot disagree with the preview. */
 export async function quickAddTask(
   stub: Stub,
-  text: string | undefined,
+  text: string,
   timeZone: string | undefined,
 ): Promise<{ task: Task; parsed: ParsedQuickAdd }> {
-  if (!text?.trim()) throw new ServiceError(400, "text is required");
-
   const prefs = await stub.getPreferences();
-  const parsed = parseQuickAdd(text.trim(), {
+  const parsed = parseQuickAdd(text, {
     timeZone: timeZone ?? prefs.timeZone,
     dateFormat: prefs.dateFormat,
   });
@@ -84,18 +83,42 @@ export async function updateTask(
   id: string,
   patch: Parameters<UserDO["updateTask"]>[1],
 ): Promise<Task> {
+  if (patch.projectId && !(await stub.hasProject(patch.projectId))) {
+    throw new ServiceError(400, "project not found");
+  }
   const task = await stub.updateTask(id, patch);
   if (!task) throw new ServiceError(404, "not found");
   return task;
 }
 
+export async function deleteTask(stub: Stub, id: string): Promise<void> {
+  await stub.deleteTask(id);
+}
+
 export async function createProject(
   stub: Stub,
-  name: string | undefined,
+  name: string,
   color: string | undefined,
 ): Promise<Project> {
-  if (!name?.trim()) throw new ServiceError(400, "name is required");
-  return stub.createProject(name.trim(), color);
+  return stub.createProject(name, color);
+}
+
+export async function setProjectPinned(
+  stub: Stub,
+  id: string,
+  pinned: boolean,
+): Promise<Project> {
+  const project = await stub.setProjectPinned(id, pinned);
+  if (!project) throw new ServiceError(404, "not found");
+  return project;
+}
+
+export async function setPreferences(
+  stub: Stub,
+  prefs: Partial<Preferences>,
+): Promise<Preferences> {
+  await stub.setPreferences(prefs);
+  return stub.getPreferences();
 }
 
 export async function deleteProject(stub: Stub, id: string): Promise<void> {
@@ -113,6 +136,20 @@ export async function calendarItems(
     throw new ServiceError(400, "start and end must be ISO timestamps");
   }
   return stub.getCalendarItems(start, end);
+}
+
+export async function disconnectGoogle(stub: Stub): Promise<GoogleAccountStatus> {
+  await stub.disconnectGoogle();
+  return stub.getGoogleStatus();
+}
+
+export async function setCalendarEnabled(
+  stub: Stub,
+  id: string,
+  enabled: boolean,
+): Promise<GoogleAccountStatus> {
+  await stub.setCalendarEnabled(id, enabled);
+  return stub.getGoogleStatus();
 }
 
 export async function beginGoogleAuth(stub: Stub, env: Env): Promise<string> {

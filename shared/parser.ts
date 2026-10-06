@@ -495,7 +495,6 @@ export function parseQuickAdd(
       date: civilKey(anchor),
       time: effectiveTime === null ? null : minutesToTime(effectiveTime),
       recurrence,
-      timeZone,
     };
   }
 

@@ -16,8 +16,8 @@ export const formatInstant = (iso: string, timeZone: string) =>
   new Date(iso).toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit", timeZone });
 
 /** "Today", "Tomorrow", "Sat 8 Aug" — plus time and repeat rule if set. */
-export function formatDueLabel(due: DueDate, timeZone?: string): string {
-  const parts = [formatDateLabel(due.date, timeZone ?? due.timeZone)];
+export function formatDueLabel(due: DueDate, timeZone: string): string {
+  const parts = [formatDateLabel(due.date, timeZone)];
   if (due.time) parts.push(formatTime(due.time));
   if (due.recurrence) parts.push(formatRecurrence(due.recurrence));
   return parts.join(" · ");

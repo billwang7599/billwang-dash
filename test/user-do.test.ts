@@ -61,16 +61,14 @@ describe("UserDO storage", () => {
       content: "Review",
       labels: ["urgent", "work"],
       priority: 1,
-      due: { date: "2026-08-04", time: "17:00", recurrence: null, timeZone: "America/Chicago" },
+      due: { date: "2026-08-04", time: "17:00", recurrence: null },
       durationMinutes: 90,
     });
 
     const [task] = await s.listTasks();
     expect(task.id).toBe(created.id);
     expect(task.labels).toEqual(["urgent", "work"]);
-    expect(task.due).toEqual({
-      date: "2026-08-04", time: "17:00", recurrence: null, timeZone: "America/Chicago",
-    });
+    expect(task.due).toEqual({ date: "2026-08-04", time: "17:00", recurrence: null });
     expect(task.durationMinutes).toBe(90);
   });
 
@@ -100,7 +98,7 @@ describe("completing tasks", () => {
     const s = stub("c2");
     const task = await s.createTask({
       content: "Vitamins",
-      due: { date: "2026-08-03", time: null, recurrence: recurrence(), timeZone: "UTC" },
+      due: { date: "2026-08-03", time: null, recurrence: recurrence() },
     });
 
     const rolled = await s.completeTask(task.id, "2026-08-03");
@@ -113,7 +111,7 @@ describe("completing tasks", () => {
     const s = stub("c3");
     const task = await s.createTask({
       content: "Water plants",
-      due: { date: "2026-08-01", time: null, recurrence: recurrence({ interval: 3 }), timeZone: "UTC" },
+      due: { date: "2026-08-01", time: null, recurrence: recurrence({ interval: 3 }) },
     });
 
     // Completed three days late; the next occurrence still follows the
@@ -129,7 +127,6 @@ describe("completing tasks", () => {
       due: {
         date: "2026-08-01", time: null,
         recurrence: recurrence({ interval: 3, fromCompletion: true }),
-        timeZone: "UTC",
       },
     });
 
@@ -185,5 +182,22 @@ describe("preferences", () => {
     const prefs = await s.getPreferences();
     expect(prefs.timeZone).toBe("America/Chicago");
     expect(prefs.dateFormat).toBe("DMY");
+  });
+});
+
+describe("UserDO cascades", () => {
+  it("deleting a project removes its tasks and their labels", async () => {
+    const s = stub("cascade1");
+    const task = await s.createTask({ content: "x", projectName: "Doomed", labels: ["a"] });
+    expect(await s.deleteProject(task.projectId)).toBe(true);
+    expect(await s.getTask(task.id)).toBeNull();
+    expect(await s.listTasks({ includeCompleted: true })).toHaveLength(0);
+  });
+
+  it("deleting a task removes its labels", async () => {
+    const s = stub("cascade2");
+    const task = await s.createTask({ content: "x", labels: ["a", "b"] });
+    await s.deleteTask(task.id);
+    expect(await s.getTask(task.id)).toBeNull();
   });
 });

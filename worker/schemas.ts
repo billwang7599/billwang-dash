@@ -9,7 +9,16 @@ import { z } from "zod";
  * because the bad data is already stored.
  */
 
-const nonEmpty = z.string().trim().min(1);
+const nonEmpty = z.string().trim().min(1, "is required");
+
+const timeZone = z.string().refine((tz) => {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}, "expected an IANA time zone");
 
 // Matches the parser's own output shape; see Recurrence in shared/types.ts.
 const recurrence = z.object({
@@ -28,12 +37,11 @@ const dueDate = z.object({
     .regex(/^\d{2}:\d{2}$/, "expected HH:MM")
     .nullable(),
   recurrence: recurrence.nullable(),
-  timeZone: z.string(),
 });
 
 export const quickAddBody = z.object({
-  text: z.string().optional(),
-  timeZone: z.string().optional(),
+  text: nonEmpty,
+  timeZone: timeZone.optional(),
 });
 
 /**
@@ -52,12 +60,12 @@ export const taskPatchBody = z.object({
 });
 
 export const createProjectBody = z.object({
-  name: z.string().optional(),
+  name: nonEmpty,
   color: z.string().optional(),
 });
 
 export const preferencesBody = z.object({
-  timeZone: z.string().optional(),
+  timeZone: timeZone.optional(),
   dateFormat: z.enum(["MDY", "DMY"]).optional(),
 });
 

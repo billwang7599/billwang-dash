@@ -44,11 +44,13 @@ user, so there is no cross-user contention and every query is a local SQLite
 read that is strongly consistent with its writes. The DO is keyed by the Access
 token's stable `sub` claim.
 
-**Tasks store wall-clock dates, never instants.** A task is `2026-08-04` +
-`17:00` + `America/Chicago`, not an epoch millisecond. "Tomorrow at 5pm" should
-stay 5pm across a DST change or a flight, and it does. Conversion to a real
-instant happens once, at the calendar boundary. `shared/civil.ts` holds that
-math; `test/calendar.test.ts` pins the behaviour.
+**Tasks store floating wall-clock dates, never instants.** A task is
+`2026-08-04` + `17:00`, not an epoch millisecond, and no zone is stored with it.
+It is read in the user's current zone (Settings), so "tomorrow at 5pm" stays 5pm
+across a DST change, a flight, or a change of zone. The trade-off is that a task
+is never pinned to a place: "3pm New York call" becomes 3pm wherever you are.
+Conversion to a real instant happens once, at the calendar boundary.
+`shared/civil.ts` holds that math; `test/calendar.test.ts` pins the behaviour.
 
 **One parser, two callers.** The UI parses on every keystroke to draw the live
 preview; the Worker re-parses the raw text on submit. Because it is literally

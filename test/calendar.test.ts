@@ -17,7 +17,7 @@ describe("calendar feed", () => {
       durationMinutes: 90,
       due: {
         date: "2026-08-04", time: "15:00",
-        recurrence: null, timeZone: "America/Chicago",
+        recurrence: null,
       },
     });
 
@@ -35,24 +35,27 @@ describe("calendar feed", () => {
     });
   });
 
-  it("keeps a task's original zone when the preference changes later", async () => {
+  it("reads a task's time in the current zone, so changing the zone floats it", async () => {
     const s = stub("cal2");
     await s.createTask({
-      content: "Booked in Tokyo",
-      due: { date: "2026-08-05", time: "09:00", recurrence: null, timeZone: "Asia/Tokyo" },
+      content: "Standup",
+      due: { date: "2026-08-05", time: "09:00", recurrence: null },
     });
-    // Moving the default zone must not shift an already-scheduled task.
-    await s.setPreferences({ timeZone: "America/Chicago" });
 
-    const [item] = await s.getCalendarItems(WEEK_START, WEEK_END);
-    expect(item.start).toBe("2026-08-05T00:00:00.000Z"); // 09:00 JST = 00:00Z
+    await s.setPreferences({ timeZone: "Asia/Tokyo" });
+    let [item] = await s.getCalendarItems(WEEK_START, WEEK_END);
+    expect(item.start).toBe("2026-08-05T00:00:00.000Z"); // 09:00 JST
+
+    await s.setPreferences({ timeZone: "America/Chicago" });
+    [item] = await s.getCalendarItems(WEEK_START, WEEK_END);
+    expect(item.start).toBe("2026-08-05T14:00:00.000Z"); // still 09:00 wall clock, now CDT
   });
 
   it("marks an undated-time task as all day", async () => {
     const s = stub("cal3");
     await s.createTask({
       content: "Renew passport",
-      due: { date: "2026-08-06", time: null, recurrence: null, timeZone: "UTC" },
+      due: { date: "2026-08-06", time: null, recurrence: null },
     });
 
     const [item] = await s.getCalendarItems(WEEK_START, WEEK_END);
@@ -65,11 +68,11 @@ describe("calendar feed", () => {
     const s = stub("cal4");
     await s.createTask({
       content: "Next month",
-      due: { date: "2026-09-15", time: "10:00", recurrence: null, timeZone: "UTC" },
+      due: { date: "2026-09-15", time: "10:00", recurrence: null },
     });
     const done = await s.createTask({
       content: "Already done",
-      due: { date: "2026-08-05", time: "10:00", recurrence: null, timeZone: "UTC" },
+      due: { date: "2026-08-05", time: "10:00", recurrence: null },
     });
     await s.completeTask(done.id, "2026-08-05");
 
@@ -98,7 +101,7 @@ describe("calendar endpoint", () => {
     await SELF.fetch("https://example.com/api/tasks", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text: "Standup tomorrow at 9am", timeZone: "UTC" }),
+      body: JSON.stringify({ text: "Standup tomorrow at 9am" }),
     });
 
     const res = await SELF.fetch(

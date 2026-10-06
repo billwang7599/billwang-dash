@@ -84,7 +84,7 @@ app.post("/api/tasks/:id/uncomplete", async (c) =>
 );
 
 app.delete("/api/tasks/:id", async (c) => {
-  await stub(c).deleteTask(c.req.param("id"));
+  await service.deleteTask(stub(c), c.req.param("id"));
   return c.body(null, 204);
 });
 
@@ -100,16 +100,17 @@ app.delete("/api/projects/:id", async (c) => {
 
 app.patch("/api/projects/:id/pinned", async (c) => {
   const { pinned } = await body(c, schemas.pinnedBody);
-  const project = await stub(c).setProjectPinned(c.req.param("id"), pinned);
-  if (!project) throw new ServiceError(404, "not found");
-  return c.json({ project });
+  return c.json({ project: await service.setProjectPinned(stub(c), c.req.param("id"), pinned) });
 });
 
-app.patch("/api/preferences", async (c) => {
-  const s = stub(c);
-  await s.setPreferences(await body(c, schemas.preferencesBody));
-  return c.json({ preferences: await s.getPreferences() });
-});
+app.patch("/api/preferences", async (c) =>
+  c.json({
+    preferences: await service.setPreferences(
+      stub(c),
+      await body(c, schemas.preferencesBody),
+    ),
+  }),
+);
 
 app.get("/api/calendar", async (c) =>
   c.json({
@@ -129,17 +130,13 @@ app.get("/api/google/callback", async (c) =>
   settings(c, await service.completeGoogleAuth(stub(c), c.env, c.req.query())),
 );
 
-app.post("/api/google/disconnect", async (c) => {
-  const s = stub(c);
-  await s.disconnectGoogle();
-  return c.json(await s.getGoogleStatus());
-});
+app.post("/api/google/disconnect", async (c) =>
+  c.json(await service.disconnectGoogle(stub(c))),
+);
 
 app.patch("/api/google/calendars/:id", async (c) => {
   const { enabled } = await body(c, schemas.calendarToggleBody);
-  const s = stub(c);
-  await s.setCalendarEnabled(c.req.param("id"), enabled);
-  return c.json(await s.getGoogleStatus());
+  return c.json(await service.setCalendarEnabled(stub(c), c.req.param("id"), enabled));
 });
 
 app.use("/api/admin/*", async (c, next) => {

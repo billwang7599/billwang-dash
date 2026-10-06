@@ -60,7 +60,35 @@ describe("ServiceError maps to HTTP status", () => {
       body: JSON.stringify({ text: "" }),
     });
     expect(res.status).toBe(400);
-    expect((await res.json<{ error: string }>()).error).toBe("text is required");
+    expect((await res.json<{ error: string }>()).error).toBe("text: is required");
+  });
+
+  const send = (method: string, path: string, body: unknown) =>
+    SELF.fetch(`https://example.com${path}`, {
+      method,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  it("400 for a blank project name", async () => {
+    expect((await send("POST", "/api/projects", { name: "  " })).status).toBe(400);
+  });
+
+  it("400 for an unknown time zone", async () => {
+    expect((await send("PATCH", "/api/preferences", { timeZone: "Mars/Base" })).status).toBe(400);
+    expect((await send("PATCH", "/api/preferences", { timeZone: "Europe/Paris" })).status).toBe(200);
+  });
+
+  it("400 for moving a task to a project that does not exist", async () => {
+    const created = await send("POST", "/api/tasks", { text: "move me" });
+    const { task } = await created.json<{ task: { id: string } }>();
+    const res = await send("PATCH", `/api/tasks/${task.id}`, { projectId: "nope" });
+    expect(res.status).toBe(400);
+    expect((await res.json<{ error: string }>()).error).toBe("project not found");
+  });
+
+  it("404 for pinning a missing project", async () => {
+    expect((await send("PATCH", "/api/projects/nope/pinned", { pinned: true })).status).toBe(404);
   });
 
   it("404 for completing a missing task", async () => {

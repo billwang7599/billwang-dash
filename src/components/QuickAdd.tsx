@@ -96,7 +96,7 @@ export function QuickAdd({ preferences, onSubmit }: Props) {
         <div className="qa-preview">
           <span className="qa-preview-label">{parsed.content || "…"}</span>
           {parsed.due && (
-            <span className="pill pill-date">{formatDueLabel(parsed.due)}</span>
+            <span className="pill pill-date">{formatDueLabel(parsed.due, preferences.timeZone)}</span>
           )}
           {parsed.deadline && (
             <span className="pill pill-deadline">due {parsed.deadline}</span>

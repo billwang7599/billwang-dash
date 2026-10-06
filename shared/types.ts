@@ -22,13 +22,11 @@ export interface Recurrence {
 }
 
 export interface DueDate {
-  /** YYYY-MM-DD in the user's timezone. */
+  /** YYYY-MM-DD, read in the user's current time zone (floating, not pinned). */
   date: string;
   /** HH:MM 24h, or null for an all-day task. */
   time: string | null;
   recurrence: Recurrence | null;
-  /** IANA zone the date/time was resolved in. */
-  timeZone: string;
 }
 
 export interface Task {
