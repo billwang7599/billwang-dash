@@ -1,65 +1,65 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "billwang-dash",
-  "main": "worker/index.ts",
-  "compatibility_date": "2025-07-01",
-  "compatibility_flags": ["nodejs_compat"],
+    "$schema": "node_modules/wrangler/config-schema.json",
+    "name": "billwang-dash",
+    "main": "worker/index.ts",
+    "compatibility_date": "2025-07-01",
+    "compatibility_flags": ["nodejs_compat"],
 
-  "observability": {
-    "enabled": true
-  },
+    "observability": {
+        "enabled": true
+    },
 
-  // "none": / is the landing page and /app is the SPA, so a blanket fallback
-  // would serve the wrong document for deep links. worker/index.ts chooses.
-  "assets": {
-    "directory": "./dist/client",
-    "not_found_handling": "none",
-    "binding": "ASSETS",
-    // Assets are served before the Worker unless listed here, which would
-    // skip the identity check and the signed-in redirect on "/".
-    "run_worker_first": ["/", "/app", "/app/*", "/api/*"]
-  },
+    // "none": / is the landing page and /app is the SPA, so a blanket fallback
+    // would serve the wrong document for deep links. worker/index.ts chooses.
+    "assets": {
+        "directory": "./dist/client",
+        "not_found_handling": "none",
+        "binding": "ASSETS",
+        // Assets are served before the Worker unless listed here, which would
+        // skip the identity check and the signed-in redirect on "/".
+        "run_worker_first": ["/", "/app", "/app/*", "/api/*"]
+    },
 
-  "durable_objects": {
-    "bindings": [
-      {
-        "name": "USER_DO",
-        "class_name": "UserDO"
-      }
-    ]
-  },
+    "durable_objects": {
+        "bindings": [
+            {
+                "name": "USER_DO",
+                "class_name": "UserDO"
+            }
+        ]
+    },
 
-  "migrations": [
-    {
-      "tag": "v1",
-      "new_sqlite_classes": ["UserDO"]
+    "migrations": [
+        {
+            "tag": "v1",
+            "new_sqlite_classes": ["UserDO"]
+        }
+    ],
+
+    "vars": {
+        // Public origin used to build the Google OAuth redirect URI.
+        "APP_ORIGIN": "https://dash.billwang.dev",
+        // From Zero Trust -> Access -> Applications -> Overview. The AUD changes
+        // if the application is recreated.
+        "ACCESS_TEAM_DOMAIN": "https://wangzetao.cloudflareaccess.com",
+        "ACCESS_AUD": "c3dbedfacb4f021b2f96c5f0a51d05a488a52b8b22a61d5c5677ae429922ce87",
+        // Comma-separated. Either grants admin; see isAdmin() in worker/auth.ts.
+        "ADMIN_EMAILS": "billwang7599@gmail.com",
+        "ADMIN_GROUPS": ""
     }
-  ],
 
-  "vars": {
-    // Public origin used to build the Google OAuth redirect URI.
-    "APP_ORIGIN": "https://dash.billwang.dev",
-    // From Zero Trust -> Access -> Applications -> Overview. The AUD changes
-    // if the application is recreated.
-    "ACCESS_TEAM_DOMAIN": "https://wangzetao.cloudflareaccess.com",
-    "ACCESS_AUD": "c3dbedfacb4f021b2f96c5f0a51d05a488a52b8b22a61d5c5677ae429922ce87",
-    // Comma-separated. Either grants admin; see isAdmin() in worker/auth.ts.
-    "ADMIN_EMAILS": "billwang7599@gmail.com",
-    "ADMIN_GROUPS": ""
-  }
-
-  // Identity comes from the Cf-Access-Jwt-Assertion header that Access injects,
-  // verified in worker/auth.ts against ACCESS_TEAM_DOMAIN's JWKS endpoint.
-  //
-  // Deliberately not `ctx.access`: that API is documented as unavailable to
-  // Workers using Static Assets, because they run behind an internal router
-  // Worker that does not forward it. This Worker serves dist/client, so
-  // ctx.access is always undefined here. Same JWT either way.
-  //
-  // DEV_USER lives in `.dev.vars` so it is never deployed. It only applies
-  // when ACCESS_TEAM_DOMAIN is unset, i.e. local dev and tests.
-  //
-  // Secrets (set via `wrangler secret put <NAME>`):
-  //   GOOGLE_CLIENT_ID
-  //   GOOGLE_CLIENT_SECRET
+    // Identity comes from the Cf-Access-Jwt-Assertion header that Access injects,
+    // verified in worker/auth.ts against ACCESS_TEAM_DOMAIN's JWKS endpoint.
+    //
+    // Deliberately not `ctx.access`: that API is documented as unavailable to
+    // Workers using Static Assets, because they run behind an internal router
+    // Worker that does not forward it. This Worker serves dist/client, so
+    // ctx.access is always undefined here. Same JWT either way.
+    //
+    // DEV_USER lives in `.dev.vars` so it is never deployed. It only applies
+    // when ACCESS_TEAM_DOMAIN is unset, i.e. local dev and tests.
+    //
+    // Secrets (set via `wrangler secret put <NAME>`):
+    //   GOOGLE_CLIENT_ID
+    //   GOOGLE_CLIENT_SECRET
 }

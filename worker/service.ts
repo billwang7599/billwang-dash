@@ -4,12 +4,12 @@ import { exchangeCode } from "./google.ts";
 import type { UserDO } from "./user-do.ts";
 import type { AuthedUser } from "./auth.ts";
 import type {
-  CalendarItem,
-  GoogleAccountStatus,
-  ParsedQuickAdd,
-  Preferences,
-  Project,
-  Task,
+    CalendarItem,
+    GoogleAccountStatus,
+    ParsedQuickAdd,
+    Preferences,
+    Project,
+    Task,
 } from "../shared/types.ts";
 
 /** API logic, independent of HTTP. Takes a DO stub, not a Hono context. */
@@ -18,143 +18,143 @@ type Stub = DurableObjectStub<UserDO>;
 
 /** index.ts maps this onto a response in app.onError. */
 export class ServiceError extends Error {
-  constructor(
-    readonly status: 400 | 403 | 404 | 503,
-    message: string,
-  ) {
-    super(message);
-  }
+    constructor(
+        readonly status: 400 | 403 | 404 | 503,
+        message: string,
+    ) {
+        super(message);
+    }
 }
 
 export interface AppState {
-  projects: Project[];
-  tasks: Task[];
-  preferences: Preferences;
-  user: AuthedUser;
+    projects: Project[];
+    tasks: Task[];
+    preferences: Preferences;
+    user: AuthedUser;
 }
 
 /** One round trip for the initial app load. */
 export async function loadState(
-  stub: Stub,
-  user: AuthedUser,
-  includeCompleted: boolean,
+    stub: Stub,
+    user: AuthedUser,
+    includeCompleted: boolean,
 ): Promise<AppState> {
-  const [projects, tasks, preferences] = await Promise.all([
-    stub.listProjects(),
-    stub.listTasks({ includeCompleted }),
-    stub.getPreferences(),
-    stub.syncProfile(user.email, user.name),
-  ]);
-  return { projects, tasks, preferences, user };
+    const [projects, tasks, preferences] = await Promise.all([
+        stub.listProjects(),
+        stub.listTasks({ includeCompleted }),
+        stub.getPreferences(),
+        stub.syncProfile(user.email, user.name),
+    ]);
+    return { projects, tasks, preferences, user };
 }
 
 /** Re-parses server-side so what is stored cannot disagree with the preview. */
 export async function quickAddTask(
-  stub: Stub,
-  text: string,
-  timeZone: string | undefined,
+    stub: Stub,
+    text: string,
+    timeZone: string | undefined,
 ): Promise<{ task: Task; parsed: ParsedQuickAdd }> {
-  const prefs = await stub.getPreferences();
-  const parsed = parseQuickAdd(text, {
-    timeZone: timeZone ?? prefs.timeZone,
-    dateFormat: prefs.dateFormat,
-  });
-  if (!parsed.content) throw new ServiceError(400, "task has no content");
+    const prefs = await stub.getPreferences();
+    const parsed = parseQuickAdd(text, {
+        timeZone: timeZone ?? prefs.timeZone,
+        dateFormat: prefs.dateFormat,
+    });
+    if (!parsed.content) throw new ServiceError(400, "task has no content");
 
-  return { task: await stub.createTask(parsed), parsed };
+    return { task: await stub.createTask(parsed), parsed };
 }
 
 /** "Today" has to be resolved in the user's zone, not the Worker's. */
 export async function completeTask(stub: Stub, id: string): Promise<Task> {
-  const { timeZone } = await stub.getPreferences();
-  const task = await stub.completeTask(id, civilKey(civilFromDate(new Date(), timeZone)));
-  if (!task) throw new ServiceError(404, "not found");
-  return task;
+    const { timeZone } = await stub.getPreferences();
+    const task = await stub.completeTask(id, civilKey(civilFromDate(new Date(), timeZone)));
+    if (!task) throw new ServiceError(404, "not found");
+    return task;
 }
 
 export async function uncompleteTask(stub: Stub, id: string): Promise<Task> {
-  const task = await stub.uncompleteTask(id);
-  if (!task) throw new ServiceError(404, "not found");
-  return task;
+    const task = await stub.uncompleteTask(id);
+    if (!task) throw new ServiceError(404, "not found");
+    return task;
 }
 
 export async function updateTask(
-  stub: Stub,
-  id: string,
-  patch: Parameters<UserDO["updateTask"]>[1],
+    stub: Stub,
+    id: string,
+    patch: Parameters<UserDO["updateTask"]>[1],
 ): Promise<Task> {
-  if (patch.projectId && !(await stub.hasProject(patch.projectId))) {
-    throw new ServiceError(400, "project not found");
-  }
-  const task = await stub.updateTask(id, patch);
-  if (!task) throw new ServiceError(404, "not found");
-  return task;
+    if (patch.projectId && !(await stub.hasProject(patch.projectId))) {
+        throw new ServiceError(400, "project not found");
+    }
+    const task = await stub.updateTask(id, patch);
+    if (!task) throw new ServiceError(404, "not found");
+    return task;
 }
 
 export async function deleteTask(stub: Stub, id: string): Promise<void> {
-  await stub.deleteTask(id);
+    await stub.deleteTask(id);
 }
 
 export async function createProject(
-  stub: Stub,
-  name: string,
-  color: string | undefined,
+    stub: Stub,
+    name: string,
+    color: string | undefined,
 ): Promise<Project> {
-  return stub.createProject(name, color);
+    return stub.createProject(name, color);
 }
 
 export async function setProjectPinned(
-  stub: Stub,
-  id: string,
-  pinned: boolean,
+    stub: Stub,
+    id: string,
+    pinned: boolean,
 ): Promise<Project> {
-  const project = await stub.setProjectPinned(id, pinned);
-  if (!project) throw new ServiceError(404, "not found");
-  return project;
+    const project = await stub.setProjectPinned(id, pinned);
+    if (!project) throw new ServiceError(404, "not found");
+    return project;
 }
 
 export async function setPreferences(
-  stub: Stub,
-  prefs: Partial<Preferences>,
+    stub: Stub,
+    prefs: Partial<Preferences>,
 ): Promise<Preferences> {
-  await stub.setPreferences(prefs);
-  return stub.getPreferences();
+    await stub.setPreferences(prefs);
+    return stub.getPreferences();
 }
 
 export async function deleteProject(stub: Stub, id: string): Promise<void> {
-  if (!(await stub.deleteProject(id))) {
-    throw new ServiceError(400, "The Inbox cannot be deleted");
-  }
+    if (!(await stub.deleteProject(id))) {
+        throw new ServiceError(400, "The Inbox cannot be deleted");
+    }
 }
 
 export async function calendarItems(
-  stub: Stub,
-  start: string | undefined,
-  end: string | undefined,
+    stub: Stub,
+    start: string | undefined,
+    end: string | undefined,
 ): Promise<CalendarItem[]> {
-  if (!start || !end || Number.isNaN(Date.parse(start)) || Number.isNaN(Date.parse(end))) {
-    throw new ServiceError(400, "start and end must be ISO timestamps");
-  }
-  return stub.getCalendarItems(start, end);
+    if (!start || !end || Number.isNaN(Date.parse(start)) || Number.isNaN(Date.parse(end))) {
+        throw new ServiceError(400, "start and end must be ISO timestamps");
+    }
+    return stub.getCalendarItems(start, end);
 }
 
 export async function disconnectGoogle(stub: Stub): Promise<GoogleAccountStatus> {
-  await stub.disconnectGoogle();
-  return stub.getGoogleStatus();
+    await stub.disconnectGoogle();
+    return stub.getGoogleStatus();
 }
 
 export async function setCalendarEnabled(
-  stub: Stub,
-  id: string,
-  enabled: boolean,
+    stub: Stub,
+    id: string,
+    enabled: boolean,
 ): Promise<GoogleAccountStatus> {
-  await stub.setCalendarEnabled(id, enabled);
-  return stub.getGoogleStatus();
+    await stub.setCalendarEnabled(id, enabled);
+    return stub.getGoogleStatus();
 }
 
 export async function beginGoogleAuth(stub: Stub, env: Env): Promise<string> {
-  if (!env.GOOGLE_CLIENT_ID) throw new ServiceError(503, "Google is not configured");
-  return stub.beginGoogleAuth();
+    if (!env.GOOGLE_CLIENT_ID) throw new ServiceError(503, "Google is not configured");
+    return stub.beginGoogleAuth();
 }
 
 /**
@@ -162,19 +162,19 @@ export async function beginGoogleAuth(stub: Stub, env: Env): Promise<string> {
  * throwing, since every outcome ends as a redirect. `state` is CSRF defence.
  */
 export async function completeGoogleAuth(
-  stub: Stub,
-  env: Env,
-  query: { code?: string; state?: string; error?: string },
+    stub: Stub,
+    env: Env,
+    query: { code?: string; state?: string; error?: string },
 ): Promise<string> {
-  if (query.error) return query.error;
-  if (!query.code || !query.state) return "missing_code";
-  if (!(await stub.consumeGoogleAuthState(query.state))) return "bad_state";
+    if (query.error) return query.error;
+    if (!query.code || !query.state) return "missing_code";
+    if (!(await stub.consumeGoogleAuthState(query.state))) return "bad_state";
 
-  try {
-    await stub.connectGoogle(await exchangeCode(env, query.code));
-    return "connected";
-  } catch (err) {
-    console.error("Google connect failed", err);
-    return (err as Error).message;
-  }
+    try {
+        await stub.connectGoogle(await exchangeCode(env, query.code));
+        return "connected";
+    } catch (err) {
+        console.error("Google connect failed", err);
+        return (err as Error).message;
+    }
 }
