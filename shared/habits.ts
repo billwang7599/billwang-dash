@@ -31,14 +31,16 @@ export interface HabitStats {
     rate: number | null;
 }
 
-/** What a create or edit sends: a name and a rule. */
+/** What a create or edit sends: a name, an optional description, and a rule. */
 export interface HabitInput extends HabitRule {
     name: string;
+    description: string;
 }
 
 export interface Habit extends HabitRule {
     id: string;
     name: string;
+    description: string;
     order: number;
     createdAt: string;
     /** First day that counts, YYYY-MM-DD. Moves back if an earlier day is logged. */

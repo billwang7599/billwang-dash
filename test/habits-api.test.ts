@@ -7,7 +7,7 @@ const stub = (name: string) => env.USER_DO.getByName(name);
 /** A date in the DO's zone (UTC unless a test changes it), offset from today. */
 const day = (offset = 0) => civilKey(addDays(civilFromDate(new Date(), "UTC"), offset));
 
-const daily = { name: "Meditate", freq: "daily" as const, perWeek: null, weekdays: [] };
+const daily = { name: "Meditate", description: "", freq: "daily" as const, perWeek: null, weekdays: [] };
 
 describe("habit storage", () => {
     it("creates a habit starting today, with empty stats", async () => {
@@ -69,8 +69,8 @@ describe("habit storage", () => {
         const h = await s.createHabit(daily);
         await s.setHabitCheckin(h.id, day(), "done", undefined);
 
-        const edited = await s.updateHabit(h.id, { name: "Run", freq: "weekly_count", perWeek: 3, weekdays: [] });
-        expect(edited).toMatchObject({ name: "Run", freq: "weekly_count", perWeek: 3, stats: { streakUnit: "week" } });
+        const edited = await s.updateHabit(h.id, { name: "Run", description: "Morning loop", freq: "weekly_count", perWeek: 3, weekdays: [] });
+        expect(edited).toMatchObject({ name: "Run", description: "Morning loop", freq: "weekly_count", perWeek: 3, stats: { streakUnit: "week" } });
 
         await s.deleteHabit(h.id);
         expect(await s.listHabits()).toEqual([]);

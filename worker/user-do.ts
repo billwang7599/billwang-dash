@@ -89,6 +89,7 @@ interface TaskRow extends Record<string, SqlStorageValue> {
 interface HabitRow extends Record<string, SqlStorageValue> {
     id: string;
     name: string;
+    description: string;
     freq: string;
     per_week: number | null;
     weekdays: string;
@@ -421,6 +422,14 @@ export class UserDO extends DurableObject<Env> {
                 CREATE INDEX idx_events_range ON events(start_date, end_date);
 
                 INSERT INTO _migrations (id) VALUES (13);
+            `);
+        }
+
+        if (version < 14) {
+            sql.exec(`
+                ALTER TABLE habits ADD COLUMN description TEXT NOT NULL DEFAULT '';
+
+                INSERT INTO _migrations (id) VALUES (14);
             `);
         }
     }
@@ -882,9 +891,9 @@ export class UserDO extends DurableObject<Env> {
         const id = crypto.randomUUID();
         const now = new Date().toISOString();
         this.sql.exec(
-            `INSERT INTO habits (id, name, freq, per_week, weekdays, sort_order, created_at, start_date)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            id, input.name, input.freq, input.perWeek, JSON.stringify(input.weekdays),
+            `INSERT INTO habits (id, name, description, freq, per_week, weekdays, sort_order, created_at, start_date)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            id, input.name, input.description, input.freq, input.perWeek, JSON.stringify(input.weekdays),
             this.nextOrder("habits"), now, this.todayKey(),
         );
         return (await this.habitSummary(id))!;
@@ -892,8 +901,8 @@ export class UserDO extends DurableObject<Env> {
 
     async updateHabit(id: string, input: HabitInput): Promise<HabitSummary | null> {
         this.sql.exec(
-            "UPDATE habits SET name = ?, freq = ?, per_week = ?, weekdays = ? WHERE id = ?",
-            input.name, input.freq, input.perWeek, JSON.stringify(input.weekdays), id,
+            "UPDATE habits SET name = ?, description = ?, freq = ?, per_week = ?, weekdays = ? WHERE id = ?",
+            input.name, input.description, input.freq, input.perWeek, JSON.stringify(input.weekdays), id,
         );
         return this.habitSummary(id);
     }
@@ -978,6 +987,7 @@ export class UserDO extends DurableObject<Env> {
             const habit: Habit = {
                 id: r.id,
                 name: r.name,
+                description: r.description,
                 freq: r.freq as HabitFreq,
                 perWeek: r.per_week,
                 weekdays: JSON.parse(r.weekdays) as number[],

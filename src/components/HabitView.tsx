@@ -105,6 +105,7 @@ export function HabitView({ habit, today, revision, onChanged, onUpdate, onDelet
                 <div>
                     <h1 className="view-title">{habit.name}</h1>
                     <p className="habit-freq">{describeFrequency(habit)}</p>
+                    {habit.description && <p className="habit-desc">{habit.description}</p>}
                 </div>
                 <div className="habit-actions">
                     <button className="btn btn-quiet" onClick={() => setEditing(true)}>

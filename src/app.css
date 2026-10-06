@@ -870,6 +870,7 @@
 .habit-view { max-width: 40rem; }
 .habit-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 .habit-freq { margin: -0.9rem 0 1.2rem; font-size: 0.86rem; color: var(--ink-3); }
+.habit-desc { margin: -0.7rem 0 1.2rem; max-width: 40rem; font-size: 0.9rem; color: var(--ink-2); white-space: pre-wrap; }
 .habit-actions { display: flex; gap: 0.4rem; margin-top: 2rem; }
 
 .habit-stats {

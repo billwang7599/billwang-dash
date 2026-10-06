@@ -21,6 +21,7 @@ const DAYS: { value: number; label: string }[] = [
 
 export function HabitModal({ habit, onSave, onClose }: Props) {
     const [name, setName] = useState(habit?.name ?? "");
+    const [description, setDescription] = useState(habit?.description ?? "");
     const [freq, setFreq] = useState<HabitFreq>(habit?.freq ?? "daily");
     const [perWeek, setPerWeek] = useState(habit?.perWeek ?? 3);
     const [weekdays, setWeekdays] = useState<number[]>(habit?.weekdays ?? [1, 3, 5]);
@@ -46,6 +47,7 @@ export function HabitModal({ habit, onSave, onClose }: Props) {
         try {
             await onSave({
                 name: name.trim(),
+                description: description.trim(),
                 freq,
                 perWeek: freq === "weekly_count" ? perWeek : null,
                 weekdays: freq === "weekdays" ? weekdays : [],
@@ -78,6 +80,16 @@ export function HabitModal({ habit, onSave, onClose }: Props) {
                         onChange={(e) => setName(e.target.value)}
                         placeholder="Habit name, e.g. Meditate"
                         aria-label="Habit name"
+                    />
+
+                    <textarea
+                        className="modal-desc"
+                        value={description}
+                        maxLength={1000}
+                        onChange={(e) => setDescription(e.target.value)}
+                        placeholder="Description (optional)"
+                        aria-label="Description"
+                        rows={2}
                     />
 
                     <div className="modal-grid">

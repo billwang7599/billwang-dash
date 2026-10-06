@@ -85,6 +85,7 @@ export const calendarToggleBody = z.object({
 export const habitBody = z
     .object({
         name: nonEmpty.max(100),
+        description: z.string().max(1000).optional(),
         freq: z.enum(["daily", "weekly_count", "weekdays"]),
         perWeek: z.int().min(1).max(7).nullable().optional(),
         weekdays: z.array(z.int().min(0).max(6)).optional(),
@@ -99,6 +100,7 @@ export const habitBody = z
     })
     .transform((h) => ({
         name: h.name,
+        description: h.description?.trim() ?? "",
         freq: h.freq,
         perWeek: h.freq === "weekly_count" ? (h.perWeek ?? null) : null,
         weekdays: h.freq === "weekdays" ? [...new Set(h.weekdays)].sort((a, b) => a - b) : [],
