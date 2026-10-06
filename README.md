@@ -1,7 +1,7 @@
 # dash
 
 A Todoist-style todo list and calendar on Cloudflare Workers + Durable Objects,
-with Todoist's quick-add grammar and read-only Google Calendar.
+with Todoist's quick-add grammar and two-way Google Calendar.
 
 ```
 Design review #Work p1 every other tuesday at 3pm for 90m
@@ -34,7 +34,7 @@ unset and `DEV_USER` from `.dev.vars` stands in as the signed-in user.
 | Per-user data | `worker/user-do.ts` | One DO per user; all reads are local SQLite |
 | Quick-add grammar | `shared/parser.ts` | Pure module, imported by both Worker and UI |
 | Date math | `shared/civil.ts` | Wall-clock dates, not instants |
-| Google Calendar | `worker/google.ts` | Read-only pull, tokens held in the DO |
+| Google Calendar | `worker/google.ts`, `worker/google-sync.ts` | Reads your events live; pushes tasks to a dash-owned calendar. Tokens held in the DO |
 | UI | `src/`, `index.html`, `app/index.html` | Static landing page + React SPA |
 
 Three decisions worth knowing about:
@@ -106,8 +106,17 @@ account. Do not move `DEV_USER` into `vars`.
 
 ## Setting up Google Calendar
 
-Read-only: your events show up beside scheduled tasks, and the app requests
-only `calendar.readonly`, so it is incapable of writing to your calendar.
+Two directions, with a hard limit on the second:
+
+- **Google to dash.** Your events show up beside scheduled tasks, in their own
+  colour (sage) so they don't blend with tasks. This uses `calendar.readonly`.
+- **dash to Google.** Optional, off until you switch it on in Settings. Tasks
+  with a due date are written to a separate calendar called "dash". This uses
+  `calendar.app.created`, which only reaches calendars dash created itself, so
+  dash cannot edit or delete any event in your own calendars.
+
+An account connected before this existed must reconnect once (Settings, "Grant
+access") so Google can ask for the second scope.
 
 1. In Google Cloud, create a project and enable the **Google Calendar API**.
 2. Create an **OAuth 2.0 Client ID** (Web application).
@@ -121,7 +130,29 @@ wrangler secret put GOOGLE_CLIENT_SECRET
 ```
 
 5. Set `APP_ORIGIN` in `wrangler.jsonc` to your deployed origin.
-6. Connect from **Settings** inside the app.
+6. Connect from **Settings** inside the app, then switch on **Show my tasks in
+   Google Calendar** if you want the second direction.
+
+If the OAuth consent screen is in **Testing**, Google expires refresh tokens
+after 7 days and only listed test users can connect, so you would reconnect
+weekly. Publishing it avoids that but may require Google's verification for
+sensitive scopes.
+
+### How tasks reach Google
+
+- A timed task becomes an event (its duration, or 30 minutes); a date-only task
+  becomes an all-day event marked free. Done, deleted, trashed or undated tasks
+  have no event. A recurring task is one event that moves forward when you
+  complete it, not a repeating series.
+- Times are wall-clock in your Settings zone, like tasks themselves, so changing
+  the zone rewrites every event.
+- It is one-way. Dash is the source of truth, and an edit made to a dash event
+  inside Google is overwritten on the next sync.
+- Each change marks the task dirty; a Durable Object alarm then reconciles it
+  against Google in small batches with backoff. Event ids are derived from the
+  task id, so a retried push can't duplicate. If Google revokes access or the
+  dash calendar is deleted, syncing stops and Settings says why.
+- Turning it off, or disconnecting Google, deletes the dash calendar.
 
 Refresh tokens are stored in the user's Durable Object, which Cloudflare
 encrypts at rest. An earlier version also encrypted them at the application
@@ -184,8 +215,10 @@ rollover, the public/protected split, and calendar timezone placement.
 - **Google events are fetched live on every calendar load**, not cached. Fine
   at personal scale. `syncToken`-based incremental sync is the next step if it
   gets chatty.
-- **Google Calendar is read-only** — tasks are not pushed to Google. Writing
-  back would need the `calendar.events` scope and conflict handling.
+- **Edits made in Google to a dash event don't come back.** The push is
+  one-way; two-way editing would need `syncToken` polling and conflict rules.
+- **Pushed tasks carry no priority, deadline or repeat rule.** A recurring task
+  is a single moving event rather than an RRULE series.
 - **No realtime sync.** Two open tabs won't see each other's edits until
   reload. The DO already supports WebSocket hibernation if that's wanted.
 - **`until` clauses are unsupported** — `every day until jan 1` parses the
