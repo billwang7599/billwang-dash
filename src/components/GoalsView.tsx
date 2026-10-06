@@ -103,7 +103,6 @@ export function GoalsView({
                             stepProps={stepProps}
                             onProgress={onProgress}
                             onEdit={() => setEditing({ goal: g })}
-                            onDelete={() => setDeleting(g)}
                         />
                     );
                     return (
@@ -139,6 +138,10 @@ export function GoalsView({
                     horizon={"horizon" in editing ? editing.horizon : undefined}
                     today={today}
                     onSave={(input) => ("goal" in editing ? onUpdate(editing.goal.id, input) : onCreate(input))}
+                    onDelete={"goal" in editing ? () => {
+                        setDeleting(editing.goal);
+                        setEditing(null);
+                    } : undefined}
                     onClose={() => setEditing(null)}
                 />
             )}
@@ -167,7 +170,6 @@ function GoalCard({
     stepProps,
     onProgress,
     onEdit,
-    onDelete,
 }: {
     goal: Goal;
     /** Card colour, from goalColors. */
@@ -177,7 +179,6 @@ function GoalCard({
     stepProps: StepProps;
     onProgress: (id: string, current: number) => void;
     onEdit: () => void;
-    onDelete: () => void;
 }) {
     // Typed edits stay local until Enter or blur, so each keystroke isn't a request.
     const [draft, setDraft] = useState(String(goal.current));
@@ -226,22 +227,14 @@ function GoalCard({
                         </svg>
                     </button>
                 )}
-                <div className="goal-title">
+                <button className="goal-title" onClick={onEdit} aria-label={`Edit ${goal.title}`}>
                     <h3>{goal.title}</h3>
                     <p className="goal-date">{formatPlainDate(goal.deadline)}</p>
-                </div>
+                </button>
                 <p className={`goal-left${!done && left < 0 ? " is-overdue" : ""}`}>
                     <b>{dueNum}</b>
                     {dueLabel}
                 </p>
-                {/* Edit and Delete tucked away so the card stays quiet. */}
-                <details className="goal-menu">
-                    <summary aria-label={`Actions for ${goal.title}`}>⋯</summary>
-                    <div className="goal-menu-list">
-                        <button onClick={onEdit}>Edit</button>
-                        <button onClick={onDelete}>Delete</button>
-                    </div>
-                </details>
             </div>
             {goal.why && <p className="goal-why">{goal.why}</p>}
 

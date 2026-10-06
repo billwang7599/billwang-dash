@@ -7,13 +7,16 @@ interface Props {
     task: Task;
     projects: Project[];
     goals: Goal[];
-    /** Project id -> card colour; the band at the top takes the chosen project's. */
+    /** Project id -> card colour; the band at the top takes the chosen project's (goals get none). */
     colors: Map<string, string>;
     onSave: (patch: Record<string, unknown>) => Promise<void>;
     /** Hands over to the delete confirmation. */
     onDelete: () => void;
     onClose: () => void;
 }
+
+/** Goal steps live in the Inbox project, so a task is in a project or on a goal, never both. */
+const INBOX_ID = "inbox";
 
 const FREQS = ["daily", "weekly", "monthly", "yearly"] as const;
 const PRIORITIES = [
@@ -51,6 +54,13 @@ export function TaskModal({ task, projects, goals, colors, onSave, onDelete, onC
     }, [onClose]);
 
     const original = task.due?.recurrence ?? null;
+
+    function moveTo(value: string) {
+        const [kind, id] = [value[0], value.slice(2)];
+        setGoalId(kind === "g" ? id : "");
+        if (kind === "p") setProjectId(id);
+        else setProjectId(INBOX_ID);
+    }
 
     function buildRecurrence(): Recurrence | null {
         if (freq === "none") return null;
@@ -108,15 +118,27 @@ export function TaskModal({ task, projects, goals, colors, onSave, onDelete, onC
                 onMouseDown={(e) => e.stopPropagation()}
             >
                 <form onSubmit={save}>
-                    {/* Where the task lives, in that project's colour; the select is how you move it. */}
-                    <label className="modal-band" style={{ ["--card-c" as string]: colors.get(projectId) }}>
+                    {/* Where the task lives: one project or one goal, in that project's colour. */}
+                    <label className="modal-band" style={{ ["--card-c" as string]: goalId ? undefined : colors.get(projectId) }}>
                         <span className="nav-swatch" aria-hidden="true" />
-                        <select value={projectId} onChange={(e) => setProjectId(e.target.value)} aria-label="Project">
-                            {projects.map((p) => (
-                                <option key={p.id} value={p.id}>
-                                    {p.name}
-                                </option>
-                            ))}
+                        <select value={goalId ? `g:${goalId}` : `p:${projectId}`} onChange={(e) => moveTo(e.target.value)} aria-label="Project or goal">
+                            <optgroup label="Projects">
+                                {projects.map((p) => (
+                                    <option key={p.id} value={`p:${p.id}`}>
+                                        {p.name}
+                                    </option>
+                                ))}
+                            </optgroup>
+                            {/* Finished goals stay out of the way, unless this task is already on one. */}
+                            <optgroup label="Goals">
+                                {goals
+                                    .filter((g) => !isDone(g) || g.id === task.goalId)
+                                    .map((g) => (
+                                        <option key={g.id} value={`g:${g.id}`}>
+                                            {g.title}
+                                        </option>
+                                    ))}
+                            </optgroup>
                         </select>
                         <span className="modal-band-hint" aria-hidden="true">
                             change ›
@@ -142,21 +164,6 @@ export function TaskModal({ task, projects, goals, colors, onSave, onDelete, onC
                     />
 
                     <div className="modal-grid">
-                        <label>
-                            <span>Goal</span>
-                            <select value={goalId} onChange={(e) => setGoalId(e.target.value)}>
-                                <option value="">None</option>
-                                {/* Finished goals stay out of the way, unless this task is already on one. */}
-                                {goals
-                                    .filter((g) => !isDone(g) || g.id === task.goalId)
-                                    .map((g) => (
-                                        <option key={g.id} value={g.id}>
-                                            {g.title}
-                                        </option>
-                                    ))}
-                            </select>
-                        </label>
-
                         <label>
                             <span>Due date</span>
                             <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />

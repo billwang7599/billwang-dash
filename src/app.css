@@ -1400,7 +1400,7 @@ html:has(.mnav.is-open) { overflow: hidden; }
 .pill-btn.is-on { background: var(--ink); border-color: var(--ink); color: var(--card); }
 .pill-btn:disabled { opacity: 0.4; cursor: default; }
 
-/* ⋯ menu on a goal card or project tile. */
+/* ⋯ menu on a project tile. */
 .goal-menu { position: relative; flex: none; }
 /* A round button that reads on any card colour: a light disc with ink dots. */
 .goal-menu > summary {
@@ -1651,7 +1651,7 @@ html:has(.mnav.is-open) { overflow: hidden; }
 .goal-card + .goal-card { box-shadow: 0 -1px 0 rgb(0 0 0 / 0.06), 0 -8px 16px -10px rgb(0 0 0 / 0.28); }
 .goal-card.is-done { opacity: 0.75; }
 .goal-card-head { display: flex; align-items: flex-start; gap: 0.6rem; }
-.goal-title { flex: 1; min-width: 0; }
+.goal-title { flex: 1; min-width: 0; text-align: left; background: none; border: 0; padding: 0; color: inherit; font: inherit; cursor: pointer; }
 .goal-title h3 { margin: 0; font-size: 1.35rem; font-weight: 500; letter-spacing: -0.04em; line-height: 1.08; overflow-wrap: anywhere; }
 .goal-date { margin: 0.2rem 0 0; font-size: 0.72rem; color: rgb(0 0 0 / 0.55); }
 .goal-left { flex: none; margin: 0; text-align: right; font-size: 0.7rem; line-height: 1.15; color: rgb(0 0 0 / 0.6); }

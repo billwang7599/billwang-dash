@@ -19,6 +19,8 @@ interface Props {
     /** Today in the user's zone, YYYY-MM-DD. */
     today: string;
     onSave: (input: GoalInput) => Promise<void>;
+    /** Editing only: hands over to the delete confirmation. */
+    onDelete?: () => void;
     onClose: () => void;
 }
 
@@ -32,7 +34,7 @@ const num = (s: string) => (s.trim() === "" ? NaN : Number(s));
  */
 export const numeric = (s: string) => s.replace(/[^\d.]/g, "");
 
-export function GoalModal({ goal, horizon: initialHorizon, today, onSave, onClose }: Props) {
+export function GoalModal({ goal, horizon: initialHorizon, today, onSave, onDelete, onClose }: Props) {
     const [title, setTitle] = useState(goal?.title ?? "");
     const [why, setWhy] = useState(goal?.why ?? "");
     const [horizon, setHorizon] = useState<Horizon>(goal?.horizon ?? initialHorizon ?? "short");
@@ -178,6 +180,11 @@ export function GoalModal({ goal, horizon: initialHorizon, today, onSave, onClos
                     {error && <p className="modal-error">{error}</p>}
 
                     <div className="modal-actions">
+                        {goal && onDelete && (
+                            <button type="button" className="btn btn-quiet btn-quiet-danger modal-delete" onClick={onDelete}>
+                                Delete
+                            </button>
+                        )}
                         <button type="button" className="btn btn-quiet" onClick={onClose}>
                             Cancel
                         </button>

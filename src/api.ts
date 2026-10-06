@@ -57,11 +57,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
     getState: () => request<AppState>("/api/state"),
 
-    /** `goalId` adds the task as a step toward that goal. */
-    createTask: (text: string, timeZone: string, goalId?: string) =>
+    /** `goalId` adds the task as a step toward that goal; `projectId` files it there unless the text names a #project. */
+    createTask: (text: string, timeZone: string, goalId?: string, projectId?: string) =>
         request<{ task: Task }>("/api/tasks", {
             method: "POST",
-            body: JSON.stringify({ text, timeZone, goalId }),
+            body: JSON.stringify({ text, timeZone, goalId, projectId }),
         }),
 
     importTasks: (text: string, timeZone: string) =>

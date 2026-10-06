@@ -119,10 +119,10 @@ export function App() {
     );
 
     const addTask = useCallback(
-        /** `goalId` adds it as a step toward that goal. */
-        async (text: string, goalId?: string) => {
+        /** `goalId` adds it as a step toward that goal; `projectId` files it in that project. */
+        async (text: string, goalId?: string, projectId?: string) => {
             if (!state) return;
-            await api.createTask(text, state.preferences.timeZone, goalId);
+            await api.createTask(text, state.preferences.timeZone, goalId, projectId);
             // Refetch rather than splice: a "#name" token may have created a project
             // server-side, so the sidebar can be stale too.
             setState(await api.getState());
@@ -666,7 +666,7 @@ export function App() {
                         <QuickAdd
                             preferences={state.preferences}
                             projects={state.projects}
-                            onSubmit={(text) => addTask(text)}
+                            onSubmit={(text) => addTask(text, undefined, view.name === "project" ? view.id : undefined)}
                             onPasteMany={setImportText}
                             compact={narrow}
                         />

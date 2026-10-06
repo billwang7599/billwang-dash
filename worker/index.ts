@@ -61,8 +61,8 @@ app.get("/api/state", async (c) =>
 );
 
 app.post("/api/tasks", async (c) => {
-    const { text, timeZone, goalId } = await body(c, schemas.quickAddBody);
-    return c.json(await service.quickAddTask(stub(c), text, timeZone, goalId), 201);
+    const { text, timeZone, goalId, projectId } = await body(c, schemas.quickAddBody);
+    return c.json(await service.quickAddTask(stub(c), text, timeZone, goalId, projectId), 201);
 });
 
 app.get("/api/tasks/completed", async (c) =>

@@ -71,6 +71,7 @@ export async function quickAddTask(
     text: string,
     timeZone: string | undefined,
     goalId?: string,
+    projectId?: string,
 ): Promise<{ task: Task; parsed: ParsedQuickAdd }> {
     if (goalId && !(await stub.hasGoal(goalId))) throw new ServiceError(400, "goal not found");
     const prefs = await stub.getPreferences();
@@ -80,7 +81,8 @@ export async function quickAddTask(
     });
     if (!parsed.content) throw new ServiceError(400, "task has no content");
 
-    return { task: await stub.createTask({ ...parsed, goalId }), parsed };
+    // A "#project" typed in the text wins over the project the user was looking at.
+    return { task: await stub.createTask({ ...parsed, goalId, projectId: parsed.projectName ? undefined : projectId }), parsed };
 }
 
 export interface ImportResult {

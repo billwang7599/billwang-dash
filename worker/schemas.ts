@@ -53,6 +53,8 @@ export const quickAddBody = z.object({
     timeZone: timeZone.optional(),
     /** Adds the task as a step toward this goal. */
     goalId: z.string().min(1).optional(),
+    /** Where the task goes when the text doesn't name a #project. */
+    projectId: z.string().min(1).optional(),
 });
 
 /**
