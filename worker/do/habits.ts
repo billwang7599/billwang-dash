@@ -7,6 +7,7 @@ import {
     type HabitInput,
     type HabitSummary,
 } from "../../shared/habits.ts";
+import { nextOrder } from "./common.ts";
 
 /**
  * Habit storage. Plain functions over the DO's SQL handle; UserDO keeps the RPC
@@ -40,15 +41,12 @@ export function createHabit(
     input: HabitInput,
 ): HabitSummary {
     const id = crypto.randomUUID();
-    const { next } = sql
-        .exec<{ next: number }>("SELECT COALESCE(MAX(sort_order), 0) + 1 AS next FROM habits")
-        .one();
     const now = new Date().toISOString();
     sql.exec(
         `INSERT INTO habits (id, name, description, freq, per_week, weekdays, sort_order, created_at, start_date)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         id, input.name, input.description, input.freq, input.perWeek, JSON.stringify(input.weekdays),
-        next, now, today,
+        nextOrder(sql, "habits"), now, today,
     );
     return getHabit(sql, today, id)!;
 }
