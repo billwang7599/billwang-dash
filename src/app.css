@@ -566,7 +566,7 @@ html:has(.mnav.is-open) { overflow: hidden; }
 .qa-highlight .tok {
     border-radius: var(--r-sm);
     /* Slight bleed so the background hugs the text rather than clipping it. */
-    box-shadow: 0 0 0 2px currentColor;
+    box-shadow: 0 0 0 4px currentColor;
 }
 
 .qa-input {
