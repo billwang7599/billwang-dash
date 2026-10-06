@@ -7,6 +7,8 @@ interface Props {
     projects: Project[];
     /** Restoring brings projects and tasks back, so the app state must reload. */
     onChanged: () => void;
+    /** Back to Settings, where this page is linked from. */
+    onBack: () => void;
 }
 
 type Pending =
@@ -14,7 +16,7 @@ type Pending =
     | { kind: "task"; id: string; name: string }
     | { kind: "all" };
 
-export function Trash({ projects, onChanged }: Props) {
+export function Trash({ projects, onChanged, onBack }: Props) {
     const [trash, setTrash] = useState<TrashContents | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [pending, setPending] = useState<Pending | null>(null);
@@ -51,18 +53,21 @@ export function Trash({ projects, onChanged }: Props) {
 
     return (
         <div className="trash">
+            <button className="trash-back sort-toggle" onClick={onBack}>
+                ← Settings
+            </button>
             <div className="trash-head">
-                <h1 className="view-title">Trash</h1>
+                <h1 className="view-title">Recently deleted</h1>
                 {trash && !empty && (
                     <button className="btn btn-quiet" onClick={() => setPending({ kind: "all" })}>
-                        Empty trash
+                        Delete all
                     </button>
                 )}
             </div>
 
             {error && <p className="banner banner-bad">{error}</p>}
             {trash === null && !error && <p className="trash-empty">Loading…</p>}
-            {empty && <p className="trash-empty">Nothing in the trash.</p>}
+            {empty && <p className="trash-empty">Nothing recently deleted.</p>}
 
             {trash && !empty && (
                 <ul className="trash-list">
@@ -127,15 +132,15 @@ export function Trash({ projects, onChanged }: Props) {
 
             {pending && (
                 <ConfirmDialog
-                    title={pending.kind === "all" ? "Empty the trash?" : "Delete forever?"}
+                    title={pending.kind === "all" ? "Delete everything here?" : "Delete forever?"}
                     message={
                         pending.kind === "all"
-                            ? "Everything in the trash will be permanently deleted. This can't be undone."
+                            ? "Everything in Recently deleted will be permanently deleted. This can't be undone."
                             : pending.kind === "project"
                               ? `"${pending.name}" and its tasks will be permanently deleted. This can't be undone.`
                               : `"${pending.name}" will be permanently deleted. This can't be undone.`
                     }
-                    confirmLabel={pending.kind === "all" ? "Empty trash" : "Delete forever"}
+                    confirmLabel={pending.kind === "all" ? "Delete all" : "Delete forever"}
                     onConfirm={confirmPending}
                     onCancel={() => setPending(null)}
                 />

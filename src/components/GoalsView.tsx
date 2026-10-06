@@ -10,24 +10,57 @@ import {
     type GoalInput,
     type Horizon,
 } from "../../shared/goals.ts";
+import type { Project, Task } from "../../shared/types.ts";
 import { formatPlainDate } from "../format.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { GoalModal, numeric } from "./GoalModal.tsx";
+import { TaskList } from "./TaskList.tsx";
 
 interface Props {
     goals: Goal[];
+    /** Open tasks; the ones with a goalId are that goal's steps. */
+    tasks: Task[];
+    projects: Project[];
+    timeZone: string;
     /** Today in the user's zone, YYYY-MM-DD. */
     today: string;
     onCreate: (input: GoalInput) => Promise<void>;
     onUpdate: (id: string, input: GoalInput) => Promise<void>;
     onProgress: (id: string, current: number) => void;
     onDelete: (id: string) => void;
+    /** Quick-add text, so "tomorrow" or "#project" work as they do in the Inbox. */
+    onAddStep: (goalId: string, text: string) => Promise<void>;
+    onCompleteTask: (id: string) => void;
+    onDeleteTask: (id: string) => void;
+    onOpenTask: (task: Task) => void;
 }
+
+/** What a card needs to show and manage its steps. */
+type StepProps = Pick<
+    Props,
+    "projects" | "timeZone" | "onAddStep" | "onCompleteTask" | "onDeleteTask" | "onOpenTask"
+>;
 
 /** The modal is either editing a goal or adding one under a horizon. */
 type Editing = { goal: Goal } | { horizon: Horizon } | null;
 
-export function GoalsView({ goals, today, onCreate, onUpdate, onProgress, onDelete }: Props) {
+export function GoalsView({
+    goals,
+    tasks,
+    projects,
+    timeZone,
+    today,
+    onCreate,
+    onUpdate,
+    onProgress,
+    onDelete,
+    onAddStep,
+    onCompleteTask,
+    onDeleteTask,
+    onOpenTask,
+}: Props) {
+    const stepProps: StepProps = { projects, timeZone, onAddStep, onCompleteTask, onDeleteTask, onOpenTask };
+    const stepsOf = (goalId: string) => tasks.filter((t) => t.goalId === goalId);
     const [editing, setEditing] = useState<Editing>(null);
     const [deleting, setDeleting] = useState<Goal | null>(null);
 
@@ -55,6 +88,8 @@ export function GoalsView({ goals, today, onCreate, onUpdate, onProgress, onDele
                                 key={g.id}
                                 goal={g}
                                 today={today}
+                                steps={stepsOf(g.id)}
+                                stepProps={stepProps}
                                 onProgress={onProgress}
                                 onEdit={() => setEditing({ goal: g })}
                                 onDelete={() => setDeleting(g)}
@@ -70,6 +105,8 @@ export function GoalsView({ goals, today, onCreate, onUpdate, onProgress, onDele
                                         key={g.id}
                                         goal={g}
                                         today={today}
+                                        steps={stepsOf(g.id)}
+                                        stepProps={stepProps}
                                         onProgress={onProgress}
                                         onEdit={() => setEditing({ goal: g })}
                                         onDelete={() => setDeleting(g)}
@@ -110,12 +147,16 @@ export function GoalsView({ goals, today, onCreate, onUpdate, onProgress, onDele
 function GoalCard({
     goal,
     today,
+    steps,
+    stepProps,
     onProgress,
     onEdit,
     onDelete,
 }: {
     goal: Goal;
     today: string;
+    steps: Task[];
+    stepProps: StepProps;
     onProgress: (id: string, current: number) => void;
     onEdit: () => void;
     onDelete: () => void;
@@ -225,6 +266,77 @@ function GoalCard({
                     {formatPlainDate(goal.deadline)} · {due}
                 </p>
             </div>
+
+            <GoalSteps goalId={goal.id} steps={steps} stepsDone={goal.stepsDone} {...stepProps} />
         </article>
+    );
+}
+
+/**
+ * A goal's open tasks, as a mini to-do list, plus a quick-add line for new ones.
+ * Steps are ordinary tasks, so they also show in the Inbox; ticking one off
+ * doesn't move the goal's progress, which measures the outcome, not the work.
+ */
+function GoalSteps({
+    goalId,
+    steps,
+    stepsDone,
+    projects,
+    timeZone,
+    onAddStep,
+    onCompleteTask,
+    onDeleteTask,
+    onOpenTask,
+}: StepProps & { goalId: string; steps: Task[]; stepsDone: number }) {
+    const [text, setText] = useState("");
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    async function add(e: React.FormEvent) {
+        e.preventDefault();
+        if (!text.trim() || busy) return;
+        setBusy(true);
+        setError(null);
+        try {
+            await onAddStep(goalId, text.trim());
+            setText("");
+        } catch (err) {
+            setError((err as Error).message);
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    return (
+        <div className="goal-steps">
+            {stepsDone > 0 && (
+                <p className="goal-steps-done">
+                    {stepsDone} step{stepsDone === 1 ? "" : "s"} done
+                </p>
+            )}
+            {steps.length > 0 && (
+                <TaskList
+                    tasks={steps}
+                    projects={projects}
+                    timeZone={timeZone}
+                    groupByDate={false}
+                    emptyMessage=""
+                    onComplete={onCompleteTask}
+                    onDelete={onDeleteTask}
+                    onOpen={onOpenTask}
+                />
+            )}
+            <form className="goal-step-add" onSubmit={add}>
+                <span aria-hidden="true">+</span>
+                <input
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                    placeholder={steps.length ? "Add a step" : "Add a first step, e.g. Buy the book tomorrow"}
+                    aria-label="Add a step"
+                    disabled={busy}
+                />
+            </form>
+            {error && <p className="modal-error">{error}</p>}
+        </div>
     );
 }

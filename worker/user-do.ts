@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
-import { civilFromDate, civilKey } from "../shared/civil.ts";
+import { addDays, civilFromDate, civilKey, weekday, zonedToUtcMs } from "../shared/civil.ts";
 import type { Goal, GoalInput } from "../shared/goals.ts";
-import type { DayStatus, HabitDetail, HabitInput, HabitSummary } from "../shared/habits.ts";
+import type { DayStatus, HabitDay, HabitDetail, HabitInput, HabitSummary } from "../shared/habits.ts";
 import * as eventStore from "./do/events.ts";
 import * as goalStore from "./do/goals.ts";
 import * as habitStore from "./do/habits.ts";
@@ -88,6 +88,18 @@ export class UserDO extends DurableObject<Env> {
                 JSON.stringify([...new Set(prefs.inboxHiddenProjects)]),
             );
         }
+        if (prefs.firstName !== undefined) {
+            this.sql.exec("UPDATE profile SET first_name = ? WHERE id = 1", prefs.firstName);
+        }
+        if (prefs.lastName !== undefined) {
+            this.sql.exec("UPDATE profile SET last_name = ? WHERE id = 1", prefs.lastName);
+        }
+        if (prefs.inboxHiddenGoals) {
+            this.sql.exec(
+                "UPDATE profile SET inbox_hidden_goals = ? WHERE id = 1",
+                JSON.stringify([...new Set(prefs.inboxHiddenGoals)]),
+            );
+        }
     }
 
     async getPreferences(): Promise<Preferences> {
@@ -97,13 +109,23 @@ export class UserDO extends DurableObject<Env> {
                 time_zone_set: number;
                 date_format: string;
                 inbox_hidden_projects: string;
-            }>("SELECT time_zone, time_zone_set, date_format, inbox_hidden_projects FROM profile WHERE id = 1")
+                inbox_hidden_goals: string;
+                first_name: string;
+                last_name: string;
+            }>(
+                `SELECT time_zone, time_zone_set, date_format, inbox_hidden_projects, inbox_hidden_goals,
+                        first_name, last_name
+                 FROM profile WHERE id = 1`,
+            )
             .one();
         return {
             timeZone: row.time_zone,
             timeZoneSet: row.time_zone_set === 1,
             dateFormat: row.date_format === "DMY" ? "DMY" : "MDY",
             inboxHiddenProjects: parseIdList(row.inbox_hidden_projects),
+            inboxHiddenGoals: parseIdList(row.inbox_hidden_goals),
+            firstName: row.first_name,
+            lastName: row.last_name,
         };
     }
 
@@ -161,6 +183,19 @@ export class UserDO extends DurableObject<Env> {
         const task = taskStore.completeTask(this.sql, id, todayKey);
         if (task) await this.google.markDirty([id]);
         return task;
+    }
+
+    async listCompletedTasks(before: string | null, limit: number): Promise<{ tasks: Task[]; more: boolean }> {
+        return taskStore.listCompleted(this.sql, before, limit);
+    }
+
+    /** Since Monday 00:00 in the user's zone. */
+    async countCompletedThisWeek(): Promise<number> {
+        const { timeZone } = await this.getPreferences();
+        const today = civilFromDate(new Date(), timeZone);
+        const monday = addDays(today, -((weekday(today) + 6) % 7));
+        const since = new Date(zonedToUtcMs(monday, 0, timeZone)).toISOString();
+        return taskStore.countCompletedSince(this.sql, since);
     }
 
     async uncompleteTask(id: string): Promise<Task | null> {
@@ -258,6 +293,10 @@ export class UserDO extends DurableObject<Env> {
         habitStore.deleteHabit(this.sql, id);
     }
 
+    async getMonthCheckins(month: string): Promise<Record<string, HabitDay[]>> {
+        return habitStore.getMonthCheckins(this.sql, month);
+    }
+
     async getHabitDetail(id: string, month: string): Promise<HabitDetail | null> {
         return habitStore.getHabitDetail(this.sql, this.todayKey(), id, month);
     }
@@ -283,6 +322,10 @@ export class UserDO extends DurableObject<Env> {
 
     async updateGoal(id: string, input: GoalInput): Promise<Goal | null> {
         return goalStore.updateGoal(this.sql, id, input);
+    }
+
+    async hasGoal(id: string): Promise<boolean> {
+        return goalStore.getGoal(this.sql, id) !== null;
     }
 
     async setGoalProgress(id: string, current: number): Promise<Goal | null> {

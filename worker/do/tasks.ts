@@ -20,6 +20,7 @@ export interface TaskRow extends Record<string, SqlStorageValue> {
     recurrence: string | null;
     deadline: string | null;
     duration_minutes: number | null;
+    goal_id: string | null;
     completed: number;
     completed_at: string | null;
     sort_order: number;
@@ -38,6 +39,7 @@ export interface TaskInput {
     due?: DueDate | null;
     deadline?: string | null;
     durationMinutes?: number | null;
+    goalId?: string | null;
 }
 
 export function toTasks(rows: TaskRow[]): Task[] {
@@ -58,6 +60,7 @@ export function toTasks(rows: TaskRow[]): Task[] {
             : null,
         deadline: r.deadline,
         durationMinutes: r.duration_minutes,
+        goalId: r.goal_id,
         completed: r.completed === 1,
         completedAt: r.completed_at,
         order: r.sort_order,
@@ -77,6 +80,36 @@ export function listTasks(sql: SqlStorage, options: { includeCompleted?: boolean
         )
         .toArray();
     return toTasks(rows);
+}
+
+/**
+ * Completed tasks, most recent first, a page at a time. `before` is the
+ * completedAt of the last task already shown; `more` says whether a next page exists.
+ */
+export function listCompleted(
+    sql: SqlStorage,
+    before: string | null,
+    limit: number,
+): { tasks: Task[]; more: boolean } {
+    const rows = sql
+        .exec<TaskRow>(
+            `SELECT * FROM tasks
+             WHERE completed = 1 AND deleted_at IS NULL AND (? IS NULL OR completed_at < ?)
+             ORDER BY completed_at DESC LIMIT ?`,
+            before, before, limit + 1,
+        )
+        .toArray();
+    return { tasks: toTasks(rows.slice(0, limit)), more: rows.length > limit };
+}
+
+/** Tasks completed at or after an instant (ISO), e.g. since the start of this week. */
+export function countCompletedSince(sql: SqlStorage, since: string): number {
+    return sql
+        .exec<{ n: number }>(
+            "SELECT COUNT(*) AS n FROM tasks WHERE completed = 1 AND deleted_at IS NULL AND completed_at >= ?",
+            since,
+        )
+        .one().n;
 }
 
 export function getTask(sql: SqlStorage, id: string): Task | null {
@@ -102,9 +135,9 @@ export function createTask(sql: SqlStorage, input: TaskInput): Task {
     sql.exec(
         `INSERT INTO tasks (
            id, content, description, project_id, priority,
-           due_date, due_time, recurrence, deadline, duration_minutes,
+           due_date, due_time, recurrence, deadline, duration_minutes, goal_id,
            completed, completed_at, sort_order, created_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, ?, ?)`,
         id,
         input.content,
         input.description ?? "",
@@ -115,6 +148,7 @@ export function createTask(sql: SqlStorage, input: TaskInput): Task {
         due?.recurrence ? JSON.stringify(due.recurrence) : null,
         input.deadline ?? null,
         input.durationMinutes ?? null,
+        input.goalId ?? null,
         nextOrder(sql, "tasks"),
         now,
         now,
@@ -139,6 +173,7 @@ export function updateTask(sql: SqlStorage, id: string, patch: Partial<TaskInput
     if (patch.durationMinutes !== undefined) {
         set("duration_minutes", patch.durationMinutes);
     }
+    if (patch.goalId !== undefined) set("goal_id", patch.goalId);
     if (patch.projectId !== undefined && patch.projectId) {
         set("project_id", patch.projectId);
     }

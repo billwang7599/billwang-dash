@@ -1,20 +1,23 @@
 import { useEffect, useRef, useState } from "react";
+import { isDone, type Goal } from "../../shared/goals.ts";
 import type { Project, Recurrence, Task } from "../../shared/types.ts";
 import { formatRecurrence } from "../format.ts";
 
 interface Props {
     task: Task;
     projects: Project[];
+    goals: Goal[];
     onSave: (patch: Record<string, unknown>) => Promise<void>;
     onClose: () => void;
 }
 
 const FREQS = ["daily", "weekly", "monthly", "yearly"] as const;
 
-export function TaskModal({ task, projects, onSave, onClose }: Props) {
+export function TaskModal({ task, projects, goals, onSave, onClose }: Props) {
     const [content, setContent] = useState(task.content);
     const [description, setDescription] = useState(task.description);
     const [projectId, setProjectId] = useState(task.projectId);
+    const [goalId, setGoalId] = useState(task.goalId ?? "");
     const [priority, setPriority] = useState(String(task.priority));
     const [dueDate, setDueDate] = useState(task.due?.date ?? "");
     const [dueTime, setDueTime] = useState(task.due?.time ?? "");
@@ -66,6 +69,7 @@ export function TaskModal({ task, projects, onSave, onClose }: Props) {
                 content: content.trim(),
                 description,
                 projectId,
+                goalId: goalId || null,
                 priority: Number(priority),
                 deadline: deadline || null,
                 durationMinutes: duration ? Number(duration) : null,
@@ -131,6 +135,21 @@ export function TaskModal({ task, projects, onSave, onClose }: Props) {
                                 <option value="2">P2 — High</option>
                                 <option value="3">P3 — Medium</option>
                                 <option value="4">P4 — Normal</option>
+                            </select>
+                        </label>
+
+                        <label>
+                            <span>Goal</span>
+                            <select value={goalId} onChange={(e) => setGoalId(e.target.value)}>
+                                <option value="">None</option>
+                                {/* Finished goals stay out of the way, unless this task is already on one. */}
+                                {goals
+                                    .filter((g) => !isDone(g) || g.id === task.goalId)
+                                    .map((g) => (
+                                        <option key={g.id} value={g.id}>
+                                            {g.title}
+                                        </option>
+                                    ))}
                             </select>
                         </label>
 

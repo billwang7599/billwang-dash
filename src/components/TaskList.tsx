@@ -1,9 +1,12 @@
+import type { Goal } from "../../shared/goals.ts";
 import type { Project, Task } from "../../shared/types.ts";
 import { formatDateLabel, formatDueLabel, priorityName } from "../format.ts";
 
 interface Props {
     tasks: Task[];
     projects: Project[];
+    /** When given, a step shows which goal it's toward. Left out on the goal's own card. */
+    goals?: Goal[];
     timeZone: string;
     /** Groups by due date; off for a single project's list. */
     groupByDate?: boolean;
@@ -16,6 +19,7 @@ interface Props {
 export function TaskList({
     tasks,
     projects,
+    goals,
     timeZone,
     groupByDate = true,
     emptyMessage,
@@ -33,6 +37,7 @@ export function TaskList({
 
     const projectName = (id: string) =>
         projects.find((p) => p.id === id) ?? null;
+    const goalFor = (id: string | null) => (id && goals?.find((g) => g.id === id)) || null;
 
     if (!groupByDate) {
         return (
@@ -42,6 +47,7 @@ export function TaskList({
                         key={task.id}
                         task={task}
                         project={projectName(task.projectId)}
+                        goal={goalFor(task.goalId)}
                         timeZone={timeZone}
                         onComplete={onComplete}
                         onDelete={onDelete}
@@ -68,6 +74,7 @@ export function TaskList({
                                 key={task.id}
                                 task={task}
                                 project={projectName(task.projectId)}
+                                goal={goalFor(task.goalId)}
                                 timeZone={timeZone}
                                 hideDate
                                 onComplete={onComplete}
@@ -85,6 +92,7 @@ export function TaskList({
 function TaskRow({
     task,
     project,
+    goal,
     timeZone,
     hideDate,
     onComplete,
@@ -93,6 +101,7 @@ function TaskRow({
 }: {
     task: Task;
     project: Project | null;
+    goal: Goal | null;
     timeZone: string;
     hideDate?: boolean;
     onComplete: (id: string) => void;
@@ -133,6 +142,7 @@ function TaskRow({
                     )}
                     {task.deadline && <span className="meta-deadline">deadline {task.deadline}</span>}
                     {project && !project.isInbox && <span className="meta-project">#{project.name}</span>}
+                    {goal && <span className="meta-goal">◎ {goal.title}</span>}
                 </div>
             </button>
 

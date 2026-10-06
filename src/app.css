@@ -73,6 +73,22 @@
     font-variation-settings: "SOFT" 30, "WONK" 1;
 }
 .sidebar.is-collapsed .wordmark { padding: 0; }
+
+/* Stands in for the wordmark everywhere but Settings. */
+.greeting {
+    margin: 0;
+    min-width: 0;
+    padding: 0 0.6rem;
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: 1.25rem;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-variation-settings: "SOFT" 30, "WONK" 1;
+}
 .sidebar.is-collapsed .wordmark-tail { display: none; }
 .sidebar .dot { color: var(--accent); }
 
@@ -221,107 +237,123 @@
 .nav-row:hover .nav-count { opacity: 0; }
 
 .sidebar-foot { margin-top: auto; }
-.whoami {
-    font-family: var(--mono);
-    font-size: 0.65rem;
-    color: var(--ink-3);
-    padding: 0.7rem 0.65rem 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
 
-.signout {
-    display: inline-block;
-    font-size: 0.7rem;
-    color: var(--ink-3);
-    text-decoration: none;
-    padding: 0.35rem 0.65rem 0.2rem;
-}
-.signout:hover { color: var(--accent); text-decoration: underline; }
+/* ---- Phone: no top bar; MobileNav's round button bottom-right ----------- */
 
-/* ---- Phone: top bar + drawer --------------------------------------------- */
+.mnav { display: contents; }
 
-.mobile-bar,
-.drawer-backdrop { display: none; }
-
-/* 780px matches NARROW in useMediaQuery.ts, which picks the drawer's behaviour. */
+/* 780px matches NARROW in useMediaQuery.ts, which swaps the sidebar for MobileNav. */
 @media (max-width: 780px) {
-    .shell {
-        grid-template-columns: minmax(0, 1fr);
-        align-content: start;
-        --bar-h: calc(3.25rem + env(safe-area-inset-top));
-    }
+    .shell { grid-template-columns: minmax(0, 1fr); align-content: start; }
+}
 
-    .mobile-bar {
-        position: sticky;
-        top: 0;
-        z-index: 40;
-        display: flex;
-        align-items: center;
-        gap: 0.35rem;
-        height: var(--bar-h);
-        padding: env(safe-area-inset-top) max(0.5rem, env(safe-area-inset-right)) 0 max(0.5rem, env(safe-area-inset-left));
-        background: var(--paper-2);
-        border-bottom: 1px solid var(--rule);
-    }
-    .mobile-bar .wordmark {
-        font-family: var(--display);
-        font-weight: 600;
-        font-size: 1.25rem;
-        letter-spacing: -0.02em;
-        color: var(--ink);
-        text-decoration: none;
-        font-variation-settings: "SOFT" 30, "WONK" 1;
-    }
-    .mobile-bar .dot { color: var(--accent); }
-    .mobile-menu {
-        display: grid;
-        place-items: center;
-        width: 2.75rem;
-        height: 2.75rem;
-        border: 0;
-        background: none;
-        color: var(--ink);
-        border-radius: var(--r-sm);
-        cursor: pointer;
-    }
+.mnav-fab {
+    position: fixed;
+    z-index: 46;
+    right: max(1rem, env(safe-area-inset-right));
+    bottom: max(1rem, env(safe-area-inset-bottom));
+    display: grid;
+    place-content: center;
+    gap: 4px;
+    width: 3.5rem;
+    height: 3.5rem;
+    border: 0;
+    border-radius: 50%;
+    background: var(--ink);
+    color: var(--paper);
+    box-shadow: var(--shadow-md);
+    cursor: pointer;
+    transition: transform 0.2s var(--ease);
+}
+.mnav-fab:active { transform: scale(0.94); }
+.mnav-bar {
+    display: block;
+    width: 18px;
+    height: 2px;
+    border-radius: 2px;
+    background: currentColor;
+    transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.18s var(--ease);
+}
+/* Three lines fold into an ×. */
+.mnav.is-open:not(.is-closing) .mnav-bar:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+.mnav.is-open:not(.is-closing) .mnav-bar:nth-child(2) { opacity: 0; transform: scaleX(0.2); }
+.mnav.is-open:not(.is-closing) .mnav-bar:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
 
-    /* Off-canvas until opened. visibility (delayed on close, so the slide still
-       shows) takes the hidden drawer's links out of the tab order. */
-    .sidebar {
-        position: fixed;
-        z-index: 60;
-        top: 0;
-        left: 0;
-        bottom: 0;
-        height: auto;
-        width: min(20rem, 85vw);
-        padding-top: max(1.2rem, env(safe-area-inset-top));
-        padding-bottom: max(1.2rem, env(safe-area-inset-bottom));
-        overflow-y: auto;
-        overscroll-behavior: contain;
-        transform: translateX(-100%);
-        visibility: hidden;
-        transition: transform 0.22s var(--ease), visibility 0s linear 0.22s;
-    }
-    .sidebar.is-open {
-        transform: none;
-        visibility: visible;
-        box-shadow: var(--shadow-lg);
-        transition: transform 0.22s var(--ease), visibility 0s;
-    }
-    .sidebar-top { margin-bottom: 1rem; }
+.mnav-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 45;
+    background: rgb(26 24 21 / 0.28);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    animation: fade-in 0.18s var(--ease);
+}
 
-    .drawer-backdrop {
-        display: block;
-        position: fixed;
-        inset: 0;
-        z-index: 50;
-        background: rgb(26 24 21 / 0.35);
-        animation: fade-in 0.15s var(--ease);
-    }
-    /* The page behind an open drawer shouldn't scroll under your thumb. */
-    html:has(.sidebar.is-open) { overflow: hidden; }
+.mnav-pills {
+    position: fixed;
+    z-index: 46;
+    right: max(1rem, env(safe-area-inset-right));
+    bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 4.25rem);
+    display: flex;
+    /* Bottom-up: Inbox nearest the button. */
+    flex-direction: column-reverse;
+    align-items: flex-end;
+    gap: 0.5rem;
+}
+.mnav-pill,
+.mnav-hello {
+    opacity: 0;
+    transform-origin: bottom right;
+    animation: mnav-in 0.26s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    animation-delay: calc(var(--i) * 35ms);
+}
+.mnav-pill {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.7rem 1.15rem;
+    border: 1px solid var(--rule);
+    border-radius: 100px;
+    background: var(--card);
+    color: var(--ink);
+    font: inherit;
+    font-size: 1rem;
+    font-weight: 500;
+    box-shadow: var(--shadow-md);
+    cursor: pointer;
+}
+.mnav-pill.is-active { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.mnav-pill.is-active .nav-count:not(.is-urgent) { background: rgb(255 255 255 / 0.18); color: var(--paper); }
+.mnav-hello {
+    margin: 0 0.4rem 0.2rem 0;
+    font-family: var(--display);
+    font-size: 1.3rem;
+    letter-spacing: -0.02em;
+    color: var(--paper);
+    text-shadow: 0 1px 8px rgb(26 24 21 / 0.35);
+}
+
+@keyframes mnav-in {
+    from { opacity: 0; transform: translateY(14px) scale(0.6); }
+    to { opacity: 1; transform: none; }
+}
+@keyframes mnav-out {
+    to { opacity: 0; transform: translateY(8px) scale(0.92); }
+}
+@keyframes mnav-fade-out {
+    to { opacity: 0; }
+}
+/* Closing: one quick fade for the whole menu; its end unmounts it (MobileNav). */
+.mnav.is-closing .mnav-pills { animation: mnav-out 0.12s var(--ease) forwards; }
+.mnav.is-closing .mnav-backdrop { animation: mnav-fade-out 0.12s var(--ease) forwards; }
+
+/* The page behind an open menu shouldn't scroll under your thumb. */
+html:has(.mnav.is-open) { overflow: hidden; }
+
+@media (prefers-reduced-motion: reduce) {
+    .mnav-pill,
+    .mnav-hello { animation: fade-in 0.12s linear forwards; animation-delay: 0s; }
+    .mnav-bar { transition: none; }
 }
 
 /* ---- Main --------------------------------------------------------------- */
@@ -342,6 +374,18 @@
 }
 
 /* ---- Quick add ---------------------------------------------------------- */
+
+/* Quick-add sits at the foot of the list and sticks to the bottom of the screen. */
+.main.has-dock { padding-bottom: 0; }
+.qa-dock {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    margin-top: 1.5rem;
+    padding: 1.2rem 0 calc(1rem + env(safe-area-inset-bottom));
+    /* Fades the list out behind it instead of a hard edge. */
+    background: linear-gradient(to top, var(--paper) 75%, transparent);
+}
 
 .quickadd {
     background: var(--card);
@@ -429,6 +473,7 @@
 }
 .qa-submit:hover:not(:disabled) { background: var(--accent); }
 .qa-submit:disabled { opacity: 0.3; cursor: default; }
+.qa-submit.is-round { width: 2.1rem; height: 2.1rem; padding: 0; font-size: 1.05rem; line-height: 1; }
 
 .qa-preview {
     display: flex;
@@ -552,6 +597,7 @@
 .meta-due { color: var(--amber); font-family: var(--mono); font-size: 0.72rem; }
 .meta-deadline { color: var(--accent); font-family: var(--mono); font-size: 0.72rem; }
 .meta-project { color: var(--sage); }
+.meta-goal { color: var(--indigo); }
 
 .task-delete {
     flex: none;
@@ -589,9 +635,9 @@
     height: 100dvh;
     overflow: hidden;
 }
-/* Fills what the top bar leaves; the grid scrolls inside, not the page. */
+/* No top bar on a phone: the header clears the status bar / Dynamic Island itself. */
 @media (max-width: 780px) {
-    .cal-wrap { height: calc(100dvh - var(--bar-h)); }
+    .cal-head { padding-top: calc(0.8rem + env(safe-area-inset-top)); }
 }
 
 .cal-head {
@@ -931,6 +977,50 @@
 .habit-day-actions { display: flex; gap: 0.4rem; margin-bottom: 0.7rem; }
 .habit-note { margin-bottom: 0; }
 
+/* All-habits grid: a row per habit, a column per day. Scrolls sideways on a
+   narrow screen with the names pinned. */
+.habits-view { max-width: 62rem; }
+.hg-scroll { overflow-x: auto; margin: 0 -0.2rem; padding: 0 0.2rem; }
+.hg { border-collapse: separate; border-spacing: 0.2rem 0.25rem; }
+.hg thead th {
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    font-weight: 400;
+    color: var(--ink-3);
+    text-align: center;
+    min-width: 1.35rem;
+}
+.hg thead th.is-today { color: var(--ink); font-weight: 600; }
+.hg-letter { display: block; opacity: 0.7; }
+.hg-corner,
+.hg-name {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--card);
+}
+.hg-name { text-align: left; padding-right: 0.7rem; min-width: 8rem; max-width: 12rem; }
+.hg-name button {
+    display: block;
+    max-width: 100%;
+    border: 0;
+    background: none;
+    padding: 0;
+    font: inherit;
+    font-size: 0.88rem;
+    font-weight: 500;
+    color: var(--ink);
+    text-align: left;
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.hg-name button:hover { color: var(--accent); }
+.hg-stats { display: block; font-family: var(--mono); font-size: 0.6rem; font-weight: 400; color: var(--ink-3); }
+.hg td { padding: 0; }
+.hg-cell { width: 1.35rem; height: 1.35rem; aspect-ratio: auto; }
+
 .habit-modal { width: min(30rem, 100%); }
 .habit-days-label { display: block; margin-bottom: 0.3rem; font-size: 0.84rem; font-weight: 500; }
 .habit-days { display: flex; flex-wrap: wrap; gap: 0.35rem; }
@@ -946,9 +1036,123 @@
 }
 .habit-day-btn.is-on { background: var(--ink); border-color: var(--ink); color: var(--paper); }
 
-/* ---- Inbox project filter ------------------------------------------------ */
+/* ---- Projects page ------------------------------------------------------- */
+
+.projects-view { max-width: 40rem; }
+.projects-search {
+    width: 100%;
+    margin-bottom: 1rem;
+    padding: 0.55rem 0.75rem;
+    font: inherit;
+    font-size: 0.92rem;
+    border: 1px solid var(--rule-2);
+    border-radius: var(--r-md);
+    background: var(--card);
+    color: var(--ink);
+    outline: none;
+}
+.projects-search:focus { border-color: var(--ink-3); }
+.projects-empty { margin-inline: 0; }
+.projects-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
+.projects-row { display: flex; align-items: center; gap: 0.3rem; border-bottom: 1px solid var(--rule); }
+.projects-name {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    padding: 0.85rem 0.3rem;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 0.95rem;
+    color: var(--ink);
+    text-align: left;
+    cursor: pointer;
+}
+.projects-name > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--sage); }
+.projects-row .sort-toggle.is-on { color: var(--ink); font-weight: 600; }
+
+/* ---- Account setup and profile name ------------------------------------- */
+
+.setup-modal { width: min(26rem, 100%); }
+.setup-title { margin: 0 0 0.3rem; font-family: var(--display); font-weight: 400; font-size: 1.6rem; letter-spacing: -0.02em; }
+.setup-title .dot { color: var(--accent); }
+.setup-lede { margin: 0 0 1.1rem; font-size: 0.92rem; color: var(--ink-2); }
+
+.name-fields { display: grid; grid-template-columns: 1fr 1fr auto; align-items: end; gap: 0 0.8rem; margin-bottom: 0.4rem; }
+.name-fields .btn { margin-bottom: 1.1rem; }
+
+.settings-wordmark {
+    display: inline-block;
+    margin: 1.6rem 0 1.2rem;
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: clamp(1.9rem, 4vw, 2.6rem);
+    letter-spacing: -0.03em;
+    color: var(--ink);
+    text-decoration: none;
+    font-variation-settings: "SOFT" 30, "WONK" 1;
+}
+.settings-wordmark .dot { color: var(--accent); }
+
+.settings-signout { display: inline-block; margin-top: 1rem; text-decoration: none; }
+.trash-back { margin: 1.4rem 0 -1rem; padding-left: 0; }
+
+/* ---- Inbox filter (projects and goals) ----------------------------------- */
 
 .view-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.view-head-title { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 0.9rem; min-width: 0; }
+.done-link {
+    border: 0;
+    background: none;
+    padding: 0;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--ink-3);
+    cursor: pointer;
+    white-space: nowrap;
+}
+.done-link:hover { color: var(--sage); }
+
+/* Completed page: done rows read as done, but the undo stays readable. */
+.completed-view .task.is-done { opacity: 1; }
+.completed-view .task-title { text-decoration: line-through; color: var(--ink-3); }
+.completed-view .check { background: var(--sage); border-color: var(--sage); color: var(--paper); }
+.completed-view .task-body { cursor: default; }
+.completed-undo { align-self: center; }
+.completed-more { margin-top: 1rem; }
+
+/* Undo pop-up after ticking a task off. */
+.toast {
+    position: fixed;
+    left: 50%;
+    bottom: calc(6.5rem + env(safe-area-inset-bottom));
+    z-index: 30;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    max-width: min(28rem, calc(100vw - 2rem));
+    padding: 0.6rem 0.7rem 0.6rem 1rem;
+    border-radius: var(--r-md);
+    background: var(--ink);
+    color: var(--paper);
+    font-size: 0.86rem;
+    box-shadow: var(--shadow-lg);
+}
+.toast span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toast button {
+    flex: none;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-weight: 600;
+    color: var(--paper);
+    text-decoration: underline;
+    cursor: pointer;
+}
 .pf { position: relative; flex: none; margin-top: 0.8rem; }
 .pf-button {
     font-family: var(--mono);
@@ -976,6 +1180,14 @@
     border: 1px solid var(--rule);
     border-radius: var(--r-md);
     box-shadow: var(--shadow-md);
+}
+.pf-head {
+    margin: 0.35rem 0.5rem 0.15rem;
+    font-family: var(--mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
 }
 .pf-option {
     display: flex;
@@ -1046,6 +1258,25 @@
 .goal-card.is-yesno .goal-card-foot { padding-left: calc(20px + 0.7rem); }
 .goal-card.is-yesno .goal-card-foot { margin-top: 0.2rem; }
 .goal-card.is-yesno.is-done h3 { text-decoration: line-through; text-decoration-color: var(--ink-3); }
+
+.goal-steps { margin-top: 0.75rem; padding-top: 0.35rem; border-top: 1px solid var(--rule); }
+.goal-steps .tasks { margin: 0; }
+.goal-steps-done { margin: 0.1rem 0 0.2rem; font-family: var(--mono); font-size: 0.65rem; color: var(--sage); }
+.goal-step-add { display: flex; align-items: center; gap: 0.55rem; padding: 0.35rem 0.1rem 0; }
+.goal-step-add > span { width: 18px; text-align: center; color: var(--ink-3); }
+.goal-step-add input {
+    flex: 1;
+    min-width: 0;
+    font: inherit;
+    font-size: 0.88rem;
+    padding: 0.3rem 0;
+    border: 0;
+    background: transparent;
+    color: var(--ink);
+    outline: none;
+}
+.goal-step-add input::placeholder { color: var(--ink-3); }
+.goal-step-add .modal-error { margin-top: 0.3rem; }
 
 .goal-done > summary { cursor: pointer; margin: 0.3rem 0 0.6rem; font-size: 0.8rem; color: var(--ink-3); }
 
@@ -1533,14 +1764,32 @@
     .modal-grid select,
     .modal-desc,
     .event-fields input,
-    .goal-current { font-size: 16px; }
+    .goal-current,
+    .goal-step-add input { font-size: 16px; }
 }
 
 /* ---- Narrow screens ------------------------------------------------------ */
 
 @media (max-width: 780px) {
-    .main:not(.main-full) { padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right)); }
-    .view-title { margin-top: 1.4rem; }
+    .main:not(.main-full) {
+        padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right));
+        /* No top bar: content clears the status bar / Dynamic Island on its own. */
+        padding-top: calc(0.5rem + env(safe-area-inset-top));
+    }
+    .view-title { margin-top: 1rem; }
+
+    /* Quick-add sits beside the round menu button, at the same height. */
+    .qa-dock {
+        padding: 0.9rem calc(3.5rem + 0.75rem) max(1rem, env(safe-area-inset-bottom)) 0;
+    }
+    .qa-dock .qa-field { min-height: 3.5rem; padding: 0.45rem 0.7rem 0.45rem 1rem; }
+    /* Room under the last item for the round button on pages without a dock. */
+    .main:not(.has-dock):not(.main-full) { padding-bottom: calc(6rem + env(safe-area-inset-bottom)); }
+    .qa-dock .quickadd { display: flex; flex-direction: column-reverse; border-radius: 100px; }
+    /* While typing, the parsed pills show above the field, clear of the keyboard. */
+    .qa-dock .quickadd:has(.qa-preview) { border-radius: var(--r-lg); }
+    .qa-dock .qa-preview { border-top: 0; border-bottom: 1px dashed var(--rule); padding: 0.6rem 0.85rem; }
+    .toast { bottom: calc(5.5rem + env(safe-area-inset-bottom)); }
 
     .cal-head { flex-wrap: wrap; gap: 0.6rem; padding: 0.7rem 0.8rem; }
     /* Title and view switch share the first row; the nav gets a row of its own. */
@@ -1549,6 +1798,9 @@
     .cal-nav button { white-space: nowrap; }
     /* One column has room for the whole all-day title. */
     .allday { white-space: normal; font-size: 0.72rem; }
+
+    .name-fields { grid-template-columns: 1fr; }
+    .name-fields .btn { justify-self: start; }
 
     .habit-head,
     .trash-head,

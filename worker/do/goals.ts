@@ -15,7 +15,14 @@ interface GoalRow extends Record<string, SqlStorageValue> {
     sort_order: number;
     created_at: string;
     updated_at: string;
+    steps_done: number;
 }
+
+/** Goal columns plus how many of its steps are done (completed, not deleted). */
+const SELECT_GOALS = `
+    SELECT g.*, (SELECT COUNT(*) FROM tasks t
+                 WHERE t.goal_id = g.id AND t.completed = 1 AND t.deleted_at IS NULL) AS steps_done
+    FROM goals g`;
 
 function toGoal(r: GoalRow): Goal {
     return {
@@ -30,18 +37,19 @@ function toGoal(r: GoalRow): Goal {
         sortOrder: r.sort_order,
         createdAt: r.created_at,
         updatedAt: r.updated_at,
+        stepsDone: r.steps_done,
     };
 }
 
 export function listGoals(sql: SqlStorage): Goal[] {
     return sql
-        .exec<GoalRow>("SELECT * FROM goals ORDER BY deadline, sort_order")
+        .exec<GoalRow>(`${SELECT_GOALS} ORDER BY g.deadline, g.sort_order`)
         .toArray()
         .map(toGoal);
 }
 
 export function getGoal(sql: SqlStorage, id: string): Goal | null {
-    const [row] = sql.exec<GoalRow>("SELECT * FROM goals WHERE id = ?", id).toArray();
+    const [row] = sql.exec<GoalRow>(`${SELECT_GOALS} WHERE g.id = ?`, id).toArray();
     return row ? toGoal(row) : null;
 }
 

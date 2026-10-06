@@ -63,6 +63,8 @@ export interface Goal extends GoalInput {
     sortOrder: number;
     createdAt: string;
     updatedAt: string;
+    /** Steps (linked tasks) completed so far. */
+    stepsDone: number;
 }
 
 type Measured = { current: number; target: number | null };

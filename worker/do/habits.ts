@@ -2,6 +2,7 @@ import {
     computeStats,
     type DayStatus,
     type Habit,
+    type HabitDay,
     type HabitDetail,
     type HabitFreq,
     type HabitInput,
@@ -87,6 +88,22 @@ export function getHabitDetail(
         .toArray()
         .map((r) => ({ day: r.day, status: r.status as DayStatus, note: r.note }));
     return { habit, month, days };
+}
+
+/** Every habit's check-ins in one month (YYYY-MM), keyed by habit id, for the all-habits grid. */
+export function getMonthCheckins(sql: SqlStorage, month: string): Record<string, HabitDay[]> {
+    const out: Record<string, HabitDay[]> = {};
+    const rows = sql
+        .exec<{ habit_id: string; day: string; status: string; note: string }>(
+            `SELECT habit_id, day, status, note FROM habit_checkins
+             WHERE day >= ? AND day <= ? ORDER BY day`,
+            `${month}-01`, `${month}-31`,
+        )
+        .toArray();
+    for (const r of rows) {
+        (out[r.habit_id] ??= []).push({ day: r.day, status: r.status as DayStatus, note: r.note });
+    }
+    return out;
 }
 
 /**

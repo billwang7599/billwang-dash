@@ -39,6 +39,8 @@ export interface Task {
     /** Hard deadline (Todoist `{jan 27}`), separate from when you plan to do it. */
     deadline: string | null;
     durationMinutes: number | null;
+    /** The goal this task is a step toward, if any. */
+    goalId: string | null;
     completed: boolean;
     completedAt: string | null;
     order: number;
@@ -183,4 +185,9 @@ export interface Preferences {
     dateFormat: "MDY" | "DMY";
     /** Project ids the Inbox leaves out. Empty means every project shows. */
     inboxHiddenProjects: string[];
+    /** Goal ids whose steps the Inbox leaves out. */
+    inboxHiddenGoals: string[];
+    /** "" until the setup step asks for it. */
+    firstName: string;
+    lastName: string;
 }

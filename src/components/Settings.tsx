@@ -9,15 +9,21 @@ interface Props {
     preferences: Preferences;
     user: { email: string; name: string | null; isAdmin: boolean };
     onPreferencesChange: (prefs: Preferences) => void;
+    onOpenTrash: () => void;
 }
 
-export function Settings({ preferences, user, onPreferencesChange }: Props) {
+export function Settings({ preferences, user, onPreferencesChange, onOpenTrash }: Props) {
     const [google, setGoogle] = useState<GoogleAccountStatus | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
     const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
     const [confirmingPushOff, setConfirmingPushOff] = useState(false);
     const [pushBusy, setPushBusy] = useState(false);
+    const [firstName, setFirstName] = useState(preferences.firstName);
+    const [lastName, setLastName] = useState(preferences.lastName);
+    const nameChanged =
+        firstName.trim() !== preferences.firstName || lastName.trim() !== preferences.lastName;
+    const nameValid = firstName.trim() !== "" && lastName.trim() !== "";
 
     useEffect(() => {
         api.googleStatus().then(setGoogle).catch((e: Error) => setError(e.message));
@@ -73,17 +79,65 @@ export function Settings({ preferences, user, onPreferencesChange }: Props) {
 
     return (
         <div className="settings">
+            <a className="settings-wordmark" href="/">
+                dash<span className="dot">.</span>
+            </a>
+
             {notice && <p className="banner banner-ok">{notice}</p>}
             {error && <p className="banner banner-bad">{error}</p>}
 
             <section className="panel">
                 <h2>Profile</h2>
+                <form
+                    className="name-fields"
+                    onSubmit={(e) => {
+                        e.preventDefault();
+                        if (nameChanged && nameValid) {
+                            void updatePrefs({ firstName: firstName.trim(), lastName: lastName.trim() });
+                        }
+                    }}
+                >
+                    <label className="field">
+                        <span>First name</span>
+                        <input
+                            value={firstName}
+                            maxLength={50}
+                            autoComplete="given-name"
+                            onChange={(e) => setFirstName(e.target.value)}
+                        />
+                    </label>
+                    <label className="field">
+                        <span>Last name</span>
+                        <input
+                            value={lastName}
+                            maxLength={50}
+                            autoComplete="family-name"
+                            onChange={(e) => setLastName(e.target.value)}
+                        />
+                    </label>
+                    <button type="submit" className="btn btn-quiet" disabled={!nameChanged || !nameValid}>
+                        Save name
+                    </button>
+                </form>
                 <dl className="kv">
                     <dt>Signed in as</dt>
                     <dd>{user.name ? `${user.name} · ${user.email}` : user.email}</dd>
                     <dt>Identity</dt>
                     <dd>Cloudflare Access{user.isAdmin ? " · admin" : ""}</dd>
                 </dl>
+                {/* A plain link, not fetch(): signing out is a full navigation to Cloudflare
+                    Access, and the in-memory app state must not survive it. */}
+                <a className="btn btn-quiet settings-signout" href="/logout">
+                    Sign out
+                </a>
+            </section>
+
+            <section className="panel">
+                <h2>Recently deleted</h2>
+                <p className="panel-note">Deleted projects and tasks wait here until you restore them or delete them for good.</p>
+                <button className="btn btn-quiet" onClick={onOpenTrash}>
+                    Open recently deleted
+                </button>
             </section>
 
             <section className="panel">

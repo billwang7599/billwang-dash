@@ -20,6 +20,7 @@ const task = (over: Partial<Task> = {}): Task => ({
     due: { date: "2026-08-04", time: "17:00", recurrence: null },
     deadline: null,
     durationMinutes: null,
+    goalId: null,
     completed: false,
     completedAt: null,
     order: 1,

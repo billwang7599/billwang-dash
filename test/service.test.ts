@@ -168,9 +168,16 @@ describe("preferences validation", () => {
     it("takes a list of hidden Inbox projects, and rejects anything else", async () => {
         expect((await patchPrefs({ inboxHiddenProjects: "abc" })).status).toBe(400);
         expect((await patchPrefs({ inboxHiddenProjects: [1, 2] })).status).toBe(400);
+        expect((await patchPrefs({ inboxHiddenGoals: "g1" })).status).toBe(400);
         const ok = await patchPrefs({ inboxHiddenProjects: ["p1"] });
         expect(ok.status).toBe(200);
         expect((await ok.json<{ preferences: { inboxHiddenProjects: string[] } }>()).preferences.inboxHiddenProjects).toEqual(["p1"]);
+    });
+
+    it("trims a name and rejects a blank one", async () => {
+        expect((await patchPrefs({ firstName: "   " })).status).toBe(400);
+        const ok = await patchPrefs({ firstName: "  Bill ", lastName: "Wang" });
+        expect((await ok.json<{ preferences: { firstName: string } }>()).preferences.firstName).toBe("Bill");
     });
 
     // Generic body() helper behavior -- malformed JSON, not preferences-specific.

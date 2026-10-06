@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { civilFromKey, civilKey, daysInMonth, diffDays, weekday } from "../../shared/civil.ts";
-import { describeFrequency, isDueDay, type DayStatus, type HabitDay, type HabitInput, type HabitSummary } from "../../shared/habits.ts";
+import { civilKey, daysInMonth, weekday } from "../../shared/civil.ts";
+import { describeFrequency, type DayStatus, type HabitDay, type HabitInput, type HabitSummary } from "../../shared/habits.ts";
 import { api } from "../api.ts";
 import { formatPlainDate } from "../format.ts";
+import { cellState } from "../habitCells.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { HabitModal } from "./HabitModal.tsx";
 
@@ -81,16 +82,7 @@ export function HabitView({ habit, today, revision, onChanged, onUpdate, onDelet
         [habit.id, onChanged],
     );
 
-    const start = civilFromKey(habit.startDate);
-    const stateOf = (key: string): string => {
-        const status = byDay.get(key)?.status;
-        if (status) return status === "done" ? "is-done" : "is-skipped";
-        if (key > today) return "is-future";
-        const c = civilFromKey(key);
-        const countable = c && start && diffDays(start, c) >= 0 && isDueDay(habit, c);
-        if (!countable) return "is-off";
-        return key === today ? "is-pending" : "is-missed";
-    };
+    const stateOf = (key: string) => cellState(habit, key, byDay.get(key)?.status, today);
 
     const { stats } = habit;
     const unit = stats.streakUnit === "week" ? "week" : "day";

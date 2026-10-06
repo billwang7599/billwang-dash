@@ -50,6 +50,8 @@ export const importBody = z.object({
 export const quickAddBody = z.object({
     text: nonEmpty,
     timeZone: timeZone.optional(),
+    /** Adds the task as a step toward this goal. */
+    goalId: z.string().min(1).optional(),
 });
 
 /**
@@ -64,6 +66,7 @@ export const taskPatchBody = z.object({
     due: dueDate.nullable().optional(),
     deadline: z.string().nullable().optional(),
     durationMinutes: z.int().positive().nullable().optional(),
+    goalId: z.string().min(1).nullable().optional(),
 });
 
 export const createProjectBody = z.object({
@@ -75,6 +78,9 @@ export const preferencesBody = z.object({
     timeZone: timeZone.optional(),
     dateFormat: z.enum(["MDY", "DMY"]).optional(),
     inboxHiddenProjects: z.array(z.string().min(1).max(100)).max(500).optional(),
+    inboxHiddenGoals: z.array(z.string().min(1).max(100)).max(500).optional(),
+    firstName: z.string().trim().min(1, "is required").max(50).optional(),
+    lastName: z.string().trim().min(1, "is required").max(50).optional(),
 });
 
 export const calendarToggleBody = z.object({

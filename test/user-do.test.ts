@@ -194,6 +194,24 @@ describe("preferences", () => {
 
         await s.setPreferences({ inboxHiddenProjects: [] });
         expect((await s.getPreferences()).inboxHiddenProjects).toEqual([]);
+
+        // Hidden goals are a separate list; setting one leaves the other alone.
+        expect((await s.getPreferences()).inboxHiddenGoals).toEqual([]);
+        await s.setPreferences({ inboxHiddenGoals: ["g1", "g1"] });
+        expect(await s.getPreferences()).toMatchObject({ inboxHiddenGoals: ["g1"], inboxHiddenProjects: [] });
+    });
+});
+
+describe("profile name", () => {
+    it("starts empty (so setup asks for it) and saves each part on its own", async () => {
+        const s = stub("prefs-name");
+        expect(await s.getPreferences()).toMatchObject({ firstName: "", lastName: "" });
+
+        await s.setPreferences({ firstName: "Bill", lastName: "Wang" });
+        expect(await s.getPreferences()).toMatchObject({ firstName: "Bill", lastName: "Wang" });
+
+        await s.setPreferences({ firstName: "William" });
+        expect(await s.getPreferences()).toMatchObject({ firstName: "William", lastName: "Wang" });
     });
 });
 

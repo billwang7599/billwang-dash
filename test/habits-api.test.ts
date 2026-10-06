@@ -142,6 +142,22 @@ describe("habits over HTTP", () => {
         expect((await call("GET", `/api/habits/${habit.id}?month=2026-13`)).status).toBe(400);
     });
 
+    it("returns every habit's check-ins for a month, keyed by habit", async () => {
+        const { habit: a } = await (await call("POST", "/api/habits", daily)).json<{ habit: { id: string } }>();
+        const { habit: b } = await (await call("POST", "/api/habits", { ...daily, name: "Read" })).json<{ habit: { id: string } }>();
+        await call("PUT", `/api/habits/${a.id}/checkins/${day()}`, { status: "done" });
+        await call("PUT", `/api/habits/${b.id}/checkins/${day()}`, { status: "skipped" });
+
+        const res = await call("GET", `/api/habits?month=${day().slice(0, 7)}`);
+        expect(res.status).toBe(200);
+        const body = await res.json<{ month: string; days: Record<string, { day: string; status: string }[]> }>();
+        expect(body.month).toBe(day().slice(0, 7));
+        expect(body.days[a.id]).toEqual([expect.objectContaining({ day: day(), status: "done" })]);
+        expect(body.days[b.id]).toEqual([expect.objectContaining({ day: day(), status: "skipped" })]);
+
+        expect((await call("GET", "/api/habits?month=2026-13")).status).toBe(400);
+    });
+
     it("404 for a missing habit", async () => {
         expect((await call("PATCH", "/api/habits/nope", daily)).status).toBe(404);
         expect((await call("PUT", `/api/habits/nope/checkins/${day()}`, { status: "done" })).status).toBe(404);

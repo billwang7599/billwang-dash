@@ -1,14 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Goal, GoalInput } from "../shared/goals.ts";
+import { isDone, type Goal, type GoalInput } from "../shared/goals.ts";
 import type { HabitInput, HabitSummary } from "../shared/habits.ts";
 import type { Task } from "../shared/types.ts";
 import { api, type AppState, type Preferences } from "./api.ts";
+import { AccountSetup } from "./components/AccountSetup.tsx";
+import { CompletedView } from "./components/CompletedView.tsx";
+import { MobileNav } from "./components/MobileNav.tsx";
+import { ProjectsView } from "./components/ProjectsView.tsx";
 import { ConfirmDialog } from "./components/ConfirmDialog.tsx";
 import { GoalsView } from "./components/GoalsView.tsx";
 import { HabitModal } from "./components/HabitModal.tsx";
 import { HabitView } from "./components/HabitView.tsx";
+import { HabitsView } from "./components/HabitsView.tsx";
 import { ImportModal } from "./components/ImportModal.tsx";
-import { ProjectFilter } from "./components/ProjectFilter.tsx";
+import { InboxFilter, type InboxHidden } from "./components/InboxFilter.tsx";
 import { QuickAdd } from "./components/QuickAdd.tsx";
 import { Settings } from "./components/Settings.tsx";
 import { Sidebar } from "./components/Sidebar.tsx";
@@ -18,6 +23,7 @@ import { TaskList } from "./components/TaskList.tsx";
 import { TaskModal } from "./components/TaskModal.tsx";
 import { WeekCalendar } from "./components/WeekCalendar.tsx";
 import { deviceTimeZone, todayKey } from "./format.ts";
+import { NARROW, useMediaQuery } from "./useMediaQuery.ts";
 
 export type View =
     | { name: "inbox" }
@@ -25,6 +31,9 @@ export type View =
     | { name: "settings" }
     | { name: "trash" }
     | { name: "goals" }
+    | { name: "habits" }
+    | { name: "completed" }
+    | { name: "projects" }
     | { name: "habit"; id: string }
     | { name: "project"; id: string };
 
@@ -35,6 +44,9 @@ function viewFromPath(pathname: string): View {
     if (rest === "settings") return { name: "settings" };
     if (rest === "trash") return { name: "trash" };
     if (rest === "goals") return { name: "goals" };
+    if (rest === "habits") return { name: "habits" };
+    if (rest === "completed") return { name: "completed" };
+    if (rest === "projects") return { name: "projects" };
     if (rest.startsWith("habit/")) return { name: "habit", id: rest.slice(6) };
     // Old bookmarks to /app or /app/upcoming land here too; Inbox is the home view.
     return { name: "inbox" };
@@ -46,12 +58,16 @@ export function App() {
     const [notice, setNotice] = useState<string | null>(null);
     const [editing, setEditing] = useState<Task | null>(null);
     const [newHabit, setNewHabit] = useState(false);
+    // The task just ticked off, for the few seconds the Undo pop-up shows.
+    const [justCompleted, setJustCompleted] = useState<Task | null>(null);
     // Bumped when a habit changes outside the habit page, so its month reloads.
     const [habitRevision, setHabitRevision] = useState(0);
     const [pendingTaskDelete, setPendingTaskDelete] = useState<Task | null>(null);
     // Set when several lines are pasted into the quick-add bar; opens the import modal.
     const [importText, setImportText] = useState<string | null>(null);
     const [view, setView] = useState<View>(() => viewFromPath(window.location.pathname));
+    // Phones get MobileNav (round menu button) instead of the sidebar.
+    const narrow = useMediaQuery(NARROW);
     // Calendar data lives server-side; bump this to make it refetch after edits.
     const [revision, setRevision] = useState(0);
 
@@ -97,9 +113,10 @@ export function App() {
     );
 
     const addTask = useCallback(
-        async (text: string) => {
+        /** `goalId` adds it as a step toward that goal. */
+        async (text: string, goalId?: string) => {
             if (!state) return;
-            await api.createTask(text, state.preferences.timeZone);
+            await api.createTask(text, state.preferences.timeZone, goalId);
             // Refetch rather than splice: a "#name" token may have created a project
             // server-side, so the sidebar can be stale too.
             setState(await api.getState());
@@ -120,13 +137,23 @@ export function App() {
                                 tasks: task.completed
                                     ? prev.tasks.filter((t) => t.id !== id)
                                     : prev.tasks.map((t) => (t.id === id ? task : t)),
+                                completedThisWeek: prev.completedThisWeek + (task.completed ? 1 : 0),
+                                goals:
+                                    task.completed && task.goalId
+                                        ? prev.goals.map((g) =>
+                                                g.id === task.goalId ? { ...g, stepsDone: g.stepsDone + 1 } : g,
+                                            )
+                                        : prev.goals,
                             }
                         : prev,
                 );
+                // Only a real completion can be undone; a repeat just moved its date.
+                if (task.completed) setJustCompleted(task);
                 setRevision((r) => r + 1);
             })(),
         [run],
     );
+
 
     const deleteTask = useCallback(
         (id: string) =>
@@ -145,6 +172,24 @@ export function App() {
         setState(await api.getState());
         setRevision((r) => r + 1);
     }, []);
+
+    /** Puts a completed task back. Counts and goal steps change too, so reload. */
+    const undoComplete = useCallback(
+        (task: Task) =>
+            run(async () => {
+                setJustCompleted(null);
+                await api.uncompleteTask(task.id);
+                await reload();
+            })(),
+        [run, reload],
+    );
+
+    // The Undo pop-up goes away on its own after a few seconds.
+    useEffect(() => {
+        if (!justCompleted) return;
+        const timer = setTimeout(() => setJustCompleted(null), 5000);
+        return () => clearTimeout(timer);
+    }, [justCompleted]);
 
     /** Puts a habit the server just returned into the list, adding it if it's new. */
     const applyHabit = useCallback((habit: HabitSummary) => {
@@ -241,7 +286,16 @@ export function App() {
         (id: string) =>
             run(async () => {
                 await api.deleteGoal(id);
-                setState((prev) => (prev ? { ...prev, goals: prev.goals.filter((g) => g.id !== id) } : prev));
+                // The server keeps the goal's steps as plain tasks; mirror that.
+                setState((prev) =>
+                    prev
+                        ? {
+                                ...prev,
+                                goals: prev.goals.filter((g) => g.id !== id),
+                                tasks: prev.tasks.map((t) => (t.goalId === id ? { ...t, goalId: null } : t)),
+                            }
+                        : prev,
+                );
             })(),
         [run],
     );
@@ -311,11 +365,13 @@ export function App() {
      * Hidden projects are a preference so the choice follows the account.
      */
     const setInboxHidden = useCallback(
-        (inboxHiddenProjects: string[]) => {
+        ({ projects: inboxHiddenProjects, goals: inboxHiddenGoals }: InboxHidden) => {
             setState((prev) =>
-                prev ? { ...prev, preferences: { ...prev.preferences, inboxHiddenProjects } } : prev,
+                prev
+                    ? { ...prev, preferences: { ...prev.preferences, inboxHiddenProjects, inboxHiddenGoals } }
+                    : prev,
             );
-            api.setPreferences({ inboxHiddenProjects })
+            api.setPreferences({ inboxHiddenProjects, inboxHiddenGoals })
                 .then(({ preferences }) => {
                     setPreferences(preferences);
                     setNotice(null);
@@ -331,8 +387,11 @@ export function App() {
     const filtered = useMemo(() => {
         if (!state) return [];
         if (view.name === "project") return state.tasks.filter((t) => t.projectId === view.id);
-        const hidden = new Set(state.preferences.inboxHiddenProjects);
-        return state.tasks.filter((t) => !hidden.has(t.projectId));
+        const hiddenProjects = new Set(state.preferences.inboxHiddenProjects);
+        const hiddenGoals = new Set(state.preferences.inboxHiddenGoals);
+        return state.tasks.filter(
+            (t) => !hiddenProjects.has(t.projectId) && !(t.goalId && hiddenGoals.has(t.goalId)),
+        );
     }, [state, view]);
 
     if (error) {
@@ -350,6 +409,7 @@ export function App() {
     }
 
     const today = todayKey(state.preferences.timeZone);
+    const hasQuickAdd = view.name === "inbox" || view.name === "project";
     const overdueCount = state.tasks.filter((t) => t.due && t.due.date < today).length;
     const todayCount = state.tasks.filter((t) => t.due && t.due.date <= today).length;
 
@@ -357,19 +417,28 @@ export function App() {
         <div className="shell">
             <div className="grain" aria-hidden="true" />
 
-            <Sidebar
-                state={state}
-                view={view}
-                todayCount={todayCount}
-                overdueCount={overdueCount}
-                navigate={navigate}
-                onTogglePin={togglePinProject}
-                onDeleteProject={deleteProject}
-                onCheckHabit={checkHabitToday}
-                onNewHabit={() => setNewHabit(true)}
-            />
+            {narrow ? (
+                <MobileNav
+                    view={view}
+                    firstName={state.preferences.firstName}
+                    todayCount={todayCount}
+                    overdueCount={overdueCount}
+                    navigate={navigate}
+                />
+            ) : (
+                <Sidebar
+                    state={state}
+                    view={view}
+                    todayCount={todayCount}
+                    overdueCount={overdueCount}
+                    navigate={navigate}
+                    onTogglePin={togglePinProject}
+                    onDeleteProject={deleteProject}
+                    onCheckHabit={checkHabitToday}
+                />
+            )}
 
-            <main className={`main${view.name === "calendar" ? " main-full" : ""}`}>
+            <main className={`main${view.name === "calendar" ? " main-full" : ""}${hasQuickAdd ? " has-dock" : ""}`}>
                 <TimeZoneNotice
                     preferences={state.preferences}
                     onSwitch={(timeZone) =>
@@ -387,20 +456,12 @@ export function App() {
                     </p>
                 )}
 
-                {view.name !== "settings" && view.name !== "calendar" && view.name !== "trash" && view.name !== "habit" && view.name !== "goals" && (
-                    <QuickAdd
-                        preferences={state.preferences}
-                        projects={state.projects}
-                        onSubmit={addTask}
-                        onPasteMany={setImportText}
-                    />
-                )}
-
                 {view.name === "settings" ? (
                     <Settings
                         preferences={state.preferences}
                         user={state.user}
                         onPreferencesChange={setPreferences}
+                        onOpenTrash={() => navigate("/app/trash")}
                     />
                 ) : view.name === "habit" ? (
                     (() => {
@@ -418,17 +479,52 @@ export function App() {
                             <p className="habit-empty">That habit doesn't exist any more.</p>
                         );
                     })()
+                ) : view.name === "projects" ? (
+                    <ProjectsView
+                        projects={state.projects}
+                        tasks={state.tasks}
+                        onOpen={(id) => navigate(`/app/project/${id}`)}
+                        onTogglePin={togglePinProject}
+                        onDelete={deleteProject}
+                    />
+                ) : view.name === "completed" ? (
+                    <CompletedView
+                        projects={state.projects}
+                        goals={state.goals}
+                        timeZone={state.preferences.timeZone}
+                        onUndo={async (task) => {
+                            await api.uncompleteTask(task.id);
+                            await reload();
+                        }}
+                        onBack={() => navigate("/app")}
+                    />
+                ) : view.name === "habits" ? (
+                    <HabitsView
+                        habits={state.habits}
+                        today={today}
+                        revision={habitRevision}
+                        onChanged={applyHabit}
+                        onNew={() => setNewHabit(true)}
+                        onOpen={(id) => navigate(`/app/habit/${id}`)}
+                    />
                 ) : view.name === "goals" ? (
                     <GoalsView
                         goals={state.goals}
+                        tasks={state.tasks}
+                        projects={state.projects}
+                        timeZone={state.preferences.timeZone}
                         today={today}
+                        onAddStep={(goalId, text) => addTask(text, goalId)}
+                        onCompleteTask={completeTask}
+                        onDeleteTask={(id) => setPendingTaskDelete(state.tasks.find((t) => t.id === id) ?? null)}
+                        onOpenTask={setEditing}
                         onCreate={createGoal}
                         onUpdate={updateGoal}
                         onProgress={setGoalProgress}
                         onDelete={deleteGoal}
                     />
                 ) : view.name === "trash" ? (
-                    <Trash projects={state.projects} onChanged={reload} />
+                    <Trash projects={state.projects} onChanged={reload} onBack={() => navigate("/app/settings")} />
                 ) : view.name === "calendar" ? (
                     <WeekCalendar
                         timeZone={state.preferences.timeZone}
@@ -442,10 +538,21 @@ export function App() {
                     <>
                         {view.name === "inbox" ? (
                             <div className="view-head">
-                                <h1 className="view-title">{titleFor(view, state)}</h1>
-                                <ProjectFilter
+                                <div className="view-head-title">
+                                    <h1 className="view-title">{titleFor(view, state)}</h1>
+                                    <button className="done-link" onClick={() => navigate("/app/completed")}>
+                                        {state.completedThisWeek} done this week →
+                                    </button>
+                                </div>
+                                <InboxFilter
                                     projects={state.projects}
-                                    hidden={state.preferences.inboxHiddenProjects}
+                                    goals={state.goals.filter(
+                                        (g) => !isDone(g) || state.tasks.some((t) => t.goalId === g.id),
+                                    )}
+                                    hidden={{
+                                        projects: state.preferences.inboxHiddenProjects,
+                                        goals: state.preferences.inboxHiddenGoals,
+                                    }}
                                     onChange={setInboxHidden}
                                 />
                             </div>
@@ -455,11 +562,12 @@ export function App() {
                         <TaskList
                             tasks={filtered}
                             projects={state.projects}
+                            goals={state.goals}
                             timeZone={state.preferences.timeZone}
                             groupByDate={view.name !== "project"}
                             emptyMessage={
                                 filtered.length < state.tasks.length && view.name === "inbox"
-                                    ? "Nothing in the projects you're showing."
+                                    ? "Nothing matches your filter."
                                     : emptyFor(view)
                             }
                             onComplete={completeTask}
@@ -470,14 +578,39 @@ export function App() {
                         />
                     </>
                 )}
+
+                {/* Pinned to the bottom of the screen while the list scrolls above it. */}
+                {hasQuickAdd && (
+                    <div className="qa-dock">
+                        <QuickAdd
+                            preferences={state.preferences}
+                            projects={state.projects}
+                            onSubmit={(text) => addTask(text)}
+                            onPasteMany={setImportText}
+                            compact={narrow}
+                        />
+                    </div>
+                )}
             </main>
+
+            {justCompleted && (
+                <div className="toast" role="status">
+                    <span>
+                        Completed “{justCompleted.content}”
+                    </span>
+                    <button onClick={() => undoComplete(justCompleted)}>Undo</button>
+                </div>
+            )}
+
+            {/* First run: the name the sidebar greets you by. */}
+            {!state.preferences.firstName && <AccountSetup onDone={setPreferences} />}
 
             {newHabit && <HabitModal onSave={createHabit} onClose={() => setNewHabit(false)} />}
 
             {pendingTaskDelete && (
                 <ConfirmDialog
                     title="Delete task?"
-                    message={`"${pendingTaskDelete.content}" will move to the Trash. You can restore it from there.`}
+                    message={`"${pendingTaskDelete.content}" will move to Recently deleted. You can restore it from there.`}
                     confirmLabel="Delete"
                     onConfirm={() => {
                         deleteTask(pendingTaskDelete.id);
@@ -501,6 +634,7 @@ export function App() {
                 <TaskModal
                     task={editing}
                     projects={state.projects}
+                    goals={state.goals}
                     onSave={saveTask}
                     onClose={() => setEditing(null)}
                 />

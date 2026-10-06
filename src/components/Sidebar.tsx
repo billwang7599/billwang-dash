@@ -4,7 +4,7 @@ import type { View } from "../App.tsx";
 import { HORIZONS, isDone, progress } from "../../shared/goals.ts";
 import type { HabitSummary } from "../../shared/habits.ts";
 import type { Project } from "../../shared/types.ts";
-import { NARROW, useMediaQuery } from "../useMediaQuery.ts";
+import { projectDeleteMessage } from "../projectDelete.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { ProjectSearch } from "./ProjectSearch.tsx";
 
@@ -30,7 +30,6 @@ interface Props {
     onDeleteProject: (id: string) => void;
     /** Check today off (or undo it) from the sidebar. */
     onCheckHabit: (habit: HabitSummary) => void;
-    onNewHabit: () => void;
 }
 
 /** The two fixed views. Order is fixed too -- not user-reorderable. */
@@ -48,29 +47,11 @@ export function Sidebar({
     onTogglePin,
     onDeleteProject,
     onCheckHabit,
-    onNewHabit,
 }: Props) {
+    // Desktop only: on a phone App shows MobileNav instead of this sidebar.
     // Not persisted: collapsing is a session-only UI preference, not a saved one.
-    const [collapsedPref, setCollapsed] = useState(false);
-    // On a phone the sidebar is an off-canvas drawer instead, and is never the
-    // narrow initials column -- the drawer has the room for full labels.
-    const narrow = useMediaQuery(NARROW);
-    const collapsed = collapsedPref && !narrow;
-    const [drawerOpen, setDrawerOpen] = useState(false);
-    const drawerShown = narrow && drawerOpen;
-
-    /** Every destination closes the drawer, so the page you picked is what you see. */
-    const go = (path: string) => {
-        setDrawerOpen(false);
-        navigate(path);
-    };
-
-    useEffect(() => {
-        if (!drawerShown) return;
-        const onKey = (e: KeyboardEvent) => e.key === "Escape" && setDrawerOpen(false);
-        window.addEventListener("keydown", onKey);
-        return () => window.removeEventListener("keydown", onKey);
-    }, [drawerShown]);
+    const [collapsed, setCollapsed] = useState(false);
+    const go = navigate;
     // Not persisted either -- same reasoning as collapsed.
     const [projectSort, setProjectSort] = useState<ProjectSort>("alphabetical");
     const [searchOpen, setSearchOpen] = useState(false);
@@ -98,12 +79,6 @@ export function Sidebar({
         [state.goals],
     );
 
-    const deleteMessage = (project: Project) => {
-        const n = state.tasks.filter((t) => t.projectId === project.id).length;
-        const detail = n > 0 ? ` and its ${n} open task${n === 1 ? "" : "s"}` : "";
-        return `"${project.name}"${detail} will move to the Trash. You can restore them from there.`;
-    };
-
     const { pinned, unpinned } = useMemo(() => {
         const others = state.projects.filter((p) => !p.isInbox);
         const sorted =
@@ -113,50 +88,32 @@ export function Sidebar({
         return { pinned: sorted.filter((p) => p.pinned), unpinned: sorted.filter((p) => !p.pinned) };
     }, [state.projects, projectSort]);
 
+    // The sidebar greets you; the wordmark lives at the top of Settings instead.
+    const firstName = state.preferences.firstName;
+    const greeting = firstName ? `Hello, ${firstName}!` : "Hello!";
+
     return (
         <>
-            {/* Phone only (hidden by CSS above the breakpoint): the drawer's handle. */}
-            <header className="mobile-bar">
-                <button
-                    className="mobile-menu"
-                    onClick={() => setDrawerOpen(true)}
-                    aria-label="Open menu"
-                    aria-expanded={drawerShown}
-                    aria-controls="sidebar"
-                >
-                    <svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
-                        <path d="M3 6h14M3 10h14M3 14h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                    </svg>
-                </button>
-                <a className="wordmark" href="/">
-                    dash<span className="dot">.</span>
-                </a>
-            </header>
-
-            <aside
-                id="sidebar"
-                className={`sidebar${collapsed ? " is-collapsed" : ""}${drawerShown ? " is-open" : ""}`}
-            >
+            <aside id="sidebar" className={`sidebar${collapsed ? " is-collapsed" : ""}`}>
                 <div className="sidebar-top">
-                    <a className="wordmark" href="/">
-                        d<span className="wordmark-tail">ash</span>
-                        <span className="dot">.</span>
-                    </a>
-                    {narrow ? (
-                        <button className="sidebar-toggle" onClick={() => setDrawerOpen(false)} aria-label="Close menu">
-                            ✕
-                        </button>
+                    {/* Collapsed, there's no room for a greeting; the "d." mark stays. */}
+                    {collapsed ? (
+                        <a className="wordmark" href="/">
+                            d<span className="wordmark-tail">ash</span>
+                            <span className="dot">.</span>
+                        </a>
                     ) : (
-                        <button
-                            className="sidebar-toggle"
-                            onClick={() => setCollapsed(!collapsed)}
-                            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-                            aria-expanded={!collapsed}
-                            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-                        >
-                            {collapsed ? "»" : "«"}
-                        </button>
+                        <p className="greeting">{greeting}</p>
                     )}
+                    <button
+                        className="sidebar-toggle"
+                        onClick={() => setCollapsed(!collapsed)}
+                        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                        aria-expanded={!collapsed}
+                        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                    >
+                        {collapsed ? "»" : "«"}
+                    </button>
                 </div>
 
                 <nav>
@@ -198,7 +155,12 @@ export function Sidebar({
                     <>
                         {!collapsed && (
                             <div className="nav-head-row">
-                                <p className="nav-head">Projects</p>
+                                <button
+                                    className={`nav-head nav-head-link${view.name === "projects" ? " is-active" : ""}`}
+                                    onClick={() => go("/app/projects")}
+                                >
+                                    Projects
+                                </button>
                                 <div className="nav-head-actions">
                                     <button
                                         className="sort-toggle"
@@ -276,17 +238,12 @@ export function Sidebar({
                 {!collapsed && (
                     <>
                         <div className="nav-head-row">
-                            <p className="nav-head">Habits</p>
-                            <div className="nav-head-actions">
-                                <button className="sort-toggle" onClick={() => {
-                                        setDrawerOpen(false);
-                                        onNewHabit();
-                                    }}
-                                    aria-label="New habit"
-                                >
-                                    + New
-                                </button>
-                            </div>
+                            <button
+                                className={`nav-head nav-head-link${view.name === "habits" ? " is-active" : ""}`}
+                                onClick={() => go("/app/habits")}
+                            >
+                                Habits
+                            </button>
                         </div>
                         <nav>
                             {state.habits.map((habit) => (
@@ -326,37 +283,20 @@ export function Sidebar({
                 )}
 
                 <div className="sidebar-foot">
-                    <NavItem
-                        label="Trash"
-                        active={view.name === "trash"}
-                        collapsed={collapsed}
-                        onClick={() => go("/app/trash")}
-                    />
+                    {/* Recently deleted and sign out live in Settings. */}
                     <NavItem
                         label="Settings"
-                        active={view.name === "settings"}
+                        active={view.name === "settings" || view.name === "trash"}
                         collapsed={collapsed}
                         onClick={() => go("/app/settings")}
                     />
-                    {!collapsed && (
-                        <>
-                            <p className="whoami">{state.user.email}</p>
-                            {/* A plain link, not fetch(): signing out is a full navigation to
-                                    Cloudflare Access, and the in-memory app state must not survive it. */}
-                            <a className="signout" href="/logout">
-                                Sign out
-                            </a>
-                        </>
-                    )}
                 </div>
             </aside>
-
-            {drawerShown && <div className="drawer-backdrop" onClick={() => setDrawerOpen(false)} aria-hidden="true" />}
 
             {pendingDelete && (
                 <ConfirmDialog
                     title="Delete project?"
-                    message={deleteMessage(pendingDelete)}
+                    message={projectDeleteMessage(pendingDelete, state.tasks)}
                     confirmLabel="Delete"
                     onConfirm={() => {
                         onDeleteProject(pendingDelete.id);

@@ -11,6 +11,8 @@ interface Props {
     onSubmit: (text: string) => Promise<void>;
     /** Several lines were pasted: hand them to the bulk import instead. */
     onPasteMany: (text: string) => void;
+    /** Phone layout: a short placeholder and a round ↑ button instead of "Add". */
+    compact?: boolean;
 }
 
 /**
@@ -22,7 +24,7 @@ interface Props {
  * keeps native caret, selection and IME behaviour, and the layer only paints
  * backgrounds.
  */
-export function QuickAdd({ preferences, projects, onSubmit, onPasteMany }: Props) {
+export function QuickAdd({ preferences, projects, onSubmit, onPasteMany, compact = false }: Props) {
     const [text, setText] = useState("");
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -95,15 +97,20 @@ export function QuickAdd({ preferences, projects, onSubmit, onPasteMany }: Props
                                 onPasteMany(pasted);
                             }
                         }}
-                        placeholder="Design review #Work p1 every other tuesday at 3pm"
+                        placeholder={compact ? "Add a task…" : "Design review #Work p1 every other tuesday at 3pm"}
                         aria-label="Add a task"
                         autoComplete="off"
                         spellCheck={false}
                     />
                 </div>
 
-                <button className="qa-submit" type="submit" disabled={!text.trim() || busy}>
-                    {busy ? "Adding…" : "Add"}
+                <button
+                    className={`qa-submit${compact ? " is-round" : ""}`}
+                    type="submit"
+                    disabled={!text.trim() || busy}
+                    aria-label="Add task"
+                >
+                    {compact ? "↑" : busy ? "Adding…" : "Add"}
                 </button>
             </div>
 

@@ -279,4 +279,28 @@ export const migrations: Migration[] = [
             ALTER TABLE profile ADD COLUMN inbox_hidden_projects TEXT NOT NULL DEFAULT '[]';
         `,
     },
+    // A task can be a step toward a goal. Deleting the goal keeps its tasks.
+    {
+        version: 18,
+        sql: `
+            ALTER TABLE tasks ADD COLUMN goal_id TEXT REFERENCES goals(id) ON DELETE SET NULL;
+            CREATE INDEX idx_tasks_goal ON tasks(goal_id);
+        `,
+    },
+    // Goals the Inbox leaves out (their steps), alongside the hidden projects.
+    {
+        version: 19,
+        sql: `
+            ALTER TABLE profile ADD COLUMN inbox_hidden_goals TEXT NOT NULL DEFAULT '[]';
+        `,
+    },
+    // The user's own name, entered once at setup. Access gives no name, so the
+    // old "name" column (synced from the login) stays as it was.
+    {
+        version: 20,
+        sql: `
+            ALTER TABLE profile ADD COLUMN first_name TEXT NOT NULL DEFAULT '';
+            ALTER TABLE profile ADD COLUMN last_name TEXT NOT NULL DEFAULT '';
+        `,
+    },
 ];

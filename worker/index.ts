@@ -61,9 +61,13 @@ app.get("/api/state", async (c) =>
 );
 
 app.post("/api/tasks", async (c) => {
-    const { text, timeZone } = await body(c, schemas.quickAddBody);
-    return c.json(await service.quickAddTask(stub(c), text, timeZone), 201);
+    const { text, timeZone, goalId } = await body(c, schemas.quickAddBody);
+    return c.json(await service.quickAddTask(stub(c), text, timeZone, goalId), 201);
 });
+
+app.get("/api/tasks/completed", async (c) =>
+    c.json(await service.listCompletedTasks(stub(c), c.req.query("before"))),
+);
 
 app.post("/api/tasks/import", async (c) => {
     const { text, timeZone } = await body(c, schemas.importBody);
@@ -137,6 +141,8 @@ app.post("/api/habits", async (c) => {
     const input = await body(c, schemas.habitBody);
     return c.json({ habit: await service.createHabit(stub(c), input) }, 201);
 });
+
+app.get("/api/habits", async (c) => c.json(await service.getHabitsMonth(stub(c), c.req.query("month"))));
 
 app.get("/api/habits/:id", async (c) =>
     c.json(await service.getHabit(stub(c), c.req.param("id"), c.req.query("month"))),

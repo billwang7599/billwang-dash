@@ -9,7 +9,7 @@ import type {
     Trash,
 } from "../shared/types.ts";
 import type { Goal, GoalInput } from "../shared/goals.ts";
-import type { DayStatus, HabitDetail, HabitInput, HabitSummary } from "../shared/habits.ts";
+import type { DayStatus, HabitDay, HabitDetail, HabitInput, HabitSummary } from "../shared/habits.ts";
 
 export type { Preferences };
 
@@ -19,6 +19,8 @@ export interface AppState {
     preferences: Preferences;
     habits: HabitSummary[];
     goals: Goal[];
+    /** Tasks completed since Monday in the user's zone. */
+    completedThisWeek: number;
     user: { id: string; email: string; name: string | null; isAdmin: boolean };
 }
 
@@ -52,10 +54,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
     getState: () => request<AppState>("/api/state"),
 
-    createTask: (text: string, timeZone: string) =>
+    /** `goalId` adds the task as a step toward that goal. */
+    createTask: (text: string, timeZone: string, goalId?: string) =>
         request<{ task: Task }>("/api/tasks", {
             method: "POST",
-            body: JSON.stringify({ text, timeZone }),
+            body: JSON.stringify({ text, timeZone, goalId }),
         }),
 
     importTasks: (text: string, timeZone: string) =>
@@ -73,6 +76,12 @@ export const api = {
     completeTask: (id: string) =>
         request<{ task: Task }>(`/api/tasks/${id}/complete`, { method: "POST" }),
 
+    /** Most recent first; pass the last task's completedAt for the next page. */
+    listCompleted: (before?: string) =>
+        request<{ tasks: Task[]; more: boolean }>(
+            `/api/tasks/completed${before ? `?before=${encodeURIComponent(before)}` : ""}`,
+        ),
+
     uncompleteTask: (id: string) =>
         request<{ task: Task }>(`/api/tasks/${id}/uncomplete`, { method: "POST" }),
 
@@ -86,6 +95,10 @@ export const api = {
         request<{ event: CalEvent }>(`/api/events/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
 
     deleteEvent: (id: string) => request<void>(`/api/events/${id}`, { method: "DELETE" }),
+
+    /** Every habit's check-ins for one month, keyed by habit id. */
+    getHabitsMonth: (month?: string) =>
+        request<{ month: string; days: Record<string, HabitDay[]> }>(`/api/habits${month ? `?month=${month}` : ""}`),
 
     getHabit: (id: string, month?: string) =>
         request<HabitDetail>(`/api/habits/${id}${month ? `?month=${month}` : ""}`),
