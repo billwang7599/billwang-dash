@@ -605,9 +605,9 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    background: var(--indigo-soft);
-    color: var(--indigo);
-    border-left: 2px solid var(--c, var(--indigo));
+    background: var(--sage-soft);
+    color: var(--sage);
+    border-left: 2px solid var(--sage);
 }
 .allday.task { background: var(--accent-soft); color: var(--accent); border-left-color: var(--accent); }
 
@@ -675,11 +675,12 @@
 }
 .cal-ev:hover { transform: scale(1.015); box-shadow: var(--shadow-md); z-index: 4; }
 
-/* Google events are filled; tasks are outlined — two sources, two weights. */
+/* Google events are always sage, a colour no task priority uses, so the source
+   is obvious at a glance; tasks keep their priority colours. */
 .cal-ev.gcal {
-    background: color-mix(in srgb, var(--c, #3f4f7a) 15%, var(--card));
-    color: color-mix(in srgb, var(--c, #3f4f7a) 75%, var(--ink));
-    border-left: 2.5px solid var(--c, var(--indigo));
+    background: var(--sage-soft);
+    color: var(--sage);
+    border-left: 2.5px solid var(--sage);
 }
 .cal-ev.task {
     background: var(--card);
@@ -813,7 +814,14 @@
     font-size: 0.88rem;
 }
 .callist label:hover { background: var(--paper-2); }
-.swatch { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.swatch { width: 10px; height: 10px; border-radius: 3px; flex: none; background: var(--sage); }
+.push { margin: 1rem 0 0.4rem; padding: 0.8rem 0.9rem; border: 1px solid var(--rule); border-radius: var(--r-md); }
+.push-toggle { display: flex; align-items: flex-start; gap: 0.65rem; cursor: pointer; }
+.push-toggle input { margin-top: 0.2rem; }
+.push-toggle strong { display: block; font-size: 0.9rem; font-weight: 500; }
+.push-toggle small { display: block; margin-top: 0.15rem; font-size: 0.78rem; color: var(--ink-3); }
+.push-grant p { margin: 0 0 0.6rem; font-size: 0.84rem; color: var(--ink-2); }
+.push-error { margin: 0.6rem 0 0; font-size: 0.82rem; color: var(--accent); }
 .cal-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tag {
     font-family: var(--mono);

@@ -126,7 +126,6 @@ export function WeekCalendar({ timeZone, revision }: Props) {
                                     <span
                                         key={item.id}
                                         className={`allday ${item.kind}`}
-                                        style={item.color ? { ["--c" as string]: item.color } : undefined}
                                         title={item.title}
                                     >
                                         {item.title}
@@ -179,7 +178,6 @@ export function WeekCalendar({ timeZone, revision }: Props) {
                                             height,
                                             left: `${(column / columns) * 100}%`,
                                             width: `${(1 / columns) * 100}%`,
-                                            ...(item.color ? { ["--c" as string]: item.color } : {}),
                                         }}
                                         title={`${item.title} — ${formatInstant(item.start, timeZone)}`}
                                     >

@@ -16,6 +16,8 @@ export function Settings({ preferences, user, onPreferencesChange }: Props) {
     const [error, setError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
     const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
+    const [confirmingPushOff, setConfirmingPushOff] = useState(false);
+    const [pushBusy, setPushBusy] = useState(false);
 
     useEffect(() => {
         api.googleStatus().then(setGoogle).catch((e: Error) => setError(e.message));
@@ -37,6 +39,27 @@ export function Settings({ preferences, user, onPreferencesChange }: Props) {
         setGoogle(await api.disconnectGoogle());
         setNotice("Google Calendar disconnected.");
     }
+
+    async function setPush(enabled: boolean) {
+        setError(null);
+        setPushBusy(true);
+        try {
+            setGoogle(await api.setGooglePush(enabled));
+        } catch (e) {
+            setError((e as Error).message);
+        } finally {
+            setPushBusy(false);
+        }
+    }
+
+    // While tasks are still being pushed, check back until the queue drains.
+    useEffect(() => {
+        if (!google?.push.enabled || google.push.pending === 0) return;
+        const timer = setTimeout(() => {
+            api.googleStatus().then(setGoogle).catch(() => {});
+        }, 3000);
+        return () => clearTimeout(timer);
+    }, [google]);
 
     async function updatePrefs(patch: Partial<Preferences>) {
         setError(null);
@@ -66,8 +89,9 @@ export function Settings({ preferences, user, onPreferencesChange }: Props) {
             <section className="panel">
                 <h2>Google Calendar</h2>
                 <p className="panel-note">
-                    Read-only. Your events appear beside scheduled tasks in the calendar
-                    view; dash never writes to your calendar.
+                    Your Google events appear beside scheduled tasks in the calendar view.
+                    dash can also add your tasks to a separate &ldquo;dash&rdquo; calendar
+                    in Google. It only ever changes that calendar, never your others.
                 </p>
 
                 {google?.connected ? (
@@ -87,6 +111,42 @@ export function Settings({ preferences, user, onPreferencesChange }: Props) {
                             </button>
                         </div>
 
+                        <div className="push">
+                            {google.canWrite ? (
+                                <label className="push-toggle">
+                                    <input
+                                        type="checkbox"
+                                        checked={google.push.enabled}
+                                        disabled={pushBusy}
+                                        onChange={(e) =>
+                                            e.target.checked ? setPush(true) : setConfirmingPushOff(true)
+                                        }
+                                    />
+                                    <span>
+                                        <strong>Show my tasks in Google Calendar</strong>
+                                        <small>
+                                            {google.push.enabled
+                                                ? google.push.pending > 0
+                                                    ? `Syncing, ${google.push.pending} waiting…`
+                                                    : "Up to date. Tasks with a due date are in your dash calendar."
+                                                : "Adds tasks with a due date to a calendar called \u201Cdash\u201D."}
+                                        </small>
+                                    </span>
+                                </label>
+                            ) : (
+                                <div className="push-grant">
+                                    <p>
+                                        To show your tasks in Google, dash needs permission to create its
+                                        own calendar. You'll be asked to approve again.
+                                    </p>
+                                    <a className="btn btn-quiet" href="/api/google/connect">
+                                        Grant access
+                                    </a>
+                                </div>
+                            )}
+                            {google.push.error && <p className="push-error">{google.push.error}</p>}
+                        </div>
+
                         <ul className="callist">
                             {google.calendars.map((cal) => (
                                 <li key={cal.id}>
@@ -96,7 +156,7 @@ export function Settings({ preferences, user, onPreferencesChange }: Props) {
                                             checked={cal.enabled}
                                             onChange={(e) => toggleCalendar(cal.id, e.target.checked)}
                                         />
-                                        <span className="swatch" style={{ background: cal.color }} aria-hidden="true" />
+                                        <span className="swatch" aria-hidden="true" />
                                         <span className="cal-name">{cal.summary}</span>
                                         {cal.primary && <span className="tag">primary</span>}
                                     </label>
@@ -138,10 +198,27 @@ export function Settings({ preferences, user, onPreferencesChange }: Props) {
                 </label>
             </section>
 
+            {confirmingPushOff && (
+                <ConfirmDialog
+                    title="Stop showing tasks in Google?"
+                    message="This deletes the dash calendar from your Google account. Your tasks are not affected, and you can turn it back on."
+                    confirmLabel="Turn off"
+                    onConfirm={() => {
+                        setConfirmingPushOff(false);
+                        void setPush(false);
+                    }}
+                    onCancel={() => setConfirmingPushOff(false)}
+                />
+            )}
+
             {confirmingDisconnect && (
                 <ConfirmDialog
                     title="Disconnect Google Calendar?"
-                    message="Your tasks are not affected. You can connect again at any time."
+                    message={
+                        google?.push.enabled
+                            ? "This also deletes the dash calendar from Google. Your tasks are not affected."
+                            : "Your tasks are not affected. You can connect again at any time."
+                    }
                     confirmLabel="Disconnect"
                     onConfirm={() => {
                         setConfirmingDisconnect(false);

@@ -120,6 +120,12 @@ export const api = {
     disconnectGoogle: () =>
         request<GoogleAccountStatus>("/api/google/disconnect", { method: "POST" }),
 
+    setGooglePush: (enabled: boolean) =>
+        request<GoogleAccountStatus>("/api/google/push", {
+            method: "POST",
+            body: JSON.stringify({ enabled }),
+        }),
+
     setCalendarEnabled: (id: string, enabled: boolean) =>
         request<GoogleAccountStatus>(`/api/google/calendars/${encodeURIComponent(id)}`, {
             method: "PATCH",
