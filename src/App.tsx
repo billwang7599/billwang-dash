@@ -8,6 +8,7 @@ import { GoalsView } from "./components/GoalsView.tsx";
 import { HabitModal } from "./components/HabitModal.tsx";
 import { HabitView } from "./components/HabitView.tsx";
 import { ImportModal } from "./components/ImportModal.tsx";
+import { ProjectFilter } from "./components/ProjectFilter.tsx";
 import { QuickAdd } from "./components/QuickAdd.tsx";
 import { Settings } from "./components/Settings.tsx";
 import { Sidebar } from "./components/Sidebar.tsx";
@@ -305,11 +306,33 @@ export function App() {
         setState((prev) => (prev ? { ...prev, preferences } : prev));
     }, []);
 
+    /**
+     * Applied at once, then saved; a failed save puts the server's copy back.
+     * Hidden projects are a preference so the choice follows the account.
+     */
+    const setInboxHidden = useCallback(
+        (inboxHiddenProjects: string[]) => {
+            setState((prev) =>
+                prev ? { ...prev, preferences: { ...prev.preferences, inboxHiddenProjects } } : prev,
+            );
+            api.setPreferences({ inboxHiddenProjects })
+                .then(({ preferences }) => {
+                    setPreferences(preferences);
+                    setNotice(null);
+                })
+                .catch((e: Error) => {
+                    setNotice(e.message);
+                    api.getState().then(setState).catch(() => {});
+                });
+        },
+        [setPreferences],
+    );
+
     const filtered = useMemo(() => {
         if (!state) return [];
-        return view.name === "project"
-            ? state.tasks.filter((t) => t.projectId === view.id)
-            : state.tasks;
+        if (view.name === "project") return state.tasks.filter((t) => t.projectId === view.id);
+        const hidden = new Set(state.preferences.inboxHiddenProjects);
+        return state.tasks.filter((t) => !hidden.has(t.projectId));
     }, [state, view]);
 
     if (error) {
@@ -417,13 +440,28 @@ export function App() {
                     />
                 ) : (
                     <>
-                        <h1 className="view-title">{titleFor(view, state)}</h1>
+                        {view.name === "inbox" ? (
+                            <div className="view-head">
+                                <h1 className="view-title">{titleFor(view, state)}</h1>
+                                <ProjectFilter
+                                    projects={state.projects}
+                                    hidden={state.preferences.inboxHiddenProjects}
+                                    onChange={setInboxHidden}
+                                />
+                            </div>
+                        ) : (
+                            <h1 className="view-title">{titleFor(view, state)}</h1>
+                        )}
                         <TaskList
                             tasks={filtered}
                             projects={state.projects}
                             timeZone={state.preferences.timeZone}
                             groupByDate={view.name !== "project"}
-                            emptyMessage={emptyFor(view)}
+                            emptyMessage={
+                                filtered.length < state.tasks.length && view.name === "inbox"
+                                    ? "Nothing in the projects you're showing."
+                                    : emptyFor(view)
+                            }
                             onComplete={completeTask}
                             onDelete={(id) =>
                                 setPendingTaskDelete(state.tasks.find((t) => t.id === id) ?? null)

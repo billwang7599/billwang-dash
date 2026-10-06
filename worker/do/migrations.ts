@@ -271,4 +271,12 @@ export const migrations: Migration[] = [
             ALTER TABLE goals_new RENAME TO goals;
         `,
     },
+    // Projects the Inbox leaves out, as a JSON array of ids. Hidden rather than
+    // shown, so a new project appears without anyone opting it in.
+    {
+        version: 17,
+        sql: `
+            ALTER TABLE profile ADD COLUMN inbox_hidden_projects TEXT NOT NULL DEFAULT '[]';
+        `,
+    },
 ];

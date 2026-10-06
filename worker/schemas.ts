@@ -74,6 +74,7 @@ export const createProjectBody = z.object({
 export const preferencesBody = z.object({
     timeZone: timeZone.optional(),
     dateFormat: z.enum(["MDY", "DMY"]).optional(),
+    inboxHiddenProjects: z.array(z.string().min(1).max(100)).max(500).optional(),
 });
 
 export const calendarToggleBody = z.object({

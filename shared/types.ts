@@ -181,4 +181,6 @@ export interface Preferences {
     /** False until the zone is chosen or auto-detected; "UTC" alone cannot say. */
     timeZoneSet: boolean;
     dateFormat: "MDY" | "DMY";
+    /** Project ids the Inbox leaves out. Empty means every project shows. */
+    inboxHiddenProjects: string[];
 }

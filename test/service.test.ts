@@ -165,6 +165,14 @@ describe("preferences validation", () => {
         expect((await patchPrefs({ dateFormat: "YMD" })).status).toBe(400);
     });
 
+    it("takes a list of hidden Inbox projects, and rejects anything else", async () => {
+        expect((await patchPrefs({ inboxHiddenProjects: "abc" })).status).toBe(400);
+        expect((await patchPrefs({ inboxHiddenProjects: [1, 2] })).status).toBe(400);
+        const ok = await patchPrefs({ inboxHiddenProjects: ["p1"] });
+        expect(ok.status).toBe(200);
+        expect((await ok.json<{ preferences: { inboxHiddenProjects: string[] } }>()).preferences.inboxHiddenProjects).toEqual(["p1"]);
+    });
+
     // Generic body() helper behavior -- malformed JSON, not preferences-specific.
     it("rejects a body that is not JSON at all", async () => {
         const res = await SELF.fetch("https://example.com/api/preferences", {

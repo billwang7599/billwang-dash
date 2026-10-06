@@ -82,6 +82,12 @@ export class UserDO extends DurableObject<Env> {
         if (prefs.dateFormat) {
             this.sql.exec("UPDATE profile SET date_format = ? WHERE id = 1", prefs.dateFormat);
         }
+        if (prefs.inboxHiddenProjects) {
+            this.sql.exec(
+                "UPDATE profile SET inbox_hidden_projects = ? WHERE id = 1",
+                JSON.stringify([...new Set(prefs.inboxHiddenProjects)]),
+            );
+        }
     }
 
     async getPreferences(): Promise<Preferences> {
@@ -90,12 +96,14 @@ export class UserDO extends DurableObject<Env> {
                 time_zone: string;
                 time_zone_set: number;
                 date_format: string;
-            }>("SELECT time_zone, time_zone_set, date_format FROM profile WHERE id = 1")
+                inbox_hidden_projects: string;
+            }>("SELECT time_zone, time_zone_set, date_format, inbox_hidden_projects FROM profile WHERE id = 1")
             .one();
         return {
             timeZone: row.time_zone,
             timeZoneSet: row.time_zone_set === 1,
             dateFormat: row.date_format === "DMY" ? "DMY" : "MDY",
+            inboxHiddenProjects: parseIdList(row.inbox_hidden_projects),
         };
     }
 
@@ -332,5 +340,15 @@ export class UserDO extends DurableObject<Env> {
     /** The platform calls this when the alarm the push queue set goes off. */
     alarm(): Promise<void> {
         return this.google.runPush();
+    }
+}
+
+/** A stored JSON id list, repaired to [] if it is ever not one. */
+function parseIdList(json: string): string[] {
+    try {
+        const parsed: unknown = JSON.parse(json);
+        return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string") : [];
+    } catch {
+        return [];
     }
 }

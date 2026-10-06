@@ -180,6 +180,21 @@ describe("preferences", () => {
         expect(prefs.timeZone).toBe("America/Chicago");
         expect(prefs.dateFormat).toBe("DMY");
     });
+
+    it("shows every project in the Inbox until some are hidden, and dedupes the list", async () => {
+        const s = stub("prefs-inbox");
+        expect((await s.getPreferences()).inboxHiddenProjects).toEqual([]);
+
+        await s.setPreferences({ inboxHiddenProjects: ["a", "b", "a"] });
+        expect((await s.getPreferences()).inboxHiddenProjects).toEqual(["a", "b"]);
+
+        // Other preference writes leave it alone.
+        await s.setPreferences({ dateFormat: "DMY" });
+        expect((await s.getPreferences()).inboxHiddenProjects).toEqual(["a", "b"]);
+
+        await s.setPreferences({ inboxHiddenProjects: [] });
+        expect((await s.getPreferences()).inboxHiddenProjects).toEqual([]);
+    });
 });
 
 describe("time zone detection flag", () => {
