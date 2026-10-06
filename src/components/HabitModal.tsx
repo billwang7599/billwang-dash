@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { HabitFreq, HabitInput, HabitSummary } from "../../shared/habits.ts";
+import { habitInputSchema, type HabitFreq, type HabitInput, type HabitSummary } from "../../shared/habits.ts";
 
 interface Props {
     /** Present when editing. */
@@ -37,21 +37,22 @@ export function HabitModal({ habit, onSave, onClose }: Props) {
         return () => window.removeEventListener("keydown", onKey);
     }, [onClose]);
 
-    const canSave = name.trim() !== "" && (freq !== "weekdays" || weekdays.length > 0);
+    const parsed = habitInputSchema.safeParse({
+        name,
+        description,
+        freq,
+        perWeek: freq === "weekly_count" ? perWeek : null,
+        weekdays: freq === "weekdays" ? weekdays : [],
+    });
+    const canSave = parsed.success;
 
     async function save(event: React.FormEvent) {
         event.preventDefault();
-        if (!canSave) return;
+        if (!parsed.success) return;
         setBusy(true);
         setError(null);
         try {
-            await onSave({
-                name: name.trim(),
-                description: description.trim(),
-                freq,
-                perWeek: freq === "weekly_count" ? perWeek : null,
-                weekdays: freq === "weekdays" ? weekdays : [],
-            });
+            await onSave(parsed.data);
             onClose();
         } catch (err) {
             setError((err as Error).message);

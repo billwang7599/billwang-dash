@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { addDays, civilFromKey, civilKey, diffDays, weekday, type Civil } from "./civil.ts";
 
 /**
@@ -31,11 +32,37 @@ export interface HabitStats {
     rate: number | null;
 }
 
-/** What a create or edit sends: a name, an optional description, and a rule. */
-export interface HabitInput extends HabitRule {
-    name: string;
-    description: string;
-}
+/**
+ * What a create or edit sends: a name, an optional description, and a rule. The
+ * Worker parses request bodies with this and the editor checks its form against it.
+ * A rule needs a count when it is "N times a week" and at least one day when it is
+ * "on specific days"; whatever doesn't apply to the chosen frequency is dropped.
+ */
+export const habitInputSchema = z
+    .object({
+        name: z.string().trim().min(1, "is required").max(100),
+        description: z.string().max(1000).optional(),
+        freq: z.enum(["daily", "weekly_count", "weekdays"]),
+        perWeek: z.int().min(1).max(7).nullable().optional(),
+        weekdays: z.array(z.int().min(0).max(6)).optional(),
+    })
+    .superRefine((h, ctx) => {
+        if (h.freq === "weekly_count" && h.perWeek == null) {
+            ctx.addIssue({ code: "custom", path: ["perWeek"], message: "is required" });
+        }
+        if (h.freq === "weekdays" && !h.weekdays?.length) {
+            ctx.addIssue({ code: "custom", path: ["weekdays"], message: "pick at least one day" });
+        }
+    })
+    .transform((h) => ({
+        name: h.name,
+        description: h.description?.trim() ?? "",
+        freq: h.freq,
+        perWeek: h.freq === "weekly_count" ? (h.perWeek ?? null) : null,
+        weekdays: h.freq === "weekdays" ? [...new Set(h.weekdays)].sort((a, b) => a - b) : [],
+    }));
+
+export type HabitInput = z.output<typeof habitInputSchema>;
 
 export interface Habit extends HabitRule {
     id: string;
