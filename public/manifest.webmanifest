@@ -2,6 +2,7 @@
     "name": "dash",
     "short_name": "dash",
     "description": "A todo list and calendar that reads plain English.",
+    "id": "/app",
     "start_url": "/app",
     "scope": "/",
     "display": "standalone",

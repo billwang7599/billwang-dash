@@ -3,6 +3,7 @@ import type { AppState } from "../api.ts";
 import type { View } from "../App.tsx";
 import type { HabitSummary } from "../../shared/habits.ts";
 import type { Project } from "../../shared/types.ts";
+import { NARROW, useMediaQuery } from "../useMediaQuery.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { ProjectSearch } from "./ProjectSearch.tsx";
 
@@ -49,7 +50,26 @@ export function Sidebar({
     onNewHabit,
 }: Props) {
     // Not persisted: collapsing is a session-only UI preference, not a saved one.
-    const [collapsed, setCollapsed] = useState(false);
+    const [collapsedPref, setCollapsed] = useState(false);
+    // On a phone the sidebar is an off-canvas drawer instead, and is never the
+    // narrow initials column -- the drawer has the room for full labels.
+    const narrow = useMediaQuery(NARROW);
+    const collapsed = collapsedPref && !narrow;
+    const [drawerOpen, setDrawerOpen] = useState(false);
+    const drawerShown = narrow && drawerOpen;
+
+    /** Every destination closes the drawer, so the page you picked is what you see. */
+    const go = (path: string) => {
+        setDrawerOpen(false);
+        navigate(path);
+    };
+
+    useEffect(() => {
+        if (!drawerShown) return;
+        const onKey = (e: KeyboardEvent) => e.key === "Escape" && setDrawerOpen(false);
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, [drawerShown]);
     // Not persisted either -- same reasoning as collapsed.
     const [projectSort, setProjectSort] = useState<ProjectSort>("alphabetical");
     const [searchOpen, setSearchOpen] = useState(false);
@@ -85,23 +105,48 @@ export function Sidebar({
 
     return (
         <>
-            <aside className={`sidebar${collapsed ? " is-collapsed" : ""}`}>
+            {/* Phone only (hidden by CSS above the breakpoint): the drawer's handle. */}
+            <header className="mobile-bar">
+                <button
+                    className="mobile-menu"
+                    onClick={() => setDrawerOpen(true)}
+                    aria-label="Open menu"
+                    aria-expanded={drawerShown}
+                    aria-controls="sidebar"
+                >
+                    <svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
+                        <path d="M3 6h14M3 10h14M3 14h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                    </svg>
+                </button>
+                <a className="wordmark" href="/">
+                    dash<span className="dot">.</span>
+                </a>
+            </header>
+
+            <aside
+                id="sidebar"
+                className={`sidebar${collapsed ? " is-collapsed" : ""}${drawerShown ? " is-open" : ""}`}
+            >
                 <div className="sidebar-top">
-                    {/* The tail is dropped by CSS, not here: the narrow-screen layout
-                            keeps the full wordmark even while the menu is collapsed. */}
                     <a className="wordmark" href="/">
                         d<span className="wordmark-tail">ash</span>
                         <span className="dot">.</span>
                     </a>
-                    <button
-                        className="sidebar-toggle"
-                        onClick={() => setCollapsed(!collapsed)}
-                        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-                        aria-expanded={!collapsed}
-                        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-                    >
-                        {collapsed ? "»" : "«"}
-                    </button>
+                    {narrow ? (
+                        <button className="sidebar-toggle" onClick={() => setDrawerOpen(false)} aria-label="Close menu">
+                            ✕
+                        </button>
+                    ) : (
+                        <button
+                            className="sidebar-toggle"
+                            onClick={() => setCollapsed(!collapsed)}
+                            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                            aria-expanded={!collapsed}
+                            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                        >
+                            {collapsed ? "»" : "«"}
+                        </button>
+                    )}
                 </div>
 
                 <nav>
@@ -113,7 +158,7 @@ export function Sidebar({
                             urgent={key === "inbox" && overdueCount > 0}
                             active={view.name === key}
                             collapsed={collapsed}
-                            onClick={() => navigate(path)}
+                            onClick={() => go(path)}
                         />
                     ))}
                 </nav>
@@ -130,7 +175,7 @@ export function Sidebar({
                                     active={view.name === "project" && view.id === project.id}
                                     collapsed={collapsed}
                                     pinned
-                                    onClick={() => navigate(`/app/project/${project.id}`)}
+                                    onClick={() => go(`/app/project/${project.id}`)}
                                     onTogglePin={() => onTogglePin(project.id, false)}
                                     onDelete={() => setPendingDelete(project)}
                                 />
@@ -172,7 +217,7 @@ export function Sidebar({
                                     active={view.name === "project" && view.id === project.id}
                                     collapsed={collapsed}
                                     pinned={false}
-                                    onClick={() => navigate(`/app/project/${project.id}`)}
+                                    onClick={() => go(`/app/project/${project.id}`)}
                                     onTogglePin={() => onTogglePin(project.id, true)}
                                     onDelete={() => setPendingDelete(project)}
                                 />
@@ -186,7 +231,12 @@ export function Sidebar({
                         <div className="nav-head-row">
                             <p className="nav-head">Habits</p>
                             <div className="nav-head-actions">
-                                <button className="sort-toggle" onClick={onNewHabit} aria-label="New habit">
+                                <button className="sort-toggle" onClick={() => {
+                                        setDrawerOpen(false);
+                                        onNewHabit();
+                                    }}
+                                    aria-label="New habit"
+                                >
                                     + New
                                 </button>
                             </div>
@@ -217,7 +267,7 @@ export function Sidebar({
                                         count={habit.stats.streak}
                                         active={view.name === "habit" && view.id === habit.id}
                                         collapsed={false}
-                                        onClick={() => navigate(`/app/habit/${habit.id}`)}
+                                        onClick={() => go(`/app/habit/${habit.id}`)}
                                     />
                                 </div>
                             ))}
@@ -233,13 +283,13 @@ export function Sidebar({
                         label="Trash"
                         active={view.name === "trash"}
                         collapsed={collapsed}
-                        onClick={() => navigate("/app/trash")}
+                        onClick={() => go("/app/trash")}
                     />
                     <NavItem
                         label="Settings"
                         active={view.name === "settings"}
                         collapsed={collapsed}
-                        onClick={() => navigate("/app/settings")}
+                        onClick={() => go("/app/settings")}
                     />
                     {!collapsed && (
                         <>
@@ -253,6 +303,8 @@ export function Sidebar({
                     )}
                 </div>
             </aside>
+
+            {drawerShown && <div className="drawer-backdrop" onClick={() => setDrawerOpen(false)} aria-hidden="true" />}
 
             {pendingDelete && (
                 <ConfirmDialog
@@ -272,7 +324,7 @@ export function Sidebar({
                     projects={[...pinned, ...unpinned]}
                     onSelect={(project) => {
                         setSearchOpen(false);
-                        navigate(`/app/project/${project.id}`);
+                        go(`/app/project/${project.id}`);
                     }}
                     onClose={() => setSearchOpen(false)}
                 />

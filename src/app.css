@@ -8,10 +8,7 @@
        concern; the shell never needs to know its collapsed state. */
     grid-template-columns: auto minmax(0, 1fr);
     min-height: 100vh;
-}
-@media (max-width: 780px) {
-    .shell { grid-template-columns: 1fr; }
-    .sidebar { position: static !important; height: auto !important; }
+    min-height: 100dvh;
 }
 
 .loading,
@@ -19,6 +16,7 @@
     display: grid;
     place-items: center;
     min-height: 100vh;
+    min-height: 100dvh;
     font-family: var(--mono);
     font-size: 0.85rem;
     color: var(--ink-3);
@@ -38,11 +36,13 @@
     position: sticky;
     top: 0;
     height: 100vh;
+    height: 100dvh;
     width: 15.5rem;
     display: flex;
     flex-direction: column;
     gap: 0.4rem;
-    padding: 1.6rem 1rem 1.2rem;
+    /* Landscape phones are wide enough for this layout, with the notch on the left. */
+    padding: 1.6rem 1rem 1.2rem max(1rem, env(safe-area-inset-left));
     background: var(--paper-2);
     border-right: 1px solid var(--rule);
     transition: width 0.18s var(--ease);
@@ -239,28 +239,95 @@
 }
 .signout:hover { color: var(--accent); text-decoration: underline; }
 
-/* Stacked on narrow screens there is no column to narrow, so "collapsed"
-   means hiding the menu outright and leaving just the wordmark and toggle. */
+/* ---- Phone: top bar + drawer --------------------------------------------- */
+
+.mobile-bar,
+.drawer-backdrop { display: none; }
+
+/* 780px matches NARROW in useMediaQuery.ts, which picks the drawer's behaviour. */
 @media (max-width: 780px) {
-    /* Rows stretch to fill the shell by default, which would leave the hidden
-       menu behind as an empty band of sidebar background. */
-    .shell:has(.sidebar.is-collapsed) { align-content: start; }
-    /* The desktop collapse width would clip the toggle row on a stacked layout. */
-    .sidebar.is-collapsed { width: auto; padding-inline: 1rem; }
-    .sidebar.is-collapsed .wordmark-tail { display: inline; }
-    .sidebar.is-collapsed .sidebar-top {
-        flex-direction: row;
-        align-items: baseline;
-        margin-bottom: 0;
+    .shell {
+        grid-template-columns: minmax(0, 1fr);
+        align-content: start;
+        --bar-h: calc(3.25rem + env(safe-area-inset-top));
     }
-    .sidebar.is-collapsed nav,
-    .sidebar.is-collapsed .sidebar-foot { display: none; }
+
+    .mobile-bar {
+        position: sticky;
+        top: 0;
+        z-index: 40;
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        height: var(--bar-h);
+        padding: env(safe-area-inset-top) max(0.5rem, env(safe-area-inset-right)) 0 max(0.5rem, env(safe-area-inset-left));
+        background: var(--paper-2);
+        border-bottom: 1px solid var(--rule);
+    }
+    .mobile-bar .wordmark {
+        font-family: var(--display);
+        font-weight: 600;
+        font-size: 1.25rem;
+        letter-spacing: -0.02em;
+        color: var(--ink);
+        text-decoration: none;
+        font-variation-settings: "SOFT" 30, "WONK" 1;
+    }
+    .mobile-bar .dot { color: var(--accent); }
+    .mobile-menu {
+        display: grid;
+        place-items: center;
+        width: 2.75rem;
+        height: 2.75rem;
+        border: 0;
+        background: none;
+        color: var(--ink);
+        border-radius: var(--r-sm);
+        cursor: pointer;
+    }
+
+    /* Off-canvas until opened. visibility (delayed on close, so the slide still
+       shows) takes the hidden drawer's links out of the tab order. */
+    .sidebar {
+        position: fixed;
+        z-index: 60;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        height: auto;
+        width: min(20rem, 85vw);
+        padding-top: max(1.2rem, env(safe-area-inset-top));
+        padding-bottom: max(1.2rem, env(safe-area-inset-bottom));
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        transform: translateX(-100%);
+        visibility: hidden;
+        transition: transform 0.22s var(--ease), visibility 0s linear 0.22s;
+    }
+    .sidebar.is-open {
+        transform: none;
+        visibility: visible;
+        box-shadow: var(--shadow-lg);
+        transition: transform 0.22s var(--ease), visibility 0s;
+    }
+    .sidebar-top { margin-bottom: 1rem; }
+
+    .drawer-backdrop {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        background: rgb(26 24 21 / 0.35);
+        animation: fade-in 0.15s var(--ease);
+    }
+    /* The page behind an open drawer shouldn't scroll under your thumb. */
+    html:has(.sidebar.is-open) { overflow: hidden; }
 }
 
 /* ---- Main --------------------------------------------------------------- */
 
 .main {
-    padding: clamp(1.5rem, 3.5vw, 2.75rem) clamp(1.25rem, 4vw, 3rem) 4rem;
+    padding: clamp(1.5rem, 3.5vw, 2.75rem) clamp(1.25rem, 4vw, 3rem) calc(4rem + env(safe-area-inset-bottom));
     max-width: 62rem;
     width: 100%;
 }
@@ -519,10 +586,12 @@
     display: flex;
     flex-direction: column;
     height: 100vh;
+    height: 100dvh;
     overflow: hidden;
 }
+/* Fills what the top bar leaves; the grid scrolls inside, not the page. */
 @media (max-width: 780px) {
-    .cal-wrap { height: 85vh; }
+    .cal-wrap { height: calc(100dvh - var(--bar-h)); }
 }
 
 .cal-head {
@@ -556,7 +625,46 @@
     cursor: pointer;
     transition: all 0.18s var(--ease);
 }
+/* The primary action, so it's filled like the app's other primary buttons
+   rather than outlined like the navigation beside it. */
+.cal-nav .cal-new {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-right: 0.5rem;
+    background: var(--ink);
+    border-color: var(--ink);
+    color: var(--paper);
+    font-weight: 500;
+    padding-inline: 0.9rem 1rem;
+    border-radius: 100px;
+}
+.cal-nav .cal-new:hover { background: var(--accent); border-color: var(--accent); }
 .cal-nav button:hover { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+/* Segmented Day / 3 days / Week switch, between the title and the nav. */
+.cal-modes {
+    display: flex;
+    margin-left: auto;
+    padding: 2px;
+    border: 1px solid var(--rule-2);
+    border-radius: var(--r-sm);
+    background: var(--paper-2);
+}
+.cal-modes button {
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 0.8rem;
+    color: var(--ink-3);
+    padding: 0.25rem 0.65rem;
+    border-radius: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.16s var(--ease), color 0.16s var(--ease);
+}
+.cal-modes button:hover { color: var(--ink); }
+.cal-modes button.is-active { background: var(--card); color: var(--ink); box-shadow: var(--shadow-sm); }
 
 .cal-error {
     margin: 0;
@@ -568,7 +676,7 @@
 
 .cal-daybar {
     display: grid;
-    grid-template-columns: 3.2rem repeat(7, minmax(0, 1fr));
+    grid-template-columns: 3.2rem repeat(var(--days, 7), minmax(0, 1fr));
     border-bottom: 1px solid var(--rule);
     background: var(--paper-2);
 }
@@ -609,18 +717,23 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    background: var(--sage-soft);
-    color: var(--sage);
-    border-left: 2px solid var(--sage);
+    background: color-mix(in srgb, var(--c, var(--sage)) 15%, var(--card));
+    color: color-mix(in srgb, var(--c, var(--sage)) 75%, var(--ink));
+    border-left: 2px solid var(--c, var(--sage));
 }
+.allday.event { background: var(--teal); color: var(--paper); border-left-color: color-mix(in srgb, var(--teal) 60%, black); }
 .allday.task { background: var(--accent-soft); color: var(--accent); border-left-color: var(--accent); }
 
 .cal-grid {
     display: grid;
-    grid-template-columns: 3.2rem repeat(7, minmax(0, 1fr));
+    grid-template-columns: 3.2rem repeat(var(--days, 7), minmax(0, 1fr));
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+    /* Vertical only. overflow-y: auto quietly makes x scrollable too, so any
+       sliver of overflow let iOS pan the grid sideways past the last day. */
+    overflow-x: hidden;
+    touch-action: pan-y pinch-zoom;
     position: relative;
 }
 
@@ -642,6 +755,9 @@
     position: relative;
     border-right: 1px solid var(--rule);
     min-width: 0;
+    /* Pressing and dragging draws an event, so dragging must not select text. */
+    user-select: none;
+    cursor: cell;
 }
 .cal-day:last-child { border-right: 0; }
 .cal-day.is-today { background: color-mix(in srgb, var(--amber) 3%, transparent); }
@@ -680,14 +796,30 @@
     cursor: pointer;
     transition: transform 0.15s var(--ease), box-shadow 0.15s var(--ease);
 }
-.cal-ev:hover { transform: scale(1.015); box-shadow: var(--shadow-md); z-index: 4; }
+/* Hover-capable devices only: iOS applies :hover on touch and keeps it, and the
+   enlarged event was the overflow that panned the grid sideways. */
+@media (hover: hover) {
+    .cal-ev:hover { transform: scale(1.015); box-shadow: var(--shadow-md); z-index: 4; }
+}
 
-/* Google events are always sage, a colour no task priority uses, so the source
-   is obvious at a glance; tasks keep their priority colours. */
+/* Google events take their calendar's own colour (--c, set from the data), with
+   sage as the fallback; they are filled, while tasks are outlined. */
 .cal-ev.gcal {
-    background: var(--sage-soft);
-    color: var(--sage);
-    border-left: 2.5px solid var(--sage);
+    background: color-mix(in srgb, var(--c, var(--sage)) 15%, var(--card));
+    color: color-mix(in srgb, var(--c, var(--sage)) 75%, var(--ink));
+    border-left: 2.5px solid var(--c, var(--sage));
+}
+/* dash's own events are solid; the one being drawn is lighter and ignores the pointer. */
+.cal-ev.event {
+    background: var(--teal);
+    color: var(--paper);
+    border-left: 2.5px solid color-mix(in srgb, var(--teal) 60%, black);
+}
+.cal-ev.is-draft {
+    opacity: 0.8;
+    pointer-events: none;
+    box-shadow: var(--shadow-md);
+    z-index: 5;
 }
 .cal-ev.task {
     background: var(--card);
@@ -812,6 +944,25 @@
     cursor: pointer;
 }
 .habit-day-btn.is-on { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+
+/* ---- Event editor -------------------------------------------------------- */
+
+.event-edit { width: min(30rem, 100%); }
+.event-allday { display: flex; align-items: center; gap: 0.5rem; margin: 0.2rem 0 0.9rem; font-size: 0.86rem; color: var(--ink-2); }
+.event-fields { display: grid; grid-template-columns: 1fr auto; gap: 0.6rem 0.8rem; margin-bottom: 1rem; }
+.event-fields label { display: flex; flex-direction: column; gap: 0.25rem; }
+.event-fields label > span { font-size: 0.74rem; color: var(--ink-3); }
+.event-fields input {
+    font: inherit;
+    font-size: 0.88rem;
+    padding: 0.4rem 0.5rem;
+    border: 1px solid var(--rule-2);
+    border-radius: var(--r-sm);
+    background: var(--paper);
+    color: var(--ink);
+}
+.event-fields input:focus { outline: none; border-color: var(--ink-3); }
+.event-delete { margin-right: auto; }
 
 /* ---- Calendar event details ---------------------------------------------- */
 
@@ -1232,4 +1383,70 @@
     font-size: 0.85rem;
     color: var(--ink-3);
     padding: 0.5rem;
+}
+
+/* ---- Touch --------------------------------------------------------------- */
+
+/* Without hover these would be unreachable, so they're always shown. */
+@media (hover: none) {
+    .task-delete { opacity: 1; }
+    /* In flow beside the row rather than over the count, which stays visible. */
+    .nav-row { display: flex; align-items: center; gap: 0.3rem; }
+    .nav-row > .nav-item { flex: 1; min-width: 0; }
+    .row-actions { position: static; transform: none; opacity: 1; flex: none; }
+    .nav-row:hover .nav-count { opacity: 1; }
+}
+
+@media (pointer: coarse) {
+    /* Fingers need ~44px. The small round checks keep their look and grow an
+       invisible hit area instead. */
+    .check,
+    .habit-check { position: relative; }
+    .check::after,
+    .habit-check::after { content: ""; position: absolute; inset: -12px; }
+
+    .nav-item { padding-block: 0.7rem; }
+    .row-action,
+    .sort-toggle { padding: 0.45rem 0.65rem; }
+    .task-delete { padding: 0.6rem; }
+    .cal-nav button { padding: 0.5rem 0.85rem; }
+    .cal-modes button { padding: 0.45rem 0.7rem; }
+    .habit-step { padding: 0.45rem 0.8rem; }
+    .btn { padding-block: 0.65rem; }
+
+    /* iOS zooms the page into any field under 16px; the quick-add highlight
+       layer must match its input exactly, so it moves with it. */
+    .qa-input,
+    .qa-highlight,
+    .field input,
+    .field select,
+    .modal-grid input,
+    .modal-grid select,
+    .modal-desc,
+    .event-fields input { font-size: 16px; }
+}
+
+/* ---- Narrow screens ------------------------------------------------------ */
+
+@media (max-width: 780px) {
+    .main:not(.main-full) { padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right)); }
+    .view-title { margin-top: 1.4rem; }
+
+    .cal-head { flex-wrap: wrap; gap: 0.6rem; padding: 0.7rem 0.8rem; }
+    /* Title and view switch share the first row; the nav gets a row of its own. */
+    .cal-nav { flex-basis: 100%; justify-content: flex-end; }
+    .cal-nav .cal-new { margin-right: auto; }
+    .cal-nav button { white-space: nowrap; }
+    /* One column has room for the whole all-day title. */
+    .allday { white-space: normal; font-size: 0.72rem; }
+
+    .habit-head,
+    .trash-head,
+    .trash-row { flex-wrap: wrap; }
+    .habit-actions { margin-top: 0; }
+
+    .modal-backdrop { padding: 1rem 0.75rem calc(1rem + env(safe-area-inset-bottom)); }
+    .modal { padding: 1.1rem 1rem 1rem; }
+    .modal-actions { flex-wrap: wrap; }
+    .panel { padding: 1.1rem 1rem; }
 }

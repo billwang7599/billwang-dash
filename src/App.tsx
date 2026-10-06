@@ -266,7 +266,8 @@ export function App() {
     if (error) {
         return (
             <div className="fatal">
-                <h1>Couldn’t load</h1>
+                {/* The service worker can serve this shell with no network, so say why it's empty. */}
+                <h1>{navigator.onLine ? "Couldn’t load" : "You’re offline"}</h1>
                 <p>{error}</p>
             </div>
         );
