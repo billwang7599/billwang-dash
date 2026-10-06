@@ -22,6 +22,7 @@ import type {
     Project,
     Recurrence,
     Task,
+    Trash,
 } from "../shared/types.ts";
 
 /**
@@ -48,6 +49,8 @@ interface TaskRow extends Record<string, SqlStorageValue> {
     sort_order: number;
     created_at: string;
     updated_at: string;
+    deleted_at: string | null;
+    trashed_with: string | null;
 }
 
 interface ProjectRow extends Record<string, SqlStorageValue> {
@@ -58,6 +61,7 @@ interface ProjectRow extends Record<string, SqlStorageValue> {
     sort_order: number;
     created_at: string;
     pinned: number;
+    deleted_at: string | null;
 }
 
 const toProject = (r: ProjectRow): Project => ({
@@ -75,7 +79,6 @@ export interface TaskInput {
     description?: string;
     projectName?: string | null;
     projectId?: string | null;
-    labels?: string[];
     priority?: Priority;
     due?: DueDate | null;
     deadline?: string | null;
@@ -239,6 +242,37 @@ export class UserDO extends DurableObject<Env> {
                 INSERT INTO _migrations (id) VALUES (7);
             `);
         }
+
+        if (version < 8) {
+            sql.exec(`
+                DROP TABLE task_labels;
+
+                INSERT INTO _migrations (id) VALUES (8);
+            `);
+        }
+
+        if (version < 9) {
+            // Soft delete. trashed_with is the project whose deletion took a task to
+            // the trash, so a restore knows which tasks went with it. NULL means the
+            // task was trashed on its own.
+            sql.exec(`
+                ALTER TABLE projects ADD COLUMN deleted_at TEXT;
+                ALTER TABLE tasks ADD COLUMN deleted_at TEXT;
+                ALTER TABLE tasks ADD COLUMN trashed_with TEXT;
+
+                INSERT INTO _migrations (id) VALUES (9);
+            `);
+        }
+
+        if (version < 10) {
+            // Existing accounts that moved off the UTC default already chose a zone.
+            sql.exec(`
+                ALTER TABLE profile ADD COLUMN time_zone_set INTEGER NOT NULL DEFAULT 0;
+                UPDATE profile SET time_zone_set = 1 WHERE time_zone != 'UTC';
+
+                INSERT INTO _migrations (id) VALUES (10);
+            `);
+        }
     }
 
     // ---- Profile -----------------------------------------------------------
@@ -249,7 +283,10 @@ export class UserDO extends DurableObject<Env> {
 
     async setPreferences(prefs: Partial<Preferences>): Promise<void> {
         if (prefs.timeZone) {
-            this.sql.exec("UPDATE profile SET time_zone = ? WHERE id = 1", prefs.timeZone);
+            this.sql.exec(
+                "UPDATE profile SET time_zone = ?, time_zone_set = 1 WHERE id = 1",
+                prefs.timeZone,
+            );
         }
         if (prefs.dateFormat) {
             this.sql.exec("UPDATE profile SET date_format = ? WHERE id = 1", prefs.dateFormat);
@@ -260,11 +297,13 @@ export class UserDO extends DurableObject<Env> {
         const row = this.sql
             .exec<{
                 time_zone: string;
+                time_zone_set: number;
                 date_format: string;
-            }>("SELECT time_zone, date_format FROM profile WHERE id = 1")
+            }>("SELECT time_zone, time_zone_set, date_format FROM profile WHERE id = 1")
             .one();
         return {
             timeZone: row.time_zone,
+            timeZoneSet: row.time_zone_set === 1,
             dateFormat: row.date_format === "DMY" ? "DMY" : "MDY",
         };
     }
@@ -273,7 +312,7 @@ export class UserDO extends DurableObject<Env> {
 
     async listProjects(): Promise<Project[]> {
         return this.sql
-            .exec<ProjectRow>("SELECT * FROM projects ORDER BY is_inbox DESC, sort_order, name")
+            .exec<ProjectRow>("SELECT * FROM projects WHERE deleted_at IS NULL ORDER BY is_inbox DESC, sort_order, name")
             .toArray()
             .map(toProject);
     }
@@ -293,26 +332,44 @@ export class UserDO extends DurableObject<Env> {
     }
 
     async setProjectPinned(id: string, pinned: boolean): Promise<Project | null> {
-        this.sql.exec("UPDATE projects SET pinned = ? WHERE id = ?", pinned ? 1 : 0, id);
-        const [row] = this.sql.exec<ProjectRow>("SELECT * FROM projects WHERE id = ?", id).toArray();
+        this.sql.exec(
+            "UPDATE projects SET pinned = ? WHERE id = ? AND deleted_at IS NULL",
+            pinned ? 1 : 0, id,
+        );
+        const [row] = this.sql
+            .exec<ProjectRow>("SELECT * FROM projects WHERE id = ? AND deleted_at IS NULL", id)
+            .toArray();
         return row ? toProject(row) : null;
     }
 
     /** False if the Inbox was targeted; it is the fallback for untagged tasks. */
     async deleteProject(id: string): Promise<boolean> {
         if (id === INBOX_ID) return false;
-        // Tasks and their labels go via ON DELETE CASCADE (foreign keys are on).
-        this.sql.exec("DELETE FROM projects WHERE id = ?", id);
+        const now = new Date().toISOString();
+        // Tasks already in the trash were deleted on their own, so they are not
+        // tagged and a restore of the project leaves them there.
+        this.sql.exec(
+            "UPDATE tasks SET deleted_at = ?, trashed_with = ? WHERE project_id = ? AND deleted_at IS NULL",
+            now, id, id,
+        );
+        this.sql.exec(
+            "UPDATE projects SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
+            now, id,
+        );
         return true;
     }
 
     async hasProject(id: string): Promise<boolean> {
-        return this.sql.exec("SELECT 1 FROM projects WHERE id = ?", id).toArray().length > 0;
+        return (
+            this.sql
+                .exec("SELECT 1 FROM projects WHERE id = ? AND deleted_at IS NULL", id)
+                .toArray().length > 0
+        );
     }
 
     private findProjectByName(name: string): Project | null {
         const [row] = this.sql
-            .exec<ProjectRow>("SELECT * FROM projects WHERE name = ? COLLATE NOCASE LIMIT 1", name)
+            .exec<ProjectRow>("SELECT * FROM projects WHERE name = ? COLLATE NOCASE AND deleted_at IS NULL LIMIT 1", name)
             .toArray();
         return row ? toProject(row) : null;
     }
@@ -320,7 +377,9 @@ export class UserDO extends DurableObject<Env> {
     // ---- Tasks -------------------------------------------------------------
 
     async listTasks(options: { includeCompleted?: boolean } = {}): Promise<Task[]> {
-        const where = options.includeCompleted ? "" : "WHERE completed = 0";
+        const where = options.includeCompleted
+            ? "WHERE deleted_at IS NULL"
+            : "WHERE deleted_at IS NULL AND completed = 0";
         const rows = this.sql
             .exec<TaskRow>(
                 `SELECT * FROM tasks ${where}
@@ -364,8 +423,14 @@ export class UserDO extends DurableObject<Env> {
             now,
         );
 
-        this.replaceLabels(id, input.labels ?? []);
         return (await this.getTask(id))!;
+    }
+
+    /** Bulk create. No real I/O between inserts, so they commit together. */
+    async createTasks(inputs: TaskInput[]): Promise<Task[]> {
+        const tasks: Task[] = [];
+        for (const input of inputs) tasks.push(await this.createTask(input));
+        return tasks;
     }
 
     async updateTask(id: string, patch: Partial<TaskInput>): Promise<Task | null> {
@@ -404,7 +469,6 @@ export class UserDO extends DurableObject<Env> {
             );
         }
 
-        if (patch.labels !== undefined) this.replaceLabels(id, patch.labels);
         return this.getTask(id);
     }
 
@@ -450,15 +514,106 @@ export class UserDO extends DurableObject<Env> {
     }
 
     async deleteTask(id: string): Promise<void> {
-        this.sql.exec("DELETE FROM tasks WHERE id = ?", id);
+        this.sql.exec(
+            "UPDATE tasks SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
+            new Date().toISOString(), id,
+        );
     }
 
     async getTask(id: string): Promise<Task | null> {
         const rows = this.sql
-            .exec<TaskRow>("SELECT * FROM tasks WHERE id = ?", id)
+            .exec<TaskRow>("SELECT * FROM tasks WHERE id = ? AND deleted_at IS NULL", id)
             .toArray();
         if (rows.length === 0) return null;
         return this.hydrate(rows)[0];
+    }
+
+    // ---- Trash -------------------------------------------------------------
+
+    async getTrash(): Promise<Trash> {
+        const projectRows = this.sql
+            .exec<ProjectRow>(
+                "SELECT * FROM projects WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC",
+            )
+            .toArray();
+        const projects = projectRows.map((r) => ({
+            ...toProject(r),
+            deletedAt: r.deleted_at!,
+            // Only the tasks that went with it; ones trashed earlier stay behind on restore.
+            taskCount: this.sql
+                .exec<{ n: number }>(
+                    "SELECT COUNT(*) AS n FROM tasks WHERE trashed_with = ?",
+                    r.id,
+                )
+                .one().n,
+        }));
+
+        // A task inside a trashed project is covered by that project's row.
+        const taskRows = this.sql
+            .exec<TaskRow>(
+                `SELECT * FROM tasks
+                 WHERE deleted_at IS NOT NULL
+                   AND project_id IN (SELECT id FROM projects WHERE deleted_at IS NULL)
+                 ORDER BY deleted_at DESC`,
+            )
+            .toArray();
+        const tasks = this.hydrate(taskRows).map((t, i) => ({
+            ...t,
+            deletedAt: taskRows[i].deleted_at!,
+        }));
+
+        return { projects, tasks };
+    }
+
+    /**
+     * Brings back the project and the tasks that were trashed with it. Refused if
+     * a live project now has the same name, so names stay unique.
+     */
+    async restoreProject(
+        id: string,
+    ): Promise<{ project: Project } | { error: "not_found" } | { error: "name_taken"; name: string }> {
+        const [row] = this.sql
+            .exec<ProjectRow>(
+                "SELECT * FROM projects WHERE id = ? AND deleted_at IS NOT NULL",
+                id,
+            )
+            .toArray();
+        if (!row) return { error: "not_found" };
+        if (this.findProjectByName(row.name)) return { error: "name_taken", name: row.name };
+
+        this.sql.exec(
+            "UPDATE tasks SET deleted_at = NULL, trashed_with = NULL WHERE trashed_with = ?",
+            id,
+        );
+        this.sql.exec("UPDATE projects SET deleted_at = NULL WHERE id = ?", id);
+        return { project: toProject({ ...row, deleted_at: null }) };
+    }
+
+    /** Null if the task isn't in the trash or its project still is. */
+    async restoreTask(id: string): Promise<Task | null> {
+        this.sql.exec(
+            `UPDATE tasks SET deleted_at = NULL
+             WHERE id = ? AND deleted_at IS NOT NULL
+               AND project_id IN (SELECT id FROM projects WHERE deleted_at IS NULL)`,
+            id,
+        );
+        return this.getTask(id);
+    }
+
+    // Permanent deletes only touch rows already in the trash. Tasks go with their
+    // project via ON DELETE CASCADE (foreign keys are on).
+
+    async purgeProject(id: string): Promise<void> {
+        this.sql.exec("DELETE FROM projects WHERE id = ? AND deleted_at IS NOT NULL", id);
+    }
+
+    async purgeTask(id: string): Promise<void> {
+        this.sql.exec("DELETE FROM tasks WHERE id = ? AND deleted_at IS NOT NULL", id);
+    }
+
+    async emptyTrash(): Promise<void> {
+        this.sql.exec("DELETE FROM projects WHERE deleted_at IS NOT NULL");
+        this.sql.exec("DELETE FROM tasks WHERE deleted_at IS NOT NULL");
     }
 
     // ---- Google Calendar (read-only) ---------------------------------------
@@ -594,7 +749,7 @@ export class UserDO extends DurableObject<Env> {
 
         const rows = this.sql
             .exec<TaskRow>(
-                "SELECT * FROM tasks WHERE completed = 0 AND due_date IS NOT NULL AND due_date BETWEEN ? AND ?",
+                "SELECT * FROM tasks WHERE deleted_at IS NULL AND completed = 0 AND due_date IS NOT NULL AND due_date BETWEEN ? AND ?",
                 startISO.slice(0, 10),
                 endISO.slice(0, 10),
             )
@@ -705,30 +860,12 @@ export class UserDO extends DurableObject<Env> {
 
     // ---- Helpers -----------------------------------------------------------
 
-    /** Loads labels for a batch of rows in one query rather than N. */
     private hydrate(rows: TaskRow[]): Task[] {
-        if (rows.length === 0) return [];
-
-        const labelsByTask = new Map<string, string[]>();
-        const placeholders = rows.map(() => "?").join(",");
-        const labelRows = this.sql
-            .exec<{ task_id: string; label: string }>(
-                `SELECT task_id, label FROM task_labels WHERE task_id IN (${placeholders}) ORDER BY label`,
-                ...rows.map((r) => r.id),
-            )
-            .toArray();
-        for (const { task_id, label } of labelRows) {
-            const list = labelsByTask.get(task_id);
-            if (list) list.push(label);
-            else labelsByTask.set(task_id, [label]);
-        }
-
         return rows.map((r) => ({
             id: r.id,
             content: r.content,
             description: r.description,
             projectId: r.project_id,
-            labels: labelsByTask.get(r.id) ?? [],
             priority: r.priority as Priority,
             due: r.due_date
                 ? {
@@ -747,16 +884,6 @@ export class UserDO extends DurableObject<Env> {
             createdAt: r.created_at,
             updatedAt: r.updated_at,
         }));
-    }
-
-    private replaceLabels(taskId: string, labels: string[]) {
-        this.sql.exec("DELETE FROM task_labels WHERE task_id = ?", taskId);
-        for (const label of new Set(labels.map((l) => l.trim()).filter(Boolean))) {
-            this.sql.exec(
-                "INSERT INTO task_labels (task_id, label) VALUES (?, ?)",
-                taskId, label,
-            );
-        }
     }
 
     private nextOrder(table: "tasks" | "projects"): number {

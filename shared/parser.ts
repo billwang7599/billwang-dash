@@ -125,7 +125,7 @@ export function parseQuickAdd(
     };
 
     // Unambiguous sigils first, shielding the date recognisers from things
-    // like "#jan-launch" or "@tomorrow-crew".
+    // like "#jan-launch".
 
     let deadline: string | null = null;
     scan(/\{([^}]+)\}/, "deadline", (m) => {
@@ -137,28 +137,11 @@ export function parseQuickAdd(
         return true;
     });
 
-    // `(?<!\S)` anchors each sigil to the start of a word, so "C#" stays text and
-    // "bill@example.com" stays an email rather than becoming a label.
+    // `(?<!\S)` anchors the sigil to the start of a word, so "C#" stays text.
     let projectName: string | null = null;
     scan(/(?<!\S)#(?:"([^"]+)"|'([^']+)'|([^\s#@]+))/, "project", (m) => {
         if (projectName !== null) return false;
         projectName = (m[1] ?? m[2] ?? m[3]).trim();
-        return true;
-    });
-
-    const labels: string[] = [];
-    // Requires a letter after "@" so clock times like "@5pm" stay times.
-    scan(/(?<!\S)@(?:"([^"]+)"|'([^']+)'|([A-Za-z_][^\s#@]*))/, "label", (m) => {
-        const label = (m[1] ?? m[2] ?? m[3]).trim();
-        if (!label || labels.includes(label)) return false;
-        labels.push(label);
-        return true;
-    });
-
-    let assignee: string | null = null;
-    scan(/(?<!\S)\+([A-Za-z][^\s#@+]*)/, "assignee", (m) => {
-        if (assignee !== null) return false;
-        assignee = m[1];
         return true;
     });
 
@@ -502,12 +485,10 @@ export function parseQuickAdd(
         content: stripSpans(raw, spans),
         raw,
         projectName,
-        labels,
         priority,
         due,
         deadline,
         durationMinutes,
-        assignee,
         tokens: tokens.sort((a, b) => a.start - b.start),
     };
 }

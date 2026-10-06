@@ -65,6 +65,11 @@ app.post("/api/tasks", async (c) => {
     return c.json(await service.quickAddTask(stub(c), text, timeZone), 201);
 });
 
+app.post("/api/tasks/import", async (c) => {
+    const { text, timeZone } = await body(c, schemas.importBody);
+    return c.json(await service.importTasks(stub(c), text, timeZone), 201);
+});
+
 app.patch("/api/tasks/:id", async (c) =>
     c.json({
         task: await service.updateTask(
@@ -85,6 +90,31 @@ app.post("/api/tasks/:id/uncomplete", async (c) =>
 
 app.delete("/api/tasks/:id", async (c) => {
     await service.deleteTask(stub(c), c.req.param("id"));
+    return c.body(null, 204);
+});
+
+app.get("/api/trash", async (c) => c.json(await service.getTrash(stub(c))));
+
+app.post("/api/trash/projects/:id/restore", async (c) =>
+    c.json({ project: await service.restoreProject(stub(c), c.req.param("id")) }),
+);
+
+app.post("/api/trash/tasks/:id/restore", async (c) =>
+    c.json({ task: await service.restoreTask(stub(c), c.req.param("id")) }),
+);
+
+app.delete("/api/trash/projects/:id", async (c) => {
+    await service.purgeProject(stub(c), c.req.param("id"));
+    return c.body(null, 204);
+});
+
+app.delete("/api/trash/tasks/:id", async (c) => {
+    await service.purgeTask(stub(c), c.req.param("id"));
+    return c.body(null, 204);
+});
+
+app.delete("/api/trash", async (c) => {
+    await service.emptyTrash(stub(c));
     return c.body(null, 204);
 });
 

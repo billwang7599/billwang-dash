@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseQuickAdd } from "../shared/parser.ts";
 import { nextOccurrence } from "../shared/parser.ts";
 import { civilFromKey, civilKey } from "../shared/civil.ts";
+import { splitImportLines } from "../shared/import.ts";
 
 // Monday 2026-08-03, 10:00 America/Chicago.
 const NOW = new Date("2026-08-03T15:00:00Z");
@@ -12,10 +13,9 @@ const parse = (input: string) =>
 
 describe("content extraction", () => {
     it("strips every recognised token", () => {
-        const r = parse("Review specs #Work @urgent p1 tomorrow at 5pm for 90m");
+        const r = parse("Review specs #Work p1 tomorrow at 5pm for 90m");
         expect(r.content).toBe("Review specs");
         expect(r.projectName).toBe("Work");
-        expect(r.labels).toEqual(["urgent"]);
         expect(r.priority).toBe(1);
         expect(r.due?.date).toBe("2026-08-04");
         expect(r.due?.time).toBe("17:00");
@@ -29,22 +29,19 @@ describe("content extraction", () => {
         expect(r.priority).toBe(4);
     });
 
-    it("supports quoted multi-word projects and labels", () => {
-        const r = parse('Ship it #"Q3 Launch" @"deep work"');
+    it("supports quoted multi-word projects", () => {
+        const r = parse('Ship it #"Q3 Launch"');
         expect(r.content).toBe("Ship it");
         expect(r.projectName).toBe("Q3 Launch");
-        expect(r.labels).toEqual(["deep work"]);
     });
 
-    it("collects multiple labels", () => {
-        const r = parse("Email team @work @email @followup");
-        expect(r.labels).toEqual(["work", "email", "followup"]);
-        expect(r.content).toBe("Email team");
+    it("leaves @mentions and +names as plain text", () => {
+        const r = parse("Email @bob +alice about it");
+        expect(r.content).toBe("Email @bob +alice about it");
     });
 
     it("does not treat a sigil inside a word as a token", () => {
         const r = parse("Reply to bill@example.com about C#");
-        expect(r.labels).toEqual([]);
         expect(r.content).toBe("Reply to bill@example.com about C#");
     });
 });
@@ -317,5 +314,21 @@ describe("nextOccurrence", () => {
     it("advances yearly rules past the current date", () => {
         const r = rule({ freq: "yearly", month: 1, monthDay: 27 });
         expect(next(r, "2027-01-27")).toBe("2028-01-27");
+    });
+});
+
+describe("import line splitting", () => {
+    it("splits on newlines, drops blanks, and strips list bullets", () => {
+        const text = "Buy milk\r\n\n  - Call mom tomorrow\n* Pay rent #Home\n\u2022 Stretch\n   \n";
+        expect(splitImportLines(text)).toEqual([
+            "Buy milk",
+            "Call mom tomorrow",
+            "Pay rent #Home",
+            "Stretch",
+        ]);
+    });
+
+    it("keeps a dash that is part of the task", () => {
+        expect(splitImportLines("3-4pm focus block")).toEqual(["3-4pm focus block"]);
     });
 });

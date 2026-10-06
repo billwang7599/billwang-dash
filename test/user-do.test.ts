@@ -1,4 +1,4 @@
-import { SELF, env } from "cloudflare:test";
+import { SELF, env, runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
 const stub = (name: string) => env.USER_DO.getByName(name);
@@ -55,11 +55,10 @@ describe("UserDO storage", () => {
         expect(await stub("u7").setProjectPinned("ghost", true)).toBeNull();
     });
 
-    it("round-trips labels and due dates", async () => {
+    it("round-trips due dates", async () => {
         const s = stub("u5");
         const created = await s.createTask({
             content: "Review",
-            labels: ["urgent", "work"],
             priority: 1,
             due: { date: "2026-08-04", time: "17:00", recurrence: null },
             durationMinutes: 90,
@@ -67,7 +66,6 @@ describe("UserDO storage", () => {
 
         const [task] = await s.listTasks();
         expect(task.id).toBe(created.id);
-        expect(task.labels).toEqual(["urgent", "work"]);
         expect(task.due).toEqual({ date: "2026-08-04", time: "17:00", recurrence: null });
         expect(task.durationMinutes).toBe(90);
     });
@@ -151,16 +149,15 @@ describe("quick add over HTTP", () => {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
-                text: "Review specs #Work @urgent p1 tomorrow at 5pm",
+                text: "Review specs #Work p1 tomorrow at 5pm",
                 timeZone: "America/Chicago",
             }),
         });
         expect(res.status).toBe(201);
 
-        const { task } = await res.json<{ task: { content: string; priority: number; labels: string[]; due: { time: string } | null } }>();
+        const { task } = await res.json<{ task: { content: string; priority: number; due: { time: string } | null } }>();
         expect(task.content).toBe("Review specs");
         expect(task.priority).toBe(1);
-        expect(task.labels).toEqual(["urgent"]);
         expect(task.due?.time).toBe("17:00");
     });
 
@@ -185,19 +182,131 @@ describe("preferences", () => {
     });
 });
 
+describe("time zone detection flag", () => {
+    it("starts unset, and setting a zone marks it chosen", async () => {
+        const s = stub("tzset1");
+        expect(await s.getPreferences()).toMatchObject({ timeZone: "UTC", timeZoneSet: false });
+
+        await s.setPreferences({ dateFormat: "DMY" });
+        expect((await s.getPreferences()).timeZoneSet).toBe(false);
+
+        await s.setPreferences({ timeZone: "UTC" });
+        expect((await s.getPreferences()).timeZoneSet).toBe(true);
+    });
+});
+
 describe("UserDO cascades", () => {
-    it("deleting a project removes its tasks and their labels", async () => {
+    it("deleting a project removes its tasks", async () => {
         const s = stub("cascade1");
-        const task = await s.createTask({ content: "x", projectName: "Doomed", labels: ["a"] });
+        const task = await s.createTask({ content: "x", projectName: "Doomed" });
         expect(await s.deleteProject(task.projectId)).toBe(true);
         expect(await s.getTask(task.id)).toBeNull();
         expect(await s.listTasks({ includeCompleted: true })).toHaveLength(0);
     });
+});
 
-    it("deleting a task removes its labels", async () => {
-        const s = stub("cascade2");
-        const task = await s.createTask({ content: "x", labels: ["a", "b"] });
-        await s.deleteTask(task.id);
-        expect(await s.getTask(task.id)).toBeNull();
+describe("UserDO trash", () => {
+    const count = (name: string, table: "projects" | "tasks") =>
+        runInDurableObject(stub(name), async (_i, state) =>
+            state.storage.sql.exec<{ n: number }>(`SELECT COUNT(*) AS n FROM ${table}`).one().n,
+        );
+
+    it("moves a deleted project and its tasks to the trash, out of every list", async () => {
+        const s = stub("trash1");
+        const a = await s.createTask({ content: "A", projectName: "Doomed" });
+        await s.createTask({ content: "B", projectName: "Doomed" });
+        await s.deleteProject(a.projectId);
+
+        expect((await s.listProjects()).map((p) => p.name)).toEqual(["Inbox"]);
+        expect(await s.listTasks({ includeCompleted: true })).toHaveLength(0);
+        expect(await s.getTask(a.id)).toBeNull();
+
+        const trash = await s.getTrash();
+        expect(trash.projects).toMatchObject([{ name: "Doomed", taskCount: 2 }]);
+        expect(trash.tasks).toHaveLength(0); // covered by the project row
+    });
+
+    it("restores a project with its tasks, but not tasks trashed earlier on their own", async () => {
+        const s = stub("trash2");
+        const keep = await s.createTask({ content: "keep", projectName: "P" });
+        const early = await s.createTask({ content: "early", projectName: "P" });
+        await s.deleteTask(early.id);
+        await s.deleteProject(keep.projectId);
+
+        expect(await s.restoreProject(keep.projectId)).toMatchObject({ project: { name: "P" } });
+        expect((await s.listTasks()).map((t) => t.content)).toEqual(["keep"]);
+        // The early one is now a standalone trashed task of a live project.
+        expect((await s.getTrash()).tasks.map((t) => t.content)).toEqual(["early"]);
+    });
+
+    it("restores a single task, unless its project is still in the trash", async () => {
+        const s = stub("trash3");
+        const t = await s.createTask({ content: "x" });
+        await s.deleteTask(t.id);
+        expect((await s.getTrash()).tasks).toHaveLength(1);
+        expect(await s.restoreTask(t.id)).toMatchObject({ content: "x" });
+        expect((await s.getTrash()).tasks).toHaveLength(0);
+
+        const inProject = await s.createTask({ content: "y", projectName: "Gone" });
+        await s.deleteTask(inProject.id);
+        await s.deleteProject(inProject.projectId);
+        expect(await s.restoreTask(inProject.id)).toBeNull();
+    });
+
+    it("purges only what is already in the trash", async () => {
+        const s = stub("trash4");
+        const live = await s.createTask({ content: "live", projectName: "Live" });
+        const dead = await s.createTask({ content: "dead", projectName: "Dead" });
+        await s.deleteProject(dead.projectId);
+
+        await s.purgeProject(live.projectId); // not trashed: no-op
+        expect(await s.getTask(live.id)).not.toBeNull();
+
+        await s.purgeProject(dead.projectId);
+        expect((await s.getTrash()).projects).toHaveLength(0);
+        // Cascade took the trashed task with it.
+        expect(await count("trash4", "tasks")).toBe(1);
+        expect(await count("trash4", "projects")).toBe(2); // Inbox + Live
+    });
+
+    it("empties the trash", async () => {
+        const s = stub("trash5");
+        const a = await s.createTask({ content: "a", projectName: "Q" });
+        const b = await s.createTask({ content: "b" });
+        await s.deleteTask(b.id);
+        await s.deleteProject(a.projectId);
+        await s.emptyTrash();
+        expect(await s.getTrash()).toEqual({ projects: [], tasks: [] });
+        expect(await count("trash5", "tasks")).toBe(0);
+    });
+
+    it("refuses to restore a project whose name a live project now has", async () => {
+        const s = stub("trash8");
+        const old = await s.createTask({ content: "a", projectName: "Work" });
+        await s.deleteProject(old.projectId);
+        await s.createTask({ content: "b", projectName: "work" });
+
+        expect(await s.restoreProject(old.projectId)).toEqual({ error: "name_taken", name: "Work" });
+        expect((await s.getTrash()).projects).toHaveLength(1);
+        expect(await s.restoreProject("nope")).toEqual({ error: "not_found" });
+    });
+
+    it("ignores trashed projects when a new task names one", async () => {
+        const s = stub("trash6");
+        const first = await s.createTask({ content: "a", projectName: "Work" });
+        await s.deleteProject(first.projectId);
+        const second = await s.createTask({ content: "b", projectName: "Work" });
+        expect(second.projectId).not.toBe(first.projectId);
+        expect(await s.hasProject(first.projectId)).toBe(false);
+    });
+
+    it("keeps trashed tasks off the calendar", async () => {
+        const s = stub("trash7");
+        const t = await s.createTask({
+            content: "gone",
+            due: { date: "2026-08-05", time: null, recurrence: null },
+        });
+        await s.deleteTask(t.id);
+        expect(await s.getCalendarItems("2026-08-03T00:00:00Z", "2026-08-10T00:00:00Z")).toEqual([]);
     });
 });

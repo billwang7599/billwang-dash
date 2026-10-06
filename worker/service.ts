@@ -1,4 +1,5 @@
 import { civilFromDate, civilKey } from "../shared/civil.ts";
+import { MAX_IMPORT_LINES, splitImportLines } from "../shared/import.ts";
 import { parseQuickAdd } from "../shared/parser.ts";
 import { exchangeCode } from "./google.ts";
 import type { UserDO } from "./user-do.ts";
@@ -10,6 +11,7 @@ import type {
     Preferences,
     Project,
     Task,
+    Trash,
 } from "../shared/types.ts";
 
 /** API logic, independent of HTTP. Takes a DO stub, not a Hono context. */
@@ -19,7 +21,7 @@ type Stub = DurableObjectStub<UserDO>;
 /** index.ts maps this onto a response in app.onError. */
 export class ServiceError extends Error {
     constructor(
-        readonly status: 400 | 403 | 404 | 503,
+        readonly status: 400 | 403 | 404 | 409 | 503,
         message: string,
     ) {
         super(message);
@@ -64,6 +66,36 @@ export async function quickAddTask(
     return { task: await stub.createTask(parsed), parsed };
 }
 
+export interface ImportResult {
+    created: Task[];
+    skipped: { line: string; reason: string }[];
+}
+
+/** One task per line. Lines that parse to no content are skipped, not fatal. */
+export async function importTasks(
+    stub: Stub,
+    text: string,
+    timeZone: string | undefined,
+): Promise<ImportResult> {
+    const lines = splitImportLines(text);
+    if (lines.length === 0) throw new ServiceError(400, "nothing to import");
+    if (lines.length > MAX_IMPORT_LINES) {
+        throw new ServiceError(400, `at most ${MAX_IMPORT_LINES} tasks per import`);
+    }
+
+    const prefs = await stub.getPreferences();
+    const options = { timeZone: timeZone ?? prefs.timeZone, dateFormat: prefs.dateFormat };
+
+    const parsed: ParsedQuickAdd[] = [];
+    const skipped: ImportResult["skipped"] = [];
+    for (const line of lines) {
+        const p = parseQuickAdd(line, options);
+        if (p.content) parsed.push(p);
+        else skipped.push({ line, reason: "no content" });
+    }
+    return { created: await stub.createTasks(parsed), skipped };
+}
+
 /** "Today" has to be resolved in the user's zone, not the Worker's. */
 export async function completeTask(stub: Stub, id: string): Promise<Task> {
     const { timeZone } = await stub.getPreferences();
@@ -102,6 +134,27 @@ export async function createProject(
 ): Promise<Project> {
     return stub.createProject(name, color);
 }
+
+export const getTrash = (stub: Stub): Promise<Trash> => stub.getTrash();
+
+export async function restoreProject(stub: Stub, id: string): Promise<Project> {
+    const result = await stub.restoreProject(id);
+    if ("project" in result) return result.project;
+    if (result.error === "name_taken") {
+        throw new ServiceError(409, `A project named "${result.name}" already exists`);
+    }
+    throw new ServiceError(404, "not found");
+}
+
+export async function restoreTask(stub: Stub, id: string): Promise<Task> {
+    const task = await stub.restoreTask(id);
+    if (!task) throw new ServiceError(404, "not found");
+    return task;
+}
+
+export const purgeProject = (stub: Stub, id: string): Promise<void> => stub.purgeProject(id);
+export const purgeTask = (stub: Stub, id: string): Promise<void> => stub.purgeTask(id);
+export const emptyTrash = (stub: Stub): Promise<void> => stub.emptyTrash();
 
 export async function setProjectPinned(
     stub: Stub,

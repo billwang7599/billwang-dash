@@ -34,7 +34,6 @@ export interface Task {
     content: string;
     description: string;
     projectId: string;
-    labels: string[];
     priority: Priority;
     due: DueDate | null;
     /** Hard deadline (Todoist `{jan 27}`), separate from when you plan to do it. */
@@ -58,18 +57,32 @@ export interface Project {
     pinned: boolean;
 }
 
+export interface TrashedProject extends Project {
+    deletedAt: string;
+    /** Tasks that went to the trash with it. */
+    taskCount: number;
+}
+
+/** A task trashed on its own; tasks trashed with a project show under that project. */
+export interface TrashedTask extends Task {
+    deletedAt: string;
+}
+
+export interface Trash {
+    projects: TrashedProject[];
+    tasks: TrashedTask[];
+}
+
 /** A span of the raw input consumed by the parser, for UI highlighting. */
 export interface ParsedToken {
     type:
         | "project"
-        | "label"
         | "priority"
         | "date"
         | "time"
         | "recurrence"
         | "duration"
-        | "deadline"
-        | "assignee";
+        | "deadline";
     /** The exact matched text. */
     text: string;
     start: number;
@@ -81,12 +94,10 @@ export interface ParsedQuickAdd {
     content: string;
     raw: string;
     projectName: string | null;
-    labels: string[];
     priority: Priority;
     due: DueDate | null;
     deadline: string | null;
     durationMinutes: number | null;
-    assignee: string | null;
     tokens: ParsedToken[];
 }
 
@@ -129,5 +140,7 @@ export interface GoogleCalendarSummary {
 
 export interface Preferences {
     timeZone: string;
+    /** False until the zone is chosen or auto-detected; "UTC" alone cannot say. */
+    timeZoneSet: boolean;
     dateFormat: "MDY" | "DMY";
 }

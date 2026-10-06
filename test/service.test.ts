@@ -182,3 +182,96 @@ describe("preferences validation", () => {
         expect(preferences.timeZone).toBe("America/Chicago");
     });
 });
+
+describe("bulk import over HTTP", () => {
+    const post = (text: string) =>
+        SELF.fetch("https://example.com/api/tasks/import", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ text, timeZone: "America/Chicago" }),
+        });
+
+    it("parses each line, creating tasks and projects once", async () => {
+        const res = await post(
+            "Review specs #ImportWork p1 tomorrow at 5pm\n- Ship it #importwork\n\nBuy milk",
+        );
+        expect(res.status).toBe(201);
+
+        const { created, skipped } = await res.json<{
+            created: { content: string; projectId: string; priority: number; due: { time: string } | null }[];
+            skipped: unknown[];
+        }>();
+        expect(created.map((t) => t.content)).toEqual(["Review specs", "Ship it", "Buy milk"]);
+        expect(created[0]).toMatchObject({ priority: 1, due: { time: "17:00" } });
+        expect(created[0].projectId).toBe(created[1].projectId);
+        expect(created[2].projectId).toBe("inbox");
+        expect(skipped).toEqual([]);
+    });
+
+    it("skips lines that parse to no content instead of failing the batch", async () => {
+        const res = await post("p1 tomorrow\nReal task");
+        expect(res.status).toBe(201);
+        const { created, skipped } = await res.json<{
+            created: { content: string }[];
+            skipped: { line: string; reason: string }[];
+        }>();
+        expect(created.map((t) => t.content)).toEqual(["Real task"]);
+        expect(skipped).toEqual([{ line: "p1 tomorrow", reason: "no content" }]);
+    });
+
+    it("400 for an empty import and for too many lines", async () => {
+        expect((await post("  \n \n")).status).toBe(400);
+        const many = Array.from({ length: 501 }, (_, i) => `task ${i}`).join("\n");
+        expect((await post(many)).status).toBe(400);
+    });
+});
+
+describe("trash over HTTP", () => {
+    const call = (method: string, path: string, body?: unknown) =>
+        SELF.fetch(`https://example.com${path}`, {
+            method,
+            headers: { "content-type": "application/json" },
+            body: body === undefined ? undefined : JSON.stringify(body),
+        });
+
+    it("deleting a project trashes it, and restoring brings it and its tasks back", async () => {
+        const added = await call("POST", "/api/tasks", { text: "Plan trip #TrashHttp" });
+        const { task } = await added.json<{ task: { id: string; projectId: string } }>();
+
+        expect((await call("DELETE", `/api/projects/${task.projectId}`)).status).toBe(204);
+        const trash = await (await call("GET", "/api/trash")).json<{
+            projects: { id: string; name: string; taskCount: number }[];
+        }>();
+        expect(trash.projects.find((p) => p.id === task.projectId)).toMatchObject({
+            name: "TrashHttp",
+            taskCount: 1,
+        });
+
+        // A trashed project can't be a move target.
+        const other = await call("POST", "/api/tasks", { text: "other" });
+        const { task: o } = await other.json<{ task: { id: string } }>();
+        expect((await call("PATCH", `/api/tasks/${o.id}`, { projectId: task.projectId })).status).toBe(400);
+
+        expect((await call("POST", `/api/trash/projects/${task.projectId}/restore`)).status).toBe(200);
+        const state = await (await call("GET", "/api/state")).json<{
+            tasks: { id: string }[];
+        }>();
+        expect(state.tasks.map((t) => t.id)).toContain(task.id);
+    });
+
+    it("409 for restoring a project whose name is taken", async () => {
+        const first = await call("POST", "/api/projects", { name: "Clash" });
+        const { project } = await first.json<{ project: { id: string } }>();
+        await call("DELETE", `/api/projects/${project.id}`);
+        await call("POST", "/api/projects", { name: "clash" });
+
+        const res = await call("POST", `/api/trash/projects/${project.id}/restore`);
+        expect(res.status).toBe(409);
+        expect((await res.json<{ error: string }>()).error).toBe('A project named "Clash" already exists');
+    });
+
+    it("404 for restoring something that is not in the trash", async () => {
+        expect((await call("POST", "/api/trash/projects/nope/restore")).status).toBe(404);
+        expect((await call("POST", "/api/trash/tasks/nope/restore")).status).toBe(404);
+    });
+});

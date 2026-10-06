@@ -39,6 +39,11 @@ const dueDate = z.object({
     recurrence: recurrence.nullable(),
 });
 
+export const importBody = z.object({
+    text: nonEmpty.max(100_000),
+    timeZone: timeZone.optional(),
+});
+
 export const quickAddBody = z.object({
     text: nonEmpty,
     timeZone: timeZone.optional(),
@@ -52,7 +57,6 @@ export const taskPatchBody = z.object({
     content: nonEmpty.optional(),
     description: z.string().optional(),
     projectId: z.string().nullable().optional(),
-    labels: z.array(z.string()).optional(),
     priority: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]).optional(),
     due: dueDate.nullable().optional(),
     deadline: z.string().nullable().optional(),
