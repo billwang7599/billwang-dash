@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { HabitInput, HabitSummary } from "../shared/habits.ts";
 import type { Task } from "../shared/types.ts";
 import { api, type AppState, type Preferences } from "./api.ts";
 import { ConfirmDialog } from "./components/ConfirmDialog.tsx";
+import { HabitModal } from "./components/HabitModal.tsx";
+import { HabitView } from "./components/HabitView.tsx";
 import { ImportModal } from "./components/ImportModal.tsx";
 import { QuickAdd } from "./components/QuickAdd.tsx";
 import { Settings } from "./components/Settings.tsx";
@@ -18,6 +21,7 @@ export type View =
     | { name: "calendar" }
     | { name: "settings" }
     | { name: "trash" }
+    | { name: "habit"; id: string }
     | { name: "project"; id: string };
 
 function viewFromPath(pathname: string): View {
@@ -26,6 +30,7 @@ function viewFromPath(pathname: string): View {
     if (rest === "calendar") return { name: "calendar" };
     if (rest === "settings") return { name: "settings" };
     if (rest === "trash") return { name: "trash" };
+    if (rest.startsWith("habit/")) return { name: "habit", id: rest.slice(6) };
     // Old bookmarks to /app or /app/upcoming land here too; Inbox is the home view.
     return { name: "inbox" };
 }
@@ -35,6 +40,9 @@ export function App() {
     const [error, setError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
     const [editing, setEditing] = useState<Task | null>(null);
+    const [newHabit, setNewHabit] = useState(false);
+    // Bumped when a habit changes outside the habit page, so its month reloads.
+    const [habitRevision, setHabitRevision] = useState(0);
     const [pendingTaskDelete, setPendingTaskDelete] = useState<Task | null>(null);
     // Set when several lines are pasted into the quick-add bar; opens the import modal.
     const [importText, setImportText] = useState<string | null>(null);
@@ -133,6 +141,61 @@ export function App() {
         setRevision((r) => r + 1);
     }, []);
 
+    /** Puts a habit the server just returned into the list, adding it if it's new. */
+    const applyHabit = useCallback((habit: HabitSummary) => {
+        setState((prev) => {
+            if (!prev) return prev;
+            const exists = prev.habits.some((h) => h.id === habit.id);
+            return {
+                ...prev,
+                habits: exists ? prev.habits.map((h) => (h.id === habit.id ? habit : h)) : [...prev.habits, habit],
+            };
+        });
+    }, []);
+
+    const checkHabitToday = useCallback(
+        (habit: HabitSummary) =>
+            run(async () => {
+                if (!state) return;
+                const { habit: updated } = await api.setCheckin(
+                    habit.id,
+                    todayKey(state.preferences.timeZone),
+                    habit.today === "done" ? null : "done",
+                );
+                applyHabit(updated);
+                setHabitRevision((r) => r + 1);
+            })(),
+        [run, state, applyHabit],
+    );
+
+    const createHabit = useCallback(
+        async (input: HabitInput) => {
+            const { habit } = await api.createHabit(input);
+            applyHabit(habit);
+            navigate(`/app/habit/${habit.id}`);
+        },
+        [applyHabit, navigate],
+    );
+
+    const updateHabit = useCallback(
+        async (id: string, input: HabitInput) => {
+            const { habit } = await api.updateHabit(id, input);
+            applyHabit(habit);
+            setHabitRevision((r) => r + 1);
+        },
+        [applyHabit],
+    );
+
+    const deleteHabit = useCallback(
+        (id: string) =>
+            run(async () => {
+                await api.deleteHabit(id);
+                setState((prev) => (prev ? { ...prev, habits: prev.habits.filter((h) => h.id !== id) } : prev));
+                navigate("/app");
+            })(),
+        [run, navigate],
+    );
+
     const importTasks = useCallback(
         async (text: string) => {
             if (!state) return;
@@ -229,6 +292,8 @@ export function App() {
                 navigate={navigate}
                 onTogglePin={togglePinProject}
                 onDeleteProject={deleteProject}
+                onCheckHabit={checkHabitToday}
+                onNewHabit={() => setNewHabit(true)}
             />
 
             <main className={`main${view.name === "calendar" ? " main-full" : ""}`}>
@@ -249,7 +314,7 @@ export function App() {
                     </p>
                 )}
 
-                {view.name !== "settings" && view.name !== "calendar" && view.name !== "trash" && (
+                {view.name !== "settings" && view.name !== "calendar" && view.name !== "trash" && view.name !== "habit" && (
                     <QuickAdd
                         preferences={state.preferences}
                         projects={state.projects}
@@ -264,6 +329,22 @@ export function App() {
                         user={state.user}
                         onPreferencesChange={setPreferences}
                     />
+                ) : view.name === "habit" ? (
+                    (() => {
+                        const habit = state.habits.find((h) => h.id === view.id);
+                        return habit ? (
+                            <HabitView
+                                habit={habit}
+                                today={todayKey(state.preferences.timeZone)}
+                                revision={habitRevision}
+                                onChanged={applyHabit}
+                                onUpdate={updateHabit}
+                                onDelete={deleteHabit}
+                            />
+                        ) : (
+                            <p className="habit-empty">That habit doesn't exist any more.</p>
+                        );
+                    })()
                 ) : view.name === "trash" ? (
                     <Trash projects={state.projects} onChanged={reload} />
                 ) : view.name === "calendar" ? (
@@ -293,6 +374,8 @@ export function App() {
                     </>
                 )}
             </main>
+
+            {newHabit && <HabitModal onSave={createHabit} onClose={() => setNewHabit(false)} />}
 
             {pendingTaskDelete && (
                 <ConfirmDialog

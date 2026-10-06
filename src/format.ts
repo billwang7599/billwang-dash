@@ -43,7 +43,7 @@ export function formatDueLabel(due: DueDate, timeZone: string): string {
 }
 
 /** "Tue, 4 Aug 2026": a plain calendar date, unlike formatDateLabel, which speaks in due-date terms ("3d overdue"). */
-function formatPlainDate(dateKey: string): string {
+export function formatPlainDate(dateKey: string): string {
     const civil = civilFromKey(dateKey);
     if (!civil) return dateKey;
     return utcDate(civil).toLocaleDateString("en-GB", {

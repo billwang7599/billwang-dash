@@ -710,6 +710,109 @@
 }
 .ev-time { display: block; font-family: var(--mono); font-size: 0.6rem; opacity: 0.75; }
 
+/* ---- Habits -------------------------------------------------------------- */
+
+.habit-row { display: flex; align-items: center; gap: 0.15rem; }
+.habit-row .nav-item { flex: 1; min-width: 0; }
+.habit-empty { margin: 0.2rem 0.65rem; font-size: 0.8rem; color: var(--ink-3); }
+
+.habit-check {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    margin-left: 0.3rem;
+    padding: 0;
+    border: 1.5px solid var(--rule-2);
+    border-radius: 50%;
+    background: transparent;
+    color: transparent;
+    cursor: pointer;
+    transition: all 0.15s var(--ease);
+}
+.habit-check:hover { border-color: var(--sage); color: var(--sage); }
+.habit-check.is-done { background: var(--sage); border-color: var(--sage); color: var(--paper); }
+.habit-check.is-skipped { border-style: dashed; }
+
+.habit-view { max-width: 40rem; }
+.habit-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.habit-freq { margin: -0.9rem 0 1.2rem; font-size: 0.86rem; color: var(--ink-3); }
+.habit-actions { display: flex; gap: 0.4rem; margin-top: 2rem; }
+
+.habit-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+    gap: 0.6rem;
+    margin: 0 0 1.4rem;
+}
+.habit-stats > div { padding: 0.7rem 0.85rem; background: var(--card); border: 1px solid var(--rule); border-radius: var(--r-md); }
+.habit-stats dt { font-size: 0.72rem; color: var(--ink-3); }
+.habit-stats dd { margin: 0.15rem 0 0; font-family: var(--display); font-size: 1.35rem; letter-spacing: -0.02em; }
+
+.habit-month { padding: 1rem 1.1rem; background: var(--card); border: 1px solid var(--rule); border-radius: var(--r-lg); }
+.habit-month-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.7rem; }
+.habit-month-head h2 { margin: 0; font-family: var(--display); font-size: 1.15rem; font-weight: 400; }
+.habit-step {
+    border: 1px solid var(--rule-2);
+    background: transparent;
+    border-radius: var(--r-sm);
+    padding: 0.2rem 0.6rem;
+    font: inherit;
+    color: var(--ink-2);
+    cursor: pointer;
+}
+.habit-step:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.habit-step:disabled { opacity: 0.35; cursor: default; }
+
+.habit-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.3rem; }
+.habit-grid-head { text-align: center; font-family: var(--mono); font-size: 0.62rem; color: var(--ink-3); padding-bottom: 0.2rem; }
+.habit-cell {
+    aspect-ratio: 1;
+    display: grid;
+    place-items: center;
+    border: 1px solid transparent;
+    border-radius: 50%;
+    background: var(--paper-2);
+    font: inherit;
+    font-size: 0.78rem;
+    color: var(--ink-2);
+    cursor: pointer;
+    padding: 0;
+}
+.habit-cell.is-done { background: var(--sage); color: var(--paper); }
+.habit-cell.is-skipped { background: transparent; border: 1.5px dashed var(--ink-3); }
+.habit-cell.is-missed { background: var(--accent-soft); color: var(--accent); }
+.habit-cell.is-off { background: transparent; color: var(--ink-3); }
+.habit-cell.is-pending { background: var(--paper-3); }
+.habit-cell.is-future { background: transparent; color: var(--rule-2); cursor: default; }
+.habit-cell.is-today { box-shadow: 0 0 0 1px var(--ink-3); }
+.habit-cell.is-selected { outline: 2px solid var(--ink); outline-offset: 1px; }
+
+.habit-legend { display: flex; gap: 1rem; list-style: none; margin: 0.8rem 0 0; padding: 0; font-size: 0.74rem; color: var(--ink-3); }
+.habit-legend li { display: flex; align-items: center; gap: 0.35rem; }
+.habit-legend .habit-cell { width: 0.8rem; aspect-ratio: auto; height: 0.8rem; cursor: default; }
+
+.habit-day { margin-top: 1.2rem; }
+.habit-day h3 { margin: 0 0 0.6rem; font-size: 0.95rem; font-weight: 500; }
+.habit-day-actions { display: flex; gap: 0.4rem; margin-bottom: 0.7rem; }
+.habit-note { margin-bottom: 0; }
+
+.habit-modal { width: min(30rem, 100%); }
+.habit-days-label { display: block; margin-bottom: 0.3rem; font-size: 0.84rem; font-weight: 500; }
+.habit-days { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.habit-day-btn {
+    padding: 0.35rem 0.7rem;
+    border: 1px solid var(--rule-2);
+    border-radius: 100px;
+    background: transparent;
+    font: inherit;
+    font-size: 0.82rem;
+    color: var(--ink-2);
+    cursor: pointer;
+}
+.habit-day-btn.is-on { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+
 /* ---- Calendar event details ---------------------------------------------- */
 
 .event-modal { width: min(30rem, 100%); }

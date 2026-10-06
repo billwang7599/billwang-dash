@@ -198,20 +198,49 @@ day-first in Settings, or change the `dateFormat` default in the same file.
 
 ---
 
+## Habits
+
+A separate feature from tasks, modelled on TickTick's. Habits live in a sidebar
+section below Projects, each with a one-click check-off for today and its current
+streak. A habit's page has the streak, best streak, total days, a four-week rate,
+and a monthly grid where you can log, skip or clear any past day and add a note.
+
+A habit asks for one of three things: **every day**, **N times a week**, or
+**specific weekdays**. The rules are in `shared/habits.ts` and are pure, so
+`test/habits.test.ts` pins them:
+
+- A day is done, skipped, or unchecked. **Skipped** is excused: it neither extends
+  nor breaks a streak, and in an "N times a week" habit it lowers that week's target.
+- A past due day with nothing logged is missed and resets the streak. **Today
+  unchecked is pending** and never breaks it; the best streak is kept.
+- Weekday habits only count their chosen days. "N times a week" counts consecutive
+  Monday-to-Sunday weeks that hit the target, and the current week can't break a
+  streak until it is over. Days before a habit began don't count against its week.
+- Check-ins belong to a date in your Settings zone. You can log past days but not
+  future ones. Logging a day before the habit started moves its start back to it.
+- Editing a habit's rule recalculates its whole history. Deleting one is permanent
+  (no Trash).
+
+---
+
 ## Testing
 
 ```bash
 npm test
 ```
 
-116 tests via `@cloudflare/vitest-pool-workers`, running in the real Workers
+Over 200 tests via `@cloudflare/vitest-pool-workers`, running in the real Workers
 runtime rather than a mock: the parser grammar, DO storage and recurrence
-rollover, the public/protected split, and calendar timezone placement.
+rollover, the public/protected split, habit streak rules, Google sync against a fake
+Google, and calendar timezone placement.
 
 ---
 
 ## Known gaps
 
+- **Habits are yes/no only.** No numeric goals ("8 glasses"), no "every N days"
+  interval, no archive, and no reminders. They don't appear on the calendar or sync
+  to Google. The sidebar's Habits section is hidden while the sidebar is collapsed.
 - **Google events are fetched live on every calendar load**, not cached. Fine
   at personal scale. `syncToken`-based incremental sync is the next step if it
   gets chatty.

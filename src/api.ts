@@ -6,6 +6,7 @@ import type {
     Task,
     Trash,
 } from "../shared/types.ts";
+import type { DayStatus, HabitDetail, HabitInput, HabitSummary } from "../shared/habits.ts";
 
 export type { Preferences };
 
@@ -13,6 +14,7 @@ export interface AppState {
     projects: Project[];
     tasks: Task[];
     preferences: Preferences;
+    habits: HabitSummary[];
     user: { id: string; email: string; name: string | null; isAdmin: boolean };
 }
 
@@ -72,6 +74,24 @@ export const api = {
 
     deleteTask: (id: string) =>
         request<void>(`/api/tasks/${id}`, { method: "DELETE" }),
+
+    getHabit: (id: string, month?: string) =>
+        request<HabitDetail>(`/api/habits/${id}${month ? `?month=${month}` : ""}`),
+
+    createHabit: (input: HabitInput) =>
+        request<{ habit: HabitSummary }>("/api/habits", { method: "POST", body: JSON.stringify(input) }),
+
+    updateHabit: (id: string, input: HabitInput) =>
+        request<{ habit: HabitSummary }>(`/api/habits/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
+
+    deleteHabit: (id: string) => request<void>(`/api/habits/${id}`, { method: "DELETE" }),
+
+    /** `status: null` clears the day. `note` omitted keeps the existing note. */
+    setCheckin: (id: string, day: string, status: DayStatus | null, note?: string) =>
+        request<{ habit: HabitSummary }>(`/api/habits/${id}/checkins/${day}`, {
+            method: "PUT",
+            body: JSON.stringify(note === undefined ? { status } : { status, note }),
+        }),
 
     getTrash: () => request<Trash>("/api/trash"),
 

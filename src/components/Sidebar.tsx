@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AppState } from "../api.ts";
 import type { View } from "../App.tsx";
+import type { HabitSummary } from "../../shared/habits.ts";
 import type { Project } from "../../shared/types.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { ProjectSearch } from "./ProjectSearch.tsx";
@@ -25,6 +26,9 @@ interface Props {
     navigate: (path: string) => void;
     onTogglePin: (id: string, pinned: boolean) => void;
     onDeleteProject: (id: string) => void;
+    /** Check today off (or undo it) from the sidebar. */
+    onCheckHabit: (habit: HabitSummary) => void;
+    onNewHabit: () => void;
 }
 
 /** The two fixed views. Order is fixed too -- not user-reorderable. */
@@ -41,6 +45,8 @@ export function Sidebar({
     navigate,
     onTogglePin,
     onDeleteProject,
+    onCheckHabit,
+    onNewHabit,
 }: Props) {
     // Not persisted: collapsing is a session-only UI preference, not a saved one.
     const [collapsed, setCollapsed] = useState(false);
@@ -171,6 +177,53 @@ export function Sidebar({
                                     onDelete={() => setPendingDelete(project)}
                                 />
                             ))}
+                        </nav>
+                    </>
+                )}
+
+                {!collapsed && (
+                    <>
+                        <div className="nav-head-row">
+                            <p className="nav-head">Habits</p>
+                            <div className="nav-head-actions">
+                                <button className="sort-toggle" onClick={onNewHabit} aria-label="New habit">
+                                    + New
+                                </button>
+                            </div>
+                        </div>
+                        <nav>
+                            {state.habits.map((habit) => (
+                                <div className="habit-row" key={habit.id}>
+                                    <button
+                                        className={`habit-check${habit.today ? ` is-${habit.today}` : ""}`}
+                                        onClick={() => onCheckHabit(habit)}
+                                        aria-label={`${habit.today === "done" ? "Undo" : "Check off"} ${habit.name} today`}
+                                        aria-pressed={habit.today === "done"}
+                                        title={habit.today === "done" ? "Done today. Click to undo" : "Check off today"}
+                                    >
+                                        <svg viewBox="0 0 16 16" width="10" height="10" aria-hidden="true">
+                                            <path
+                                                d="M2.5 8.5l3.5 3.5 7.5-8"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                strokeWidth="2.4"
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                            />
+                                        </svg>
+                                    </button>
+                                    <NavItem
+                                        label={habit.name}
+                                        count={habit.stats.streak}
+                                        active={view.name === "habit" && view.id === habit.id}
+                                        collapsed={false}
+                                        onClick={() => navigate(`/app/habit/${habit.id}`)}
+                                    />
+                                </div>
+                            ))}
+                            {state.habits.length === 0 && (
+                                <p className="habit-empty">Track something you want to do regularly.</p>
+                            )}
                         </nav>
                     </>
                 )}
