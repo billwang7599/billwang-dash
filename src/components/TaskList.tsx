@@ -37,7 +37,7 @@ export function TaskList({
     if (!groupByDate) {
         return (
             <ul className="tasks">
-                {tasks.map((task) => (
+                {undatedFirst(tasks).map((task) => (
                     <TaskRow
                         key={task.id}
                         task={task}
@@ -155,7 +155,15 @@ function TaskRow({
     );
 }
 
-/** Buckets by due date, undated last, each bucket in date order. */
+/**
+ * Undated tasks go on top, so they aren't buried under everything scheduled.
+ * Stable, so the server's order holds within each part.
+ */
+function undatedFirst(tasks: Task[]): Task[] {
+    return [...tasks.filter((t) => !t.due), ...tasks.filter((t) => t.due)];
+}
+
+/** Buckets by due date, undated first, then each bucket in date order. */
 function groupTasks(tasks: Task[]): [string, Task[]][] {
     const buckets = new Map<string, Task[]>();
     for (const task of tasks) {
@@ -166,8 +174,8 @@ function groupTasks(tasks: Task[]): [string, Task[]][] {
     }
 
     return [...buckets.entries()].sort(([a], [b]) => {
-        if (a === "none") return 1;
-        if (b === "none") return -1;
+        if (a === "none") return -1;
+        if (b === "none") return 1;
         return a.localeCompare(b);
     });
 }
