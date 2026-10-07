@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Approval, ChatMessage, PendingAction } from "../../shared/chat.ts";
 import { api } from "../api.ts";
+import { cardColor } from "../projectColors.ts";
+import { Hero } from "./Hero.tsx";
 
 interface Props {
     /** A change the user approved went through; the rest of the app should reload. */
@@ -87,9 +89,15 @@ export function AssistantView({ onChanged }: Props) {
     const { busy, sending, error } = chat;
     const [draft, setDraft] = useState("");
     const [decisions, setDecisions] = useState<Record<string, boolean>>({});
-    const endRef = useRef<HTMLDivElement>(null);
+    const mounted = useRef(false);
 
-    useEffect(() => endRef.current?.scrollIntoView({ block: "end" }), [chat]);
+    // Newest at the bottom, like any chat: jump there on arrival, glide for new turns.
+    // A block body on purpose: Chrome's scroll methods now return a Promise, and an
+    // effect that returns one crashes React when the view unmounts.
+    useEffect(() => {
+        window.scrollTo({ top: document.documentElement.scrollHeight, behavior: mounted.current ? "smooth" : "instant" });
+        mounted.current = true;
+    }, [chat]);
 
     async function send(text: string) {
         const content = text.trim();
@@ -126,6 +134,8 @@ export function AssistantView({ onChanged }: Props) {
             m.role === "user" || (m.role === "assistant" && !!m.content?.trim()),
     );
     const empty = shown.length === 0 && !sending;
+    // Replies take the palette in turn, like project and goal cards.
+    let replies = 0;
 
     return (
         <>
@@ -140,64 +150,85 @@ export function AssistantView({ onChanged }: Props) {
                     </button>
                 )}
             </div>
-            <h1 className="view-title">Assistant</h1>
+            <Hero kicker="Ask about anything in your dash" title="Assistant" accent="var(--c-lav)" />
 
             <div className="chat" aria-live="polite">
                 {empty && (
-                    <div className="chat-empty">
-                        <p>Ask about your tasks, calendar, habits or goals, or tell it what to change. You approve every change before it happens.</p>
+                    <>
+                        <p className="chat-intro">
+                            Ask about your tasks, calendar, habits or goals, or tell it what to change. Nothing changes
+                            until you approve it.
+                        </p>
                         <div className="chat-suggestions">
-                            {SUGGESTIONS.map((s) => (
-                                <button key={s} className="btn btn-quiet" onClick={() => send(s)}>
+                            {SUGGESTIONS.map((s, i) => (
+                                <button
+                                    key={s}
+                                    className="chat-suggestion"
+                                    style={{ "--card-c": cardColor(i) } as React.CSSProperties}
+                                    onClick={() => send(s)}
+                                >
                                     {s}
                                 </button>
                             ))}
                         </div>
-                    </div>
+                    </>
                 )}
 
-                {shown.map((m, i) => (
-                    <p key={i} className={`chat-msg chat-${m.role}`}>
-                        {m.content}
+                {shown.map((m, i) =>
+                    m.role === "user" ? (
+                        <p key={i} className="chat-q">
+                            {m.content}
+                        </p>
+                    ) : (
+                        <p key={i} className="chat-a" style={{ "--card-c": cardColor(replies++) } as React.CSSProperties}>
+                            {m.content}
+                        </p>
+                    ),
+                )}
+                {sending && <p className="chat-q">{sending}</p>}
+                {busy && (
+                    <p className="chat-a chat-thinking" role="status" aria-label="Thinking">
+                        <span className="chat-dot" />
+                        <span className="chat-dot" />
+                        <span className="chat-dot" />
                     </p>
-                ))}
-                {sending && <p className="chat-msg chat-user">{sending}</p>}
-                {busy && <p className="chat-msg chat-assistant chat-thinking">Thinking…</p>}
+                )}
 
-                {!busy && chat.pending.length > 0 && (
-                    <div className="chat-pending">
-                        {chat.pending.map((p) => (
-                            <div key={p.toolCallId} className="chat-action">
-                                <span className="chat-action-text">{p.summary}</span>
-                                {p.toolCallId in decisions ? (
-                                    <span className="chat-action-state">{decisions[p.toolCallId] ? "Approved" : "Declined"}</span>
-                                ) : (
-                                    <span className="chat-action-buttons">
-                                        <button className="btn btn-quiet" onClick={() => decide(p.toolCallId, false)}>
-                                            Decline
-                                        </button>
-                                        <button className="btn btn-primary" onClick={() => decide(p.toolCallId, true)}>
-                                            Approve
-                                        </button>
-                                    </span>
-                                )}
-                            </div>
-                        ))}
-                        {chat.pending.length > 1 && Object.keys(decisions).length === 0 && (
-                            <div className="chat-action-all">
-                                <button className="btn btn-quiet" onClick={() => decideAll(false)}>
-                                    Decline all
-                                </button>
-                                <button className="btn btn-primary" onClick={() => decideAll(true)}>
-                                    Approve all
-                                </button>
-                            </div>
-                        )}
+                {!busy &&
+                    chat.pending.map((p) => (
+                        <div key={p.toolCallId} className="chat-action">
+                            <p className="chat-action-kicker">Needs your OK</p>
+                            <p className="chat-action-text">{p.summary}</p>
+                            {p.toolCallId in decisions ? (
+                                <p className="chat-action-state">{decisions[p.toolCallId] ? "Approved" : "Declined"}</p>
+                            ) : (
+                                <div className="chat-action-buttons">
+                                    <button className="btn btn-quiet" onClick={() => decide(p.toolCallId, false)}>
+                                        Decline
+                                    </button>
+                                    <button className="btn btn-primary" onClick={() => decide(p.toolCallId, true)}>
+                                        Approve
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                {!busy && chat.pending.length > 1 && Object.keys(decisions).length === 0 && (
+                    <div className="chat-action-all">
+                        <button className="btn btn-quiet" onClick={() => decideAll(false)}>
+                            Decline all
+                        </button>
+                        <button className="btn btn-primary" onClick={() => decideAll(true)}>
+                            Approve all
+                        </button>
                     </div>
                 )}
 
-                {error && <p className="chat-error" role="alert">{error}</p>}
-                <div ref={endRef} />
+                {error && (
+                    <p className="chat-error" role="alert">
+                        {error}
+                    </p>
+                )}
             </div>
 
             <div className="qa-dock">

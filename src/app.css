@@ -530,56 +530,97 @@ html:has(.mnav.is-open) { overflow: hidden; }
 
 /* ---- Assistant ----------------------------------------------------------- */
 
-.chat { display: flex; flex-direction: column; gap: 0.6rem; max-width: 46rem; width: 100%; }
-.chat-empty { color: var(--ink-2); font-size: 0.92rem; animation: rise 0.24s var(--ease) backwards; }
-.chat-empty p { margin: 0 0 1rem; max-width: 34rem; }
-.chat-suggestions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-.chat-suggestions .btn { white-space: normal; text-align: left; }
+/* Your turns read as big display lines; replies are colour cards like the rest
+   of the app; changes waiting on you are ink cards, so no reply colour can pass
+   for one. */
+.chat { display: flex; flex-direction: column; gap: 0.9rem; max-width: 46rem; width: 100%; }
 
-.chat-msg {
-    margin: 0;
-    max-width: 85%;
-    padding: 0.6rem 0.9rem;
+.chat-intro { margin: 0 0 0.4rem; max-width: 34rem; font-size: 0.95rem; color: var(--ink-2); animation: rise 0.24s var(--ease) backwards; }
+.chat-suggestions { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: 0.7rem; }
+.chat-suggestion {
+    min-height: 6.5rem;
+    display: flex;
+    align-items: flex-end;
+    padding: 1rem 1.15rem;
+    border: 0;
     border-radius: var(--r-lg);
-    font-size: 0.92rem;
-    line-height: 1.5;
+    background: var(--card-c);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35);
+    font: inherit;
+    font-size: 1.3rem;
+    font-weight: 500;
+    line-height: 1.15;
+    letter-spacing: -0.035em;
+    color: var(--ink);
+    text-align: left;
+    cursor: pointer;
+    transition: transform 0.18s var(--ease), box-shadow 0.18s var(--ease);
+    animation: rise 0.24s var(--ease) backwards;
+}
+.chat-suggestion:nth-child(2) { animation-delay: 0.03s; }
+.chat-suggestion:nth-child(3) { animation-delay: 0.06s; }
+.chat-suggestion:hover { transform: translateY(-2px); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35), var(--shadow-md); }
+
+.chat-q,
+.chat-a,
+.chat-action { margin: 0; overflow-wrap: anywhere; animation: rise 0.22s var(--ease) backwards; }
+
+.chat-q {
+    margin-top: 0.9rem;
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: clamp(1.55rem, 3.2vw, 2.15rem);
+    line-height: 1.08;
+    letter-spacing: -0.04em;
+}
+.chat-q:first-child { margin-top: 0; }
+
+.chat-a {
+    padding: 1rem 1.25rem;
+    border-radius: var(--r-lg);
+    background: var(--card-c, var(--card));
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35);
+    font-size: 1rem;
+    line-height: 1.55;
     /* Replies come back as plain text with "- " lists and line breaks. */
     white-space: pre-wrap;
-    overflow-wrap: anywhere;
-    animation: rise 0.2s var(--ease) backwards;
 }
-.chat-user { align-self: flex-end; background: var(--ink); color: var(--paper); border-bottom-right-radius: var(--r-sm); }
-.chat-assistant { align-self: flex-start; background: var(--card); border: 1px solid var(--rule); border-bottom-left-radius: var(--r-sm); }
-.chat-thinking { color: var(--ink-3); }
 
-.chat-pending { display: flex; flex-direction: column; gap: 0.5rem; align-self: flex-start; width: min(100%, 34rem); }
-.chat-action {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 0.6rem;
-    padding: 0.65rem 0.75rem 0.65rem 0.95rem;
-    background: var(--amber-soft);
-    border: 1px solid var(--rule);
-    border-radius: var(--r-md);
-    animation: rise 0.2s var(--ease) backwards;
+.chat-thinking { display: flex; gap: 0.4rem; align-self: flex-start; padding: 1.15rem 1.3rem; background: var(--c-stone); }
+.chat-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--ink); opacity: 0.25; animation: chat-dot 1.1s var(--ease) infinite; }
+.chat-dot:nth-child(2) { animation-delay: 0.15s; }
+.chat-dot:nth-child(3) { animation-delay: 0.3s; }
+@keyframes chat-dot {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.25; }
+    30% { transform: translateY(-5px); opacity: 0.8; }
 }
-.chat-action-text { font-size: 0.9rem; min-width: 0; overflow-wrap: anywhere; }
+
+.chat-action {
+    padding: 1rem 1.25rem 1.1rem;
+    border-radius: var(--r-lg);
+    background: var(--ink);
+    color: var(--paper);
+    box-shadow: var(--shadow-md);
+}
+.chat-action-kicker { margin: 0 0 0.25rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--c-mustard); }
+.chat-action-text { margin: 0; font-size: 1.45rem; font-weight: 500; line-height: 1.15; letter-spacing: -0.04em; }
 .chat-action-buttons,
-.chat-action-all { display: flex; gap: 0.4rem; }
-.chat-action-all { justify-content: flex-end; }
-.chat-action .btn,
-.chat-action-all .btn { padding: 0.35rem 0.85rem; font-size: 0.8rem; }
-.chat-action-state { font-size: 0.8rem; color: var(--ink-3); }
-.chat-error { margin: 0; font-size: 0.85rem; color: var(--accent); }
+.chat-action-all { display: flex; gap: 0.5rem; margin-top: 0.9rem; }
+.chat-action-all { justify-content: flex-end; margin-top: 0; }
+.chat-action-state { margin: 0.6rem 0 0; font-size: 0.85rem; opacity: 0.7; }
+/* Buttons inverted for the dark card. */
+.chat-action .btn-primary { background: var(--paper); color: var(--ink); }
+.chat-action .btn-primary:hover { background: var(--c-mustard); }
+.chat-action .btn-quiet { border-color: rgb(247 244 238 / 0.3); color: var(--paper); }
+.chat-action .btn-quiet:hover { border-color: var(--paper); }
+.chat-error { margin: 0; font-size: 0.9rem; color: var(--accent); }
 
 .chat-composer { display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem 0.5rem 0.5rem 1rem; max-width: 46rem; }
 .chat-input {
     flex: 1;
     min-width: 0;
     font: inherit;
-    font-size: 0.95rem;
+    font-size: 1.05rem;
     padding: 0.35rem 0;
     border: 0;
     background: transparent;
