@@ -315,3 +315,18 @@ describe("trash over HTTP", () => {
         expect((await call("POST", "/api/trash/tasks/nope/restore")).status).toBe(404);
     });
 });
+
+describe("adding to a project over HTTP", () => {
+    it("files a quick-add into the project named by projectId", async () => {
+        const post = (path: string, body: unknown) =>
+            SELF.fetch(`https://example.com${path}`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify(body),
+            });
+        const project = (await (await post("/api/projects", { name: "HttpWork" })).json()) as { project: { id: string } };
+        const res = await post("/api/tasks", { text: "Draft memo", projectId: project.project.id });
+        expect(res.status).toBe(201);
+        expect(((await res.json()) as { task: { projectId: string } }).task.projectId).toBe(project.project.id);
+    });
+});
