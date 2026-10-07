@@ -11,6 +11,7 @@ import {
 } from "../../shared/civil.ts";
 import type { CalEvent, CalendarItem, EventInput } from "../../shared/types.ts";
 import { api } from "../api.ts";
+import { useCalendarRange } from "../useCalendarRange.ts";
 import { dragRange, minutesAtOffset, rangeToEvent } from "../eventDrag.ts";
 import { EventDetails } from "./EventDetails.tsx";
 import { Hero } from "./Hero.tsx";
@@ -57,9 +58,6 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask }: Props) 
     // keeps you on the same day. The week snaps to Monday; day and 3-day start on it.
     const [focus, setFocus] = useState<Civil>(() => civilFromDate(new Date(), timeZone));
     const rangeStart = useMemo(() => (mode === "week" ? startOfWeek(focus) : focus), [focus, mode]);
-    const [items, setItems] = useState<CalendarItem[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
     const [selected, setSelected] = useState<CalendarItem | null>(null);
     const gridRef = useRef<HTMLDivElement>(null);
 
@@ -70,11 +68,13 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask }: Props) 
     const [draft, setDraft] = useState<{ day: string; start: number; end: number } | null>(null);
     const [editor, setEditor] = useState<{ initial: EventInput; id: string | null } | null>(null);
     const [reload, setReload] = useState(0);
-    // The range whose items are on screen. A refetch of the same range (after an edit)
-    // keeps them up quietly; a new range has nothing to show yet, so it gets a spinner.
-    const rangeKey = `${civilKey(rangeStart)}:${dayCount}`;
-    const [loadedRange, setLoadedRange] = useState<string | null>(null);
-    const syncing = loading && loadedRange !== rangeKey;
+    // Cached ranges paint at once and revalidate behind; only a range never seen gets a spinner.
+    const { items, syncing, error, setError, removeItem } = useCalendarRange(
+        rangeStart,
+        dayCount,
+        timeZone,
+        `${revision}:${reload}`,
+    );
     const [refreshing, setRefreshing] = useState(false);
 
     /** Skips the cache: Google is asked again, then this range reloads. */
@@ -95,29 +95,6 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask }: Props) 
         () => Array.from({ length: dayCount }, (_, i) => addDays(rangeStart, i)),
         [rangeStart, dayCount],
     );
-
-    useEffect(() => {
-        let cancelled = false;
-        const start = new Date(zonedToUtcMs(rangeStart, 0, timeZone)).toISOString();
-        const end = new Date(zonedToUtcMs(addDays(rangeStart, dayCount), 0, timeZone)).toISOString();
-
-        setLoading(true);
-        api
-            .calendar(start, end)
-            .then((res) => {
-                if (!cancelled) {
-                    setItems(res.items);
-                    setLoadedRange(`${civilKey(rangeStart)}:${dayCount}`);
-                    setError(null);
-                }
-            })
-            .catch((err: Error) => !cancelled && setError(err.message))
-            .finally(() => !cancelled && setLoading(false));
-
-        return () => {
-            cancelled = true;
-        };
-    }, [rangeStart, dayCount, timeZone, revision, reload]);
 
     // Open on the working day rather than at midnight.
     useEffect(() => {
@@ -247,6 +224,7 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask }: Props) 
 
     async function deleteEvent() {
         if (!editor?.id) return;
+        removeItem(`event:${editor.id}`);
         await api.deleteEvent(editor.id);
         setReload((n) => n + 1);
     }
@@ -309,7 +287,7 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask }: Props) 
                     </div>
                 </div>
                 <Hero
-                    kicker={loading ? "Syncing…" : rangeLabel}
+                    kicker={syncing ? "Syncing…" : rangeLabel}
                     title={`${MONTHS[rangeStart.m - 1].toUpperCase()} ${rangeStart.y}`}
                     stats={[
                         { value: syncing ? "–" : items.length - taskCount, label: "events" },
