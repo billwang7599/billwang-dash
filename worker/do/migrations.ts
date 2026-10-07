@@ -533,4 +533,15 @@ export const migrations: Migration[] = [
             CREATE INDEX idx_events_days ON events(start_date, end_date);
         `,
     },
+    {
+        // Approved assistant writes, so the same tool call can't run twice; see do/ai-runs.ts.
+        version: 25,
+        sql: `
+            CREATE TABLE ai_tool_runs (
+                tool_call_id TEXT PRIMARY KEY,
+                result TEXT,
+                created_at INTEGER NOT NULL
+            );
+        `,
+    },
 ];

@@ -5,6 +5,9 @@ export default defineWorkersConfig({
         poolOptions: {
             workers: {
                 wrangler: { configPath: "./wrangler.jsonc" },
+                // The AI binding is remote-only. Tests pass a fake model to runAgent
+                // rather than spending neurons or needing `wrangler login` in CI.
+                remoteBindings: false,
                 miniflare: {
                     bindings: {
                         // Blank so getUser() takes the DEV_USER path. Verifying a real

@@ -2,6 +2,8 @@ import { DurableObject } from "cloudflare:workers";
 import { addDays, civilFromDate, civilKey, weekday, zonedToUtcMs } from "../shared/civil.ts";
 import type { Goal, GoalInput } from "../shared/goals.ts";
 import type { DayStatus, HabitDay, HabitDetail, HabitInput, HabitSummary } from "../shared/habits.ts";
+import * as aiRuns from "./do/ai-runs.ts";
+import type { ToolRunClaim } from "./do/ai-runs.ts";
 import * as eventStore from "./do/events.ts";
 import * as goalStore from "./do/goals.ts";
 import * as habitStore from "./do/habits.ts";
@@ -352,6 +354,17 @@ export class UserDO extends DurableObject<Env> {
 
     async deleteGoal(id: string): Promise<void> {
         goalStore.deleteGoal(this.sql, id);
+    }
+
+    // ---- Assistant ---------------------------------------------------------
+
+    /** False with the earlier result if this approved tool call already ran (or is running). */
+    async claimToolRun(toolCallId: string): Promise<ToolRunClaim> {
+        return aiRuns.claimToolRun(this.sql, toolCallId, Date.now());
+    }
+
+    async finishToolRun(toolCallId: string, result: string): Promise<void> {
+        aiRuns.finishToolRun(this.sql, toolCallId, result);
     }
 
     // ---- Google ------------------------------------------------------------

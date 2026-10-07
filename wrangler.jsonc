@@ -29,6 +29,12 @@
         ]
     },
 
+    // The assistant in worker/ai/. Always runs remotely, even under `npm run dev`.
+    "ai": {
+        "binding": "AI",
+        "remote": true
+    },
+
     "migrations": [
         {
             "tag": "v1",

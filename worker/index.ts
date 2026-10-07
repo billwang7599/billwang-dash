@@ -1,5 +1,6 @@
 import { Hono, type Context } from "hono";
 import type { z } from "zod";
+import { runAgent, type Model } from "./ai/agent.ts";
 import { getUser, type AuthedUser } from "./auth.ts";
 import { UserDO } from "./user-do.ts";
 import { buildAuthUrl } from "./google.ts";
@@ -219,6 +220,16 @@ app.get("/api/calendar", async (c) =>
         items: await service.calendarItems(stub(c), c.req.query("start"), c.req.query("end")),
     }),
 );
+
+// ---- Assistant -----------------------------------------------------------
+
+// The binding's run() is overloaded per model; runAgent only needs the chat shape.
+const workersAi = (ai: Ai): Model => ({ run: (model, input) => ai.run(model as keyof AiModels, input as never) });
+
+app.post("/api/ai/chat", async (c) => {
+    const { messages, timeZone, approvals } = await body(c, schemas.chatBody);
+    return c.json(await runAgent({ model: workersAi(c.env.AI), stub: stub(c), timeZone, messages, approvals }));
+});
 
 // ---- Google Calendar -----------------------------------------------------
 

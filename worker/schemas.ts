@@ -134,3 +134,32 @@ export const googlePushBody = z.object({
 export const pinnedBody = z.object({
     pinned: z.boolean(),
 });
+
+const toolCall = z.object({
+    id: z.string().min(1).max(200),
+    type: z.literal("function"),
+    function: z.object({ name: z.string().max(100), arguments: z.string().max(20_000) }),
+});
+
+/** Assistant history comes back from the browser, so it is bounded like any other body. */
+export const chatBody = z.object({
+    messages: z
+        .array(
+            z.discriminatedUnion("role", [
+                z.object({ role: z.literal("user"), content: z.string().max(4000) }),
+                z.object({
+                    role: z.literal("assistant"),
+                    content: z.string().max(20_000).nullable(),
+                    tool_calls: z.array(toolCall).max(20).optional(),
+                }),
+                z.object({ role: z.literal("tool"), tool_call_id: z.string().max(200), content: z.string().max(20_000) }),
+            ]),
+        )
+        .min(1)
+        .max(200),
+    timeZone: timeZone.optional(),
+    approvals: z
+        .array(z.object({ toolCallId: z.string().min(1).max(200), approved: z.boolean() }))
+        .max(20)
+        .optional(),
+});
