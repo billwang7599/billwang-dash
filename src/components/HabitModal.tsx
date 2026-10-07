@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { habitInputSchema, type HabitFreq, type HabitInput, type HabitSummary } from "../../shared/habits.ts";
+import { useDismiss } from "../useDismiss.ts";
+import { Modal } from "./Modal.tsx";
 
 interface Props {
     /** Present when editing. */
@@ -20,6 +22,7 @@ const DAYS: { value: number; label: string }[] = [
 ];
 
 export function HabitModal({ habit, onSave, onClose }: Props) {
+    const [closing, close] = useDismiss(onClose);
     const [name, setName] = useState(habit?.name ?? "");
     const [description, setDescription] = useState(habit?.description ?? "");
     const [freq, setFreq] = useState<HabitFreq>(habit?.freq ?? "daily");
@@ -30,12 +33,6 @@ export function HabitModal({ habit, onSave, onClose }: Props) {
     const nameRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => nameRef.current?.focus(), []);
-
-    useEffect(() => {
-        const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-        window.addEventListener("keydown", onKey);
-        return () => window.removeEventListener("keydown", onKey);
-    }, [onClose]);
 
     const parsed = habitInputSchema.safeParse({
         name,
@@ -53,7 +50,7 @@ export function HabitModal({ habit, onSave, onClose }: Props) {
         setError(null);
         try {
             await onSave(parsed.data);
-            onClose();
+            close();
         } catch (err) {
             setError((err as Error).message);
             setBusy(false);
@@ -64,95 +61,87 @@ export function HabitModal({ habit, onSave, onClose }: Props) {
         setWeekdays((days) => (days.includes(value) ? days.filter((d) => d !== value) : [...days, value]));
 
     return (
-        <div className="modal-backdrop" onMouseDown={onClose}>
-            <div
-                className="modal habit-modal"
-                role="dialog"
-                aria-modal="true"
-                aria-label={habit ? "Edit habit" : "New habit"}
-                onMouseDown={(e) => e.stopPropagation()}
-            >
-                <form onSubmit={save}>
-                    <input
-                        ref={nameRef}
-                        className="modal-title"
-                        value={name}
-                        maxLength={100}
-                        onChange={(e) => setName(e.target.value)}
-                        placeholder="Habit name, e.g. Meditate"
-                        aria-label="Habit name"
-                    />
+        <Modal label={habit ? "Edit habit" : "New habit"} className="habit-modal" closing={closing} onClose={close}>
+            <form onSubmit={save}>
+                <input
+                    ref={nameRef}
+                    className="modal-title"
+                    value={name}
+                    maxLength={100}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Habit name, e.g. Meditate"
+                    aria-label="Habit name"
+                />
 
-                    <textarea
-                        className="modal-desc"
-                        value={description}
-                        maxLength={1000}
-                        onChange={(e) => setDescription(e.target.value)}
-                        placeholder="Description (optional)"
-                        aria-label="Description"
-                        rows={2}
-                    />
+                <textarea
+                    className="modal-desc"
+                    value={description}
+                    maxLength={1000}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Description (optional)"
+                    aria-label="Description"
+                    rows={2}
+                />
 
-                    <div className="modal-grid">
+                <div className="modal-grid">
+                    <label className="modal-wide">
+                        <span>How often</span>
+                        <select value={freq} onChange={(e) => setFreq(e.target.value as HabitFreq)}>
+                            <option value="daily">Every day</option>
+                            <option value="weekly_count">A number of times a week</option>
+                            <option value="weekdays">On specific days</option>
+                        </select>
+                    </label>
+
+                    {freq === "weekly_count" && (
                         <label className="modal-wide">
-                            <span>How often</span>
-                            <select value={freq} onChange={(e) => setFreq(e.target.value as HabitFreq)}>
-                                <option value="daily">Every day</option>
-                                <option value="weekly_count">A number of times a week</option>
-                                <option value="weekdays">On specific days</option>
+                            <span>Times a week</span>
+                            <select value={perWeek} onChange={(e) => setPerWeek(Number(e.target.value))}>
+                                {[1, 2, 3, 4, 5, 6, 7].map((n) => (
+                                    <option key={n} value={n}>
+                                        {n}
+                                    </option>
+                                ))}
                             </select>
                         </label>
-
-                        {freq === "weekly_count" && (
-                            <label className="modal-wide">
-                                <span>Times a week</span>
-                                <select value={perWeek} onChange={(e) => setPerWeek(Number(e.target.value))}>
-                                    {[1, 2, 3, 4, 5, 6, 7].map((n) => (
-                                        <option key={n} value={n}>
-                                            {n}
-                                        </option>
-                                    ))}
-                                </select>
-                            </label>
-                        )}
-
-                        {freq === "weekdays" && (
-                            <div className="modal-wide">
-                                <span className="habit-days-label">Days</span>
-                                <div className="habit-days" role="group" aria-label="Days of the week">
-                                    {DAYS.map(({ value, label }) => (
-                                        <button
-                                            key={value}
-                                            type="button"
-                                            className={`habit-day-btn${weekdays.includes(value) ? " is-on" : ""}`}
-                                            aria-pressed={weekdays.includes(value)}
-                                            onClick={() => toggleDay(value)}
-                                        >
-                                            {label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    {habit && (
-                        <p className="modal-note">
-                            Changing how often applies to your whole history, so past streaks are recalculated.
-                        </p>
                     )}
-                    {error && <p className="modal-error">{error}</p>}
 
-                    <div className="modal-actions">
-                        <button type="button" className="btn btn-quiet" onClick={onClose}>
-                            Cancel
-                        </button>
-                        <button type="submit" className="btn btn-primary" disabled={!canSave || busy}>
-                            {busy ? "Saving…" : habit ? "Save" : "Add habit"}
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
+                    {freq === "weekdays" && (
+                        <div className="modal-wide">
+                            <span className="habit-days-label">Days</span>
+                            <div className="habit-days" role="group" aria-label="Days of the week">
+                                {DAYS.map(({ value, label }) => (
+                                    <button
+                                        key={value}
+                                        type="button"
+                                        className={`habit-day-btn${weekdays.includes(value) ? " is-on" : ""}`}
+                                        aria-pressed={weekdays.includes(value)}
+                                        onClick={() => toggleDay(value)}
+                                    >
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {habit && (
+                    <p className="modal-note">
+                        Changing how often applies to your whole history, so past streaks are recalculated.
+                    </p>
+                )}
+                {error && <p className="modal-error">{error}</p>}
+
+                <div className="modal-actions">
+                    <button type="button" className="btn btn-quiet" onClick={close}>
+                        Cancel
+                    </button>
+                    <button type="submit" className="btn btn-primary" disabled={!canSave || busy}>
+                        {busy ? "Saving…" : habit ? "Save" : "Add habit"}
+                    </button>
+                </div>
+            </form>
+        </Modal>
     );
 }

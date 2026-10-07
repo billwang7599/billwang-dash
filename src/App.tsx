@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { isDone, type Goal, type GoalInput } from "../shared/goals.ts";
 import type { HabitInput, HabitSummary } from "../shared/habits.ts";
 import type { ProjectColor, Task } from "../shared/types.ts";
@@ -58,6 +59,16 @@ function viewFromPath(pathname: string): View {
     return { name: "inbox" };
 }
 
+/**
+ * Slides the sidebar's active pill to its new row; the view itself animates in
+ * on mount. flushSync so the new view is in the DOM when the browser takes its
+ * "after" snapshot. Browsers without view transitions just swap.
+ */
+function withTransition(update: () => void) {
+    if (!("startViewTransition" in document)) return update();
+    document.startViewTransition(() => flushSync(update));
+}
+
 export function App() {
     const [state, setState] = useState<AppState | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -82,7 +93,7 @@ export function App() {
     }, []);
 
     useEffect(() => {
-        const onPop = () => setView(viewFromPath(window.location.pathname));
+        const onPop = () => withTransition(() => setView(viewFromPath(window.location.pathname)));
         window.addEventListener("popstate", onPop);
         return () => window.removeEventListener("popstate", onPop);
     }, []);
@@ -102,7 +113,7 @@ export function App() {
 
     const navigate = useCallback((path: string) => {
         window.history.pushState({}, "", path);
-        setView(viewFromPath(path));
+        withTransition(() => setView(viewFromPath(path)));
     }, []);
 
     /**
@@ -482,183 +493,186 @@ export function App() {
                     </p>
                 )}
 
-                {view.name === "settings" ? (
-                    <Settings
-                        preferences={state.preferences}
-                        user={state.user}
-                        onPreferencesChange={setPreferences}
-                        onOpenTrash={() => navigate("/app/trash")}
-                    />
-                ) : view.name === "habit" ? (
-                    (() => {
-                        const habit = state.habits.find((h) => h.id === view.id);
-                        return habit ? (
-                            <HabitView
-                                habit={habit}
-                                color={cardColor(state.habits.indexOf(habit))}
-                                onBack={() => navigate("/app/habits")}
-                                today={todayKey(state.preferences.timeZone)}
-                                revision={habitRevision}
-                                onChanged={applyHabit}
-                                onUpdate={updateHabit}
-                                onDelete={deleteHabit}
-                            />
-                        ) : (
-                            <p className="habit-empty">That habit doesn't exist any more.</p>
-                        );
-                    })()
-                ) : view.name === "projects" ? (
-                    <ProjectsView
-                        projects={state.projects}
-                        tasks={state.tasks}
-                        colors={colors}
-                        timeZone={state.preferences.timeZone}
-                        today={today}
-                        onOpen={(id) => navigate(`/app/project/${id}`)}
-                        onCreate={async (name) => {
-                            await api.createProject(name);
-                            await reload();
-                        }}
-                        onTogglePin={togglePinProject}
-                        onDelete={deleteProject}
-                    />
-                ) : view.name === "completed" ? (
-                    <CompletedView
-                        projects={state.projects}
-                        goals={state.goals}
-                        timeZone={state.preferences.timeZone}
-                        colors={colors}
-                        project={view.projectId ? state.projects.find((p) => p.id === view.projectId) : undefined}
-                        doneThisWeek={
-                            view.projectId
-                                ? (state.completedThisWeekByProject[view.projectId] ?? 0)
-                                : state.completedThisWeek
-                        }
-                        onUndo={async (task) => {
-                            await api.uncompleteTask(task.id);
-                            await reload();
-                        }}
-                        onBack={() => navigate(view.projectId ? `/app/project/${view.projectId}` : "/app")}
-                    />
-                ) : view.name === "habits" ? (
-                    <HabitsView
-                        habits={state.habits}
-                        today={today}
-                        revision={habitRevision}
-                        onChanged={applyHabit}
-                        onNew={() => setNewHabit(true)}
-                        onOpen={(id) => navigate(`/app/habit/${id}`)}
-                    />
-                ) : view.name === "goals" ? (
-                    <GoalsView
-                        goals={state.goals}
-                        tasks={state.tasks}
-                        projects={state.projects}
-                        timeZone={state.preferences.timeZone}
-                        today={today}
-                        onAddStep={(goalId, text) => addTask(text, goalId)}
-                        onCompleteTask={completeTask}
-                        onDeleteTask={(id) => setPendingTaskDelete(state.tasks.find((t) => t.id === id) ?? null)}
-                        onOpenTask={setEditing}
-                        onCreate={createGoal}
-                        onUpdate={updateGoal}
-                        onProgress={setGoalProgress}
-                        onDelete={deleteGoal}
-                    />
-                ) : view.name === "trash" ? (
-                    <Trash projects={state.projects} onChanged={reload} onBack={() => navigate("/app/settings")} />
-                ) : view.name === "calendar" ? (
-                    <WeekCalendar
-                        timeZone={state.preferences.timeZone}
-                        colors={colors}
-                        revision={revision}
-                        onOpenTask={(id) => {
-                            const task = state.tasks.find((t) => t.id === id);
-                            if (task) setEditing(task);
-                        }}
-                    />
-                ) : (
-                    <>
-                        {view.name === "inbox" ? (
-                            <>
-                                <div className="view-bar">
-                                    <InboxFilter
-                                        projects={state.projects}
-                                        goals={state.goals.filter(
-                                            (g) => !isDone(g) || state.tasks.some((t) => t.goalId === g.id),
-                                        )}
-                                        hidden={{
-                                            projects: state.preferences.inboxHiddenProjects,
-                                            goals: state.preferences.inboxHiddenGoals,
-                                        }}
-                                        onChange={setInboxHidden}
-                                    />
-                                </div>
-                                <Hero
-                                    kicker={heroDate(today).weekday}
-                                    title={heroDate(today).title}
-                                    stats={[
-                                        { value: overdueCount, label: "overdue" },
-                                        { value: todayCount - overdueCount, label: "today" },
-                                        {
-                                            value: state.completedThisWeek,
-                                            label: "done this week",
-                                            onClick: () => navigate("/app/completed"),
-                                        },
-                                    ]}
+                {/* Keyed on the view so each navigation mounts it afresh and replays its entrance. */}
+                <Fragment key={JSON.stringify(view)}>
+                    {view.name === "settings" ? (
+                        <Settings
+                            preferences={state.preferences}
+                            user={state.user}
+                            onPreferencesChange={setPreferences}
+                            onOpenTrash={() => navigate("/app/trash")}
+                        />
+                    ) : view.name === "habit" ? (
+                        (() => {
+                            const habit = state.habits.find((h) => h.id === view.id);
+                            return habit ? (
+                                <HabitView
+                                    habit={habit}
+                                    color={cardColor(state.habits.indexOf(habit))}
+                                    onBack={() => navigate("/app/habits")}
+                                    today={todayKey(state.preferences.timeZone)}
+                                    revision={habitRevision}
+                                    onChanged={applyHabit}
+                                    onUpdate={updateHabit}
+                                    onDelete={deleteHabit}
                                 />
-                            </>
-                        ) : (
-                            <Hero
-                                kicker="Project"
-                                title={titleFor(view, state)}
-                                accent={view.name === "project" ? colors.get(view.id) : undefined}
-                                onPickAccent={
-                                    view.name === "project"
-                                        ? (color) => setProjectColor(view.id, color)
-                                        : undefined
-                                }
-                                stats={[
-                                    { value: filtered.length, label: "open" },
-                                    {
-                                        value: filtered.filter((t) => t.due && t.due.date < today).length,
-                                        label: "overdue",
-                                    },
-                                    ...(view.name === "project"
-                                        ? [
-                                              {
-                                                  value: state.completedThisWeekByProject[view.id] ?? 0,
-                                                  label: "done this week",
-                                                  onClick: () => navigate(`/app/project/${view.id}/completed`),
-                                              },
-                                          ]
-                                        : []),
-                                ]}
-                            />
-                        )}
-                        <TaskList
-                            tasks={filtered}
+                            ) : (
+                                <p className="habit-empty">That habit doesn't exist any more.</p>
+                            );
+                        })()
+                    ) : view.name === "projects" ? (
+                        <ProjectsView
+                            projects={state.projects}
+                            tasks={state.tasks}
+                            colors={colors}
+                            timeZone={state.preferences.timeZone}
+                            today={today}
+                            onOpen={(id) => navigate(`/app/project/${id}`)}
+                            onCreate={async (name) => {
+                                await api.createProject(name);
+                                await reload();
+                            }}
+                            onTogglePin={togglePinProject}
+                            onDelete={deleteProject}
+                        />
+                    ) : view.name === "completed" ? (
+                        <CompletedView
                             projects={state.projects}
                             goals={state.goals}
                             timeZone={state.preferences.timeZone}
-                            today={today}
-                            layout={view.name === "project" ? "project" : "inbox"}
                             colors={colors}
-                            emptyMessage={
-                                filtered.length < state.tasks.length && view.name === "inbox"
-                                    ? "Nothing matches your filter."
-                                    : emptyFor(view)
+                            project={view.projectId ? state.projects.find((p) => p.id === view.projectId) : undefined}
+                            doneThisWeek={
+                                view.projectId
+                                    ? (state.completedThisWeekByProject[view.projectId] ?? 0)
+                                    : state.completedThisWeek
                             }
-                            onComplete={completeTask}
-                            onDelete={(id) =>
-                                setPendingTaskDelete(state.tasks.find((t) => t.id === id) ?? null)
-                            }
-                            onOpen={setEditing}
-                            onOpenProject={(id) => navigate(`/app/project/${id}`)}
-                            onOpenGoal={() => navigate("/app/goals")}
+                            onUndo={async (task) => {
+                                await api.uncompleteTask(task.id);
+                                await reload();
+                            }}
+                            onBack={() => navigate(view.projectId ? `/app/project/${view.projectId}` : "/app")}
                         />
-                    </>
-                )}
+                    ) : view.name === "habits" ? (
+                        <HabitsView
+                            habits={state.habits}
+                            today={today}
+                            revision={habitRevision}
+                            onChanged={applyHabit}
+                            onNew={() => setNewHabit(true)}
+                            onOpen={(id) => navigate(`/app/habit/${id}`)}
+                        />
+                    ) : view.name === "goals" ? (
+                        <GoalsView
+                            goals={state.goals}
+                            tasks={state.tasks}
+                            projects={state.projects}
+                            timeZone={state.preferences.timeZone}
+                            today={today}
+                            onAddStep={(goalId, text) => addTask(text, goalId)}
+                            onCompleteTask={completeTask}
+                            onDeleteTask={(id) => setPendingTaskDelete(state.tasks.find((t) => t.id === id) ?? null)}
+                            onOpenTask={setEditing}
+                            onCreate={createGoal}
+                            onUpdate={updateGoal}
+                            onProgress={setGoalProgress}
+                            onDelete={deleteGoal}
+                        />
+                    ) : view.name === "trash" ? (
+                        <Trash projects={state.projects} onChanged={reload} onBack={() => navigate("/app/settings")} />
+                    ) : view.name === "calendar" ? (
+                        <WeekCalendar
+                            timeZone={state.preferences.timeZone}
+                            colors={colors}
+                            revision={revision}
+                            onOpenTask={(id) => {
+                                const task = state.tasks.find((t) => t.id === id);
+                                if (task) setEditing(task);
+                            }}
+                        />
+                    ) : (
+                        <>
+                            {view.name === "inbox" ? (
+                                <>
+                                    <div className="view-bar">
+                                        <InboxFilter
+                                            projects={state.projects}
+                                            goals={state.goals.filter(
+                                                (g) => !isDone(g) || state.tasks.some((t) => t.goalId === g.id),
+                                            )}
+                                            hidden={{
+                                                projects: state.preferences.inboxHiddenProjects,
+                                                goals: state.preferences.inboxHiddenGoals,
+                                            }}
+                                            onChange={setInboxHidden}
+                                        />
+                                    </div>
+                                    <Hero
+                                        kicker={heroDate(today).weekday}
+                                        title={heroDate(today).title}
+                                        stats={[
+                                            { value: overdueCount, label: "overdue" },
+                                            { value: todayCount - overdueCount, label: "today" },
+                                            {
+                                                value: state.completedThisWeek,
+                                                label: "done this week",
+                                                onClick: () => navigate("/app/completed"),
+                                            },
+                                        ]}
+                                    />
+                                </>
+                            ) : (
+                                <Hero
+                                    kicker="Project"
+                                    title={titleFor(view, state)}
+                                    accent={view.name === "project" ? colors.get(view.id) : undefined}
+                                    onPickAccent={
+                                        view.name === "project"
+                                            ? (color) => setProjectColor(view.id, color)
+                                            : undefined
+                                    }
+                                    stats={[
+                                        { value: filtered.length, label: "open" },
+                                        {
+                                            value: filtered.filter((t) => t.due && t.due.date < today).length,
+                                            label: "overdue",
+                                        },
+                                        ...(view.name === "project"
+                                            ? [
+                                                  {
+                                                      value: state.completedThisWeekByProject[view.id] ?? 0,
+                                                      label: "done this week",
+                                                      onClick: () => navigate(`/app/project/${view.id}/completed`),
+                                                  },
+                                              ]
+                                            : []),
+                                    ]}
+                                />
+                            )}
+                            <TaskList
+                                tasks={filtered}
+                                projects={state.projects}
+                                goals={state.goals}
+                                timeZone={state.preferences.timeZone}
+                                today={today}
+                                layout={view.name === "project" ? "project" : "inbox"}
+                                colors={colors}
+                                emptyMessage={
+                                    filtered.length < state.tasks.length && view.name === "inbox"
+                                        ? "Nothing matches your filter."
+                                        : emptyFor(view)
+                                }
+                                onComplete={completeTask}
+                                onDelete={(id) =>
+                                    setPendingTaskDelete(state.tasks.find((t) => t.id === id) ?? null)
+                                }
+                                onOpen={setEditing}
+                                onOpenProject={(id) => navigate(`/app/project/${id}`)}
+                                onOpenGoal={() => navigate("/app/goals")}
+                            />
+                        </>
+                    )}
+                </Fragment>
 
                 {/* Pinned to the bottom of the screen while the list scrolls above it. */}
                 {hasQuickAdd && (

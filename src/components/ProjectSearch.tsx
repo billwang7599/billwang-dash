@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Project } from "../../shared/types.ts";
+import { useDismiss } from "../useDismiss.ts";
+import { Modal } from "./Modal.tsx";
 
 interface Props {
     projects: Project[];
@@ -8,16 +10,11 @@ interface Props {
 }
 
 export function ProjectSearch({ projects, onSelect, onClose }: Props) {
+    const [closing, close] = useDismiss(onClose);
     const [query, setQuery] = useState("");
     const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => inputRef.current?.focus(), []);
-
-    useEffect(() => {
-        const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-        window.addEventListener("keydown", onKey);
-        return () => window.removeEventListener("keydown", onKey);
-    }, [onClose]);
 
     const results = useMemo(() => {
         const q = query.trim().toLowerCase();
@@ -31,36 +28,28 @@ export function ProjectSearch({ projects, onSelect, onClose }: Props) {
     }
 
     return (
-        <div className="modal-backdrop" onMouseDown={onClose}>
-            <div
-                className="modal search-modal"
-                role="dialog"
-                aria-modal="true"
-                aria-label="Search projects"
-                onMouseDown={(e) => e.stopPropagation()}
-            >
-                <form onSubmit={submit}>
-                    <input
-                        ref={inputRef}
-                        className="modal-title"
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        placeholder="Search projects…"
-                        aria-label="Search projects"
-                    />
-                </form>
+        <Modal label="Search projects" className="search-modal" closing={closing} onClose={close}>
+            <form onSubmit={submit}>
+                <input
+                    ref={inputRef}
+                    className="modal-title"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Search projects…"
+                    aria-label="Search projects"
+                />
+            </form>
 
-                <ul className="search-results">
-                    {results.length === 0 && <li className="search-empty">No projects match.</li>}
-                    {results.map((p) => (
-                        <li key={p.id}>
-                            <button className="search-result" onClick={() => onSelect(p)}>
-                                {p.name}
-                            </button>
-                        </li>
-                    ))}
-                </ul>
-            </div>
-        </div>
+            <ul className="search-results">
+                {results.length === 0 && <li className="search-empty">No projects match.</li>}
+                {results.map((p) => (
+                    <li key={p.id}>
+                        <button className="search-result" onClick={() => onSelect(p)}>
+                            {p.name}
+                        </button>
+                    </li>
+                ))}
+            </ul>
+        </Modal>
     );
 }

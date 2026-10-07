@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
 import type { Goal } from "../../shared/goals.ts";
 import type { Project } from "../../shared/types.ts";
+import { usePopover } from "../usePopover.ts";
 
 export interface InboxHidden {
     projects: string[];
@@ -22,22 +22,7 @@ interface Props {
  * its goal is too.
  */
 export function InboxFilter({ projects, goals, hidden, onChange }: Props) {
-    const [open, setOpen] = useState(false);
-    const rootRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        if (!open) return;
-        const onDown = (e: MouseEvent) => {
-            if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
-        };
-        const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-        window.addEventListener("mousedown", onDown);
-        window.addEventListener("keydown", onKey);
-        return () => {
-            window.removeEventListener("mousedown", onDown);
-            window.removeEventListener("keydown", onKey);
-        };
-    }, [open]);
+    const { open, setOpen, ref: rootRef } = usePopover<HTMLDivElement>();
 
     // Inbox first, then A–Z, like the sidebar's default.
     const orderedProjects = [...projects].sort((a, b) =>

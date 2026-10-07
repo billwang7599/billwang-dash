@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { Project, Task } from "../../shared/types.ts";
 import { formatDateLabel, formatTime } from "../format.ts";
 import { projectDeleteMessage } from "../projectDelete.ts";
+import { usePopover } from "../usePopover.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { Hero } from "./Hero.tsx";
 
@@ -67,13 +68,13 @@ export function ProjectsView({ projects, tasks, colors, timeZone, today, onOpen,
                     <button className="ptile-name" onClick={() => onOpen(p.id)}>
                         {p.name}
                     </button>
-                    <details className="goal-menu">
-                        <summary aria-label={`Actions for ${p.name}`}>⋯</summary>
-                        <div className="goal-menu-list">
-                            <button onClick={() => onTogglePin(p.id, !p.pinned)}>{p.pinned ? "Unpin" : "Pin"}</button>
-                            <button onClick={() => setPendingDelete(p)}>Delete</button>
-                        </div>
-                    </details>
+                    <TileMenu
+                        label={`Actions for ${p.name}`}
+                        actions={[
+                            [p.pinned ? "Unpin" : "Pin", () => onTogglePin(p.id, !p.pinned)],
+                            ["Delete", () => setPendingDelete(p)],
+                        ]}
+                    />
                 </div>
                 <button className="ptile-foot" onClick={() => onOpen(p.id)} tabIndex={-1}>
                     <span className="ptile-count">
@@ -183,6 +184,33 @@ export function ProjectsView({ projects, tasks, colors, timeZone, today, onOpen,
                     }}
                     onCancel={() => setPendingDelete(null)}
                 />
+            )}
+        </div>
+    );
+}
+
+/** The ⋯ button on a tile; picking an action closes it. */
+function TileMenu({ label, actions }: { label: string; actions: [string, () => void][] }) {
+    const { open, setOpen, ref } = usePopover<HTMLDivElement>();
+    return (
+        <div className={`goal-menu${open ? " is-open" : ""}`} ref={ref}>
+            <button className="goal-menu-button" onClick={() => setOpen(!open)} aria-label={label} aria-haspopup="true" aria-expanded={open}>
+                ⋯
+            </button>
+            {open && (
+                <div className="goal-menu-list">
+                    {actions.map(([name, run]) => (
+                        <button
+                            key={name}
+                            onClick={() => {
+                                setOpen(false);
+                                run();
+                            }}
+                        >
+                            {name}
+                        </button>
+                    ))}
+                </div>
             )}
         </div>
     );

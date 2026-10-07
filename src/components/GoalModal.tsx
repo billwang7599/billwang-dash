@@ -10,6 +10,8 @@ import {
     type GoalInput,
     type Horizon,
 } from "../../shared/goals.ts";
+import { useDismiss } from "../useDismiss.ts";
+import { Modal } from "./Modal.tsx";
 
 interface Props {
     /** Present when editing. */
@@ -35,6 +37,7 @@ const num = (s: string) => (s.trim() === "" ? NaN : Number(s));
 export const numeric = (s: string) => s.replace(/[^\d.]/g, "");
 
 export function GoalModal({ goal, horizon: initialHorizon, today, onSave, onDelete, onClose }: Props) {
+    const [closing, close] = useDismiss(onClose);
     const [title, setTitle] = useState(goal?.title ?? "");
     const [why, setWhy] = useState(goal?.why ?? "");
     const [horizon, setHorizon] = useState<Horizon>(goal?.horizon ?? initialHorizon ?? "short");
@@ -47,12 +50,6 @@ export function GoalModal({ goal, horizon: initialHorizon, today, onSave, onDele
     const titleRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => titleRef.current?.focus(), []);
-
-    useEffect(() => {
-        const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-        window.addEventListener("keydown", onKey);
-        return () => window.removeEventListener("keydown", onKey);
-    }, [onClose]);
 
     // A blank target makes a yes/no goal, which keeps whether it was done.
     const yesNo = target.trim() === "";
@@ -82,7 +79,7 @@ export function GoalModal({ goal, horizon: initialHorizon, today, onSave, onDele
         setError(null);
         try {
             await onSave(parsed.data);
-            onClose();
+            close();
         } catch (err) {
             setError((err as Error).message);
             setBusy(false);
@@ -90,110 +87,102 @@ export function GoalModal({ goal, horizon: initialHorizon, today, onSave, onDele
     }
 
     return (
-        <div className="modal-backdrop" onMouseDown={onClose}>
-            <div
-                className="modal goal-modal"
-                role="dialog"
-                aria-modal="true"
-                aria-label={goal ? "Edit goal" : "New goal"}
-                onMouseDown={(e) => e.stopPropagation()}
-            >
-                <form onSubmit={save} noValidate>
-                    <input
-                        ref={titleRef}
-                        className="modal-title"
-                        value={title}
-                        maxLength={100}
-                        onChange={(e) => setTitle(e.target.value)}
-                        placeholder="Something specific, e.g. Read 12 books"
-                        aria-label="Goal"
-                    />
+        <Modal label={goal ? "Edit goal" : "New goal"} className="goal-modal" closing={closing} onClose={close}>
+            <form onSubmit={save} noValidate>
+                <input
+                    ref={titleRef}
+                    className="modal-title"
+                    value={title}
+                    maxLength={100}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="Something specific, e.g. Read 12 books"
+                    aria-label="Goal"
+                />
 
-                    <textarea
-                        className="modal-desc"
-                        value={why}
-                        maxLength={1000}
-                        onChange={(e) => setWhy(e.target.value)}
-                        placeholder="Why it matters to you (optional)"
-                        aria-label="Why it matters"
-                        rows={2}
-                    />
+                <textarea
+                    className="modal-desc"
+                    value={why}
+                    maxLength={1000}
+                    onChange={(e) => setWhy(e.target.value)}
+                    placeholder="Why it matters to you (optional)"
+                    aria-label="Why it matters"
+                    rows={2}
+                />
 
-                    <div className="modal-grid">
-                        <div className="modal-wide">
-                            <span className="goal-field-label">Horizon</span>
-                            <div className="goal-horizons" role="group" aria-label="Horizon">
-                                {HORIZONS.map((h) => (
-                                    <button
-                                        key={h}
-                                        type="button"
-                                        className={`habit-day-btn${horizon === h ? " is-on" : ""}`}
-                                        aria-pressed={horizon === h}
-                                        title={HORIZON_HINTS[h]}
-                                        onClick={() => setHorizon(h)}
-                                    >
-                                        {HORIZON_LABELS[h]}
-                                    </button>
-                                ))}
-                            </div>
+                <div className="modal-grid">
+                    <div className="modal-wide">
+                        <span className="goal-field-label">Horizon</span>
+                        <div className="goal-horizons" role="group" aria-label="Horizon">
+                            {HORIZONS.map((h) => (
+                                <button
+                                    key={h}
+                                    type="button"
+                                    className={`habit-day-btn${horizon === h ? " is-on" : ""}`}
+                                    aria-pressed={horizon === h}
+                                    title={HORIZON_HINTS[h]}
+                                    onClick={() => setHorizon(h)}
+                                >
+                                    {HORIZON_LABELS[h]}
+                                </button>
+                            ))}
                         </div>
-
-                        <label>
-                            <span>Target</span>
-                            <input
-                                inputMode="decimal"
-                                value={target}
-                                onChange={(e) => setTarget(numeric(e.target.value))}
-                                placeholder="blank = yes/no"
-                            />
-                        </label>
-
-                        <label>
-                            <span>Unit</span>
-                            <input
-                                value={unit}
-                                maxLength={30}
-                                disabled={yesNo}
-                                onChange={(e) => setUnit(e.target.value)}
-                                placeholder="optional, e.g. books"
-                            />
-                        </label>
-
-                        <label>
-                            <span>Progress so far</span>
-                            <input
-                                inputMode="decimal"
-                                value={yesNo ? "" : current}
-                                disabled={yesNo}
-                                onChange={(e) => setCurrent(numeric(e.target.value))}
-                            />
-                        </label>
-
-                        <label>
-                            <span>Deadline</span>
-                            <input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
-                        </label>
                     </div>
 
-                    {mismatch && <p className="modal-note goal-mismatch">{mismatch}</p>}
-                    {!canSave && missing.length > 0 && <p className="modal-note">Still needs {missing.join(", ")}.</p>}
-                    {error && <p className="modal-error">{error}</p>}
+                    <label>
+                        <span>Target</span>
+                        <input
+                            inputMode="decimal"
+                            value={target}
+                            onChange={(e) => setTarget(numeric(e.target.value))}
+                            placeholder="blank = yes/no"
+                        />
+                    </label>
 
-                    <div className="modal-actions">
-                        {goal && onDelete && (
-                            <button type="button" className="btn btn-quiet btn-quiet-danger modal-delete" onClick={onDelete}>
-                                Delete
-                            </button>
-                        )}
-                        <button type="button" className="btn btn-quiet" onClick={onClose}>
-                            Cancel
+                    <label>
+                        <span>Unit</span>
+                        <input
+                            value={unit}
+                            maxLength={30}
+                            disabled={yesNo}
+                            onChange={(e) => setUnit(e.target.value)}
+                            placeholder="optional, e.g. books"
+                        />
+                    </label>
+
+                    <label>
+                        <span>Progress so far</span>
+                        <input
+                            inputMode="decimal"
+                            value={yesNo ? "" : current}
+                            disabled={yesNo}
+                            onChange={(e) => setCurrent(numeric(e.target.value))}
+                        />
+                    </label>
+
+                    <label>
+                        <span>Deadline</span>
+                        <input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
+                    </label>
+                </div>
+
+                {mismatch && <p className="modal-note goal-mismatch">{mismatch}</p>}
+                {!canSave && missing.length > 0 && <p className="modal-note">Still needs {missing.join(", ")}.</p>}
+                {error && <p className="modal-error">{error}</p>}
+
+                <div className="modal-actions">
+                    {goal && onDelete && (
+                        <button type="button" className="btn btn-quiet btn-quiet-danger modal-delete" onClick={onDelete}>
+                            Delete
                         </button>
-                        <button type="submit" className="btn btn-primary" disabled={!canSave || busy}>
-                            {busy ? "Saving…" : goal ? "Save" : "Add goal"}
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
+                    )}
+                    <button type="button" className="btn btn-quiet" onClick={close}>
+                        Cancel
+                    </button>
+                    <button type="submit" className="btn btn-primary" disabled={!canSave || busy}>
+                        {busy ? "Saving…" : goal ? "Save" : "Add goal"}
+                    </button>
+                </div>
+            </form>
+        </Modal>
     );
 }

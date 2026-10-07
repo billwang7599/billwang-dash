@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type Preferences } from "../api.ts";
+import { Modal } from "./Modal.tsx";
 
 interface Props {
     onDone: (preferences: Preferences) => void;
@@ -39,46 +40,44 @@ export function AccountSetup({ onDone }: Props) {
     }
 
     return (
-        <div className="modal-backdrop">
-            <div className="modal setup-modal" role="dialog" aria-modal="true" aria-labelledby="setup-title">
-                <form onSubmit={save}>
-                    <h2 id="setup-title" className="setup-title">
-                        Welcome to dash<span className="dot">.</span>
-                    </h2>
-                    <p className="setup-lede">What should we call you?</p>
+        <Modal label="Welcome to dash" className="setup-modal">
+            <form onSubmit={save}>
+                <h2 className="setup-title">
+                    Welcome to dash<span className="dot">.</span>
+                </h2>
+                <p className="setup-lede">What should we call you?</p>
 
-                    <div className="modal-grid">
-                        <label>
-                            <span>First name</span>
-                            <input
-                                ref={firstRef}
-                                value={firstName}
-                                maxLength={50}
-                                autoComplete="given-name"
-                                onChange={(e) => setFirstName(e.target.value)}
-                            />
-                        </label>
-                        <label>
-                            <span>Last name</span>
-                            <input
-                                value={lastName}
-                                maxLength={50}
-                                autoComplete="family-name"
-                                onChange={(e) => setLastName(e.target.value)}
-                            />
-                        </label>
-                    </div>
+                <div className="modal-grid">
+                    <label>
+                        <span>First name</span>
+                        <input
+                            ref={firstRef}
+                            value={firstName}
+                            maxLength={50}
+                            autoComplete="given-name"
+                            onChange={(e) => setFirstName(e.target.value)}
+                        />
+                    </label>
+                    <label>
+                        <span>Last name</span>
+                        <input
+                            value={lastName}
+                            maxLength={50}
+                            autoComplete="family-name"
+                            onChange={(e) => setLastName(e.target.value)}
+                        />
+                    </label>
+                </div>
 
-                    <p className="modal-note">You can change this later in Settings.</p>
-                    {error && <p className="modal-error">{error}</p>}
+                <p className="modal-note">You can change this later in Settings.</p>
+                {error && <p className="modal-error">{error}</p>}
 
-                    <div className="modal-actions">
-                        <button type="submit" className="btn btn-primary" disabled={!canSave || busy}>
-                            {busy ? "Saving…" : "Continue"}
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
+                <div className="modal-actions">
+                    <button type="submit" className="btn btn-primary" disabled={!canSave || busy}>
+                        {busy ? "Saving…" : "Continue"}
+                    </button>
+                </div>
+            </form>
+        </Modal>
     );
 }

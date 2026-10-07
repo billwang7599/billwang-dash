@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { eventProblem } from "../../shared/events.ts";
 import type { EventInput } from "../../shared/types.ts";
+import { useDismiss } from "../useDismiss.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
+import { Modal } from "./Modal.tsx";
 
 interface Props {
     /** The event being edited, or a new one pre-filled from a drag or the New event button. */
@@ -15,6 +17,7 @@ interface Props {
 
 /** Create or edit a dash calendar event. The rules come from shared/events.ts, the server's too. */
 export function EventModal({ initial, isExisting, onSave, onDelete, onClose }: Props) {
+    const [closing, close] = useDismiss(onClose);
     const [title, setTitle] = useState(initial.title);
     const [allDay, setAllDay] = useState(initial.startTime === null);
     const [startDate, setStartDate] = useState(initial.startDate);
@@ -28,12 +31,6 @@ export function EventModal({ initial, isExisting, onSave, onDelete, onClose }: P
     const titleRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => titleRef.current?.focus(), []);
-
-    useEffect(() => {
-        const onKey = (e: KeyboardEvent) => e.key === "Escape" && !confirmingDelete && onClose();
-        window.addEventListener("keydown", onKey);
-        return () => window.removeEventListener("keydown", onKey);
-    }, [onClose, confirmingDelete]);
 
     const input: EventInput = {
         title: title.trim(),
@@ -52,7 +49,7 @@ export function EventModal({ initial, isExisting, onSave, onDelete, onClose }: P
         setError(null);
         try {
             await action();
-            onClose();
+            close();
         } catch (err) {
             setError((err as Error).message);
             setBusy(false);
@@ -72,87 +69,86 @@ export function EventModal({ initial, isExisting, onSave, onDelete, onClose }: P
 
     return (
         <>
-            <div className="modal-backdrop" onMouseDown={onClose}>
-                <div
-                    className="modal event-edit"
-                    role="dialog"
-                    aria-modal="true"
-                    aria-label={isExisting ? "Edit event" : "New event"}
-                    onMouseDown={(e) => e.stopPropagation()}
-                >
-                    <form onSubmit={save}>
-                        <input
-                            ref={titleRef}
-                            className="modal-title"
-                            value={title}
-                            maxLength={200}
-                            onChange={(e) => setTitle(e.target.value)}
-                            placeholder="Add a title"
-                            aria-label="Event title"
-                        />
+            <Modal
+                label={isExisting ? "Edit event" : "New event"}
+                className="event-edit"
+                closing={closing}
+                onClose={close}
+                // The delete confirmation on top owns Escape while it is open.
+                closeOnEscape={!confirmingDelete}
+            >
+                <form onSubmit={save}>
+                    <input
+                        ref={titleRef}
+                        className="modal-title"
+                        value={title}
+                        maxLength={200}
+                        onChange={(e) => setTitle(e.target.value)}
+                        placeholder="Add a title"
+                        aria-label="Event title"
+                    />
 
-                        <label className="event-allday">
-                            <input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} />
-                            All day
+                    <label className="event-allday">
+                        <input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} />
+                        All day
+                    </label>
+
+                    <div className="event-fields">
+                        <label>
+                            <span>Starts</span>
+                            <input type="date" value={startDate} onChange={(e) => changeStartDate(e.target.value)} />
                         </label>
-
-                        <div className="event-fields">
+                        {!allDay && (
                             <label>
-                                <span>Starts</span>
-                                <input type="date" value={startDate} onChange={(e) => changeStartDate(e.target.value)} />
+                                <span>Time</span>
+                                <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
                             </label>
-                            {!allDay && (
-                                <label>
-                                    <span>Time</span>
-                                    <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
-                                </label>
-                            )}
+                        )}
+                        <label>
+                            <span>Ends</span>
+                            <input type="date" value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)} />
+                        </label>
+                        {!allDay && (
                             <label>
-                                <span>Ends</span>
-                                <input type="date" value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)} />
+                                <span>Time</span>
+                                <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
                             </label>
-                            {!allDay && (
-                                <label>
-                                    <span>Time</span>
-                                    <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
-                                </label>
-                            )}
-                        </div>
+                        )}
+                    </div>
 
-                        <textarea
-                            className="modal-desc"
-                            value={description}
-                            maxLength={5000}
-                            onChange={(e) => setDescription(e.target.value)}
-                            placeholder="Description"
-                            aria-label="Description"
-                            rows={3}
-                        />
+                    <textarea
+                        className="modal-desc"
+                        value={description}
+                        maxLength={5000}
+                        onChange={(e) => setDescription(e.target.value)}
+                        placeholder="Description"
+                        aria-label="Description"
+                        rows={3}
+                    />
 
-                        {shownProblem && <p className="modal-error">{shownProblem}</p>}
-                        {error && <p className="modal-error">{error}</p>}
+                    {shownProblem && <p className="modal-error">{shownProblem}</p>}
+                    {error && <p className="modal-error">{error}</p>}
 
-                        <div className="modal-actions">
-                            {isExisting && (
-                                <button
-                                    type="button"
-                                    className="btn btn-quiet btn-quiet-danger event-delete"
-                                    onClick={() => setConfirmingDelete(true)}
-                                    disabled={busy}
-                                >
-                                    Delete
-                                </button>
-                            )}
-                            <button type="button" className="btn btn-quiet" onClick={onClose}>
-                                Cancel
+                    <div className="modal-actions">
+                        {isExisting && (
+                            <button
+                                type="button"
+                                className="btn btn-quiet btn-quiet-danger event-delete"
+                                onClick={() => setConfirmingDelete(true)}
+                                disabled={busy}
+                            >
+                                Delete
                             </button>
-                            <button type="submit" className="btn btn-primary" disabled={problem !== null || busy}>
-                                {busy ? "Saving…" : "Save"}
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
+                        )}
+                        <button type="button" className="btn btn-quiet" onClick={close}>
+                            Cancel
+                        </button>
+                        <button type="submit" className="btn btn-primary" disabled={problem !== null || busy}>
+                            {busy ? "Saving…" : "Save"}
+                        </button>
+                    </div>
+                </form>
+            </Modal>
 
             {/* A sibling, not a child: a click on its backdrop must not bubble up and close this editor too. */}
             {confirmingDelete && (

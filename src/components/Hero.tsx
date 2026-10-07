@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { PROJECT_COLORS, type ProjectColor } from "../../shared/types.ts";
 import { colorValue } from "../projectColors.ts";
+import { usePopover } from "../usePopover.ts";
 
 export interface HeroStat {
-    value: ReactNode;
+    value: string | number;
     label: string;
     /** Makes the stat a link-like button. */
     onClick?: () => void;
@@ -43,7 +44,8 @@ export function Hero({ kicker, title, accent, onPickAccent, stats = [] }: Props)
                     {stats.map((s) => {
                         const body = (
                             <>
-                                <span className="hero-stat-value">{s.value}</span>
+                                {/* Keyed on the value so a change remounts it and replays the roll-up. */}
+                                <span key={s.value} className="hero-stat-value">{s.value}</span>
                                 <span className="hero-stat-label">{s.label}</span>
                             </>
                         );
@@ -65,20 +67,7 @@ export function Hero({ kicker, title, accent, onPickAccent, stats = [] }: Props)
 
 /** The coloured full stop as a button, with the preset colours in a popover under it. */
 function AccentPicker({ accent, onPick }: { accent: string; onPick: (color: ProjectColor) => void }) {
-    const [open, setOpen] = useState(false);
-    const ref = useRef<HTMLSpanElement>(null);
-
-    useEffect(() => {
-        if (!open) return;
-        const onDown = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
-        const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-        window.addEventListener("pointerdown", onDown);
-        window.addEventListener("keydown", onKey);
-        return () => {
-            window.removeEventListener("pointerdown", onDown);
-            window.removeEventListener("keydown", onKey);
-        };
-    }, [open]);
+    const { open, setOpen, ref } = usePopover<HTMLSpanElement>();
 
     return (
         <span className="hero-picker" ref={ref}>

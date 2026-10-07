@@ -1403,12 +1403,14 @@ html:has(.mnav.is-open) { overflow: hidden; }
 /* ⋯ menu on a project tile. */
 .goal-menu { position: relative; flex: none; }
 /* A round button that reads on any card colour: a light disc with ink dots. */
-.goal-menu > summary {
+.goal-menu-button {
+    border: 0;
+    padding: 0;
+    font-family: inherit;
     display: grid;
     place-items: center;
     width: 2rem;
     height: 2rem;
-    list-style: none;
     cursor: pointer;
     border-radius: 50%;
     background: rgb(255 255 255 / 0.45);
@@ -1419,9 +1421,8 @@ html:has(.mnav.is-open) { overflow: hidden; }
     color: var(--ink);
     transition: background 0.16s var(--ease), color 0.16s var(--ease);
 }
-.goal-menu > summary::-webkit-details-marker { display: none; }
-.goal-menu > summary:hover { background: rgb(255 255 255 / 0.75); }
-.goal-menu[open] > summary { background: var(--ink); color: var(--card); }
+.goal-menu-button:hover { background: rgb(255 255 255 / 0.75); }
+.goal-menu.is-open .goal-menu-button { background: var(--ink); color: var(--card); }
 .goal-menu-list {
     position: absolute;
     right: 0;
@@ -2290,4 +2291,98 @@ html:has(.mnav.is-open) { overflow: hidden; }
     .modal { padding: 1.1rem 1rem 1rem; }
     .modal-actions { flex-wrap: wrap; }
     .panel { padding: 1.1rem 1rem; }
+}
+
+/* ---- Motion ------------------------------------------------------------- */
+
+/*
+ * Kept subtle: 150–250ms, a few pixels of travel, no bounce. Reduced motion is
+ * handled once in tokens.css, which collapses every duration here to ~0.
+ */
+
+/* View changes: the sidebar's active pill slides to its new row (App.tsx wraps
+   navigation in startViewTransition). Only between rows of the same shape:
+   morphing into the smaller "Projects ›" heading squashed the label mid-slide.
+   The page itself isn't crossfaded: a snapshot fading over cards that are also
+   fading in showed up as a flash. The new view animates in on mount instead
+   (App.tsx re-keys it per view). */
+.nav-item.is-active { view-transition-name: nav-active; }
+::view-transition-old(root),
+::view-transition-new(root) { animation: none; }
+::view-transition-group(nav-active) { animation-duration: 0.24s; animation-timing-function: var(--ease); }
+.hero,
+.view-title { animation: rise 0.24s var(--ease) backwards; }
+@keyframes fade-out {
+    to { opacity: 0; }
+}
+
+/* Cards deal in one after another when a view mounts; past the eighth they all
+   share the last delay so a long list doesn't trickle. `from` only, so a done
+   goal still settles at its dimmed opacity. */
+.tcard,
+.hcard,
+.ptile,
+.goal-card { animation: rise 0.24s var(--ease) backwards; animation-delay: 0.21s; }
+:is(.tcard, .hcard, .ptile, .goal-card):nth-child(1) { animation-delay: 0s; }
+:is(.tcard, .hcard, .ptile, .goal-card):nth-child(2) { animation-delay: 0.03s; }
+:is(.tcard, .hcard, .ptile, .goal-card):nth-child(3) { animation-delay: 0.06s; }
+:is(.tcard, .hcard, .ptile, .goal-card):nth-child(4) { animation-delay: 0.09s; }
+:is(.tcard, .hcard, .ptile, .goal-card):nth-child(5) { animation-delay: 0.12s; }
+:is(.tcard, .hcard, .ptile, .goal-card):nth-child(6) { animation-delay: 0.15s; }
+:is(.tcard, .hcard, .ptile, .goal-card):nth-child(7) { animation-delay: 0.18s; }
+@keyframes rise {
+    from { opacity: 0; transform: translateY(6px); }
+}
+
+/* A task row slips in when it appears: a quick-add, an undo. */
+li.task { animation: slip 0.22s var(--ease) backwards; }
+
+/* Depth: a faint lit top edge on the colour cards, so they read as objects on
+   the paper rather than flat cut-outs. Stacked cards keep their upward shadow. */
+.ptile,
+.tcard,
+.hcard,
+.goal-card { box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35); }
+.tcard + .tcard,
+.hcard + .hcard,
+.goal-card + .goal-card {
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35), 0 -1px 0 rgb(0 0 0 / 0.06), 0 -8px 16px -10px rgb(0 0 0 / 0.28);
+}
+/* Hover lift on hover-capable devices only (iOS keeps :hover after a tap). */
+@media (hover: hover) {
+    .ptile,
+    .tcard,
+    .hcard,
+    .goal-card { transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease); }
+    .ptile:hover { transform: translateY(-2px); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35), var(--shadow-md); }
+    :is(.tcard, .hcard, .goal-card):hover { transform: translateY(-2px); }
+}
+
+/* Popovers grow out of the corner they're anchored to. */
+.swatches,
+.goal-menu-list,
+.pf-menu { animation: pop-in 0.16s var(--ease); }
+.swatches { transform-origin: top left; }
+.goal-menu-list,
+.pf-menu { transform-origin: top right; }
+@keyframes pop-in {
+    from { opacity: 0; transform: translateY(-4px) scale(0.96); }
+}
+/* The toast rises from below; it's centred with a transform, so the keyframe keeps it. */
+.toast { animation: toast-in 0.22s var(--ease); }
+@keyframes toast-in {
+    from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+}
+
+/* Modals leave the way they came (useDismiss holds them for the animation). */
+.modal-backdrop.is-closing { animation: fade-out 0.14s var(--ease) forwards; }
+.modal-backdrop.is-closing .modal { animation: modal-sink 0.14s var(--ease) forwards; }
+@keyframes modal-sink {
+    to { opacity: 0; transform: translateY(6px) scale(0.99); }
+}
+
+/* A hero count rolls up when it changes (Hero.tsx re-keys it on the value). */
+.hero-stat-value { display: inline-block; animation: tick 0.22s var(--ease); }
+@keyframes tick {
+    from { opacity: 0; transform: translateY(35%); }
 }
