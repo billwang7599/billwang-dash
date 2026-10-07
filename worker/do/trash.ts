@@ -1,5 +1,7 @@
 import type { Project, Task, Trash } from "../../shared/types.ts";
 import { findProjectByName, toProject, type ProjectRow } from "./projects.ts";
+import { profileTimeZone } from "./common.ts";
+import { toIso } from "./time.ts";
 import { getTask, toTasks, type TaskRow } from "./tasks.ts";
 
 /**
@@ -15,7 +17,7 @@ export function getTrash(sql: SqlStorage): Trash {
         .toArray();
     const projects = projectRows.map((r) => ({
         ...toProject(r),
-        deletedAt: r.deleted_at!,
+        deletedAt: toIso(r.deleted_at!),
         // Only the tasks that went with it; ones trashed earlier stay behind on restore.
         taskCount: sql
             .exec<{ n: number }>("SELECT COUNT(*) AS n FROM tasks WHERE trashed_with = ?", r.id)
@@ -31,9 +33,9 @@ export function getTrash(sql: SqlStorage): Trash {
              ORDER BY deleted_at DESC`,
         )
         .toArray();
-    const tasks = toTasks(taskRows).map((t, i) => ({
+    const tasks = toTasks(taskRows, profileTimeZone(sql)).map((t, i) => ({
         ...t,
-        deletedAt: taskRows[i].deleted_at!,
+        deletedAt: toIso(taskRows[i].deleted_at!),
     }));
 
     return { projects, tasks };

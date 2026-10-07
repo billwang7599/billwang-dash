@@ -35,20 +35,23 @@ describe("calendar feed", () => {
         });
     });
 
-    it("reads a task's time in the current zone, so changing the zone floats it", async () => {
+    it("pins a task to the moment it was set, so changing the zone moves its clock time", async () => {
         const s = stub("cal2");
         await s.createTask({
             content: "Standup",
             due: { date: "2026-08-05", time: "09:00", recurrence: null },
         });
 
+        // Set while in UTC: 09:00Z is 18:00 in Tokyo and 04:00 in Chicago.
         await s.setPreferences({ timeZone: "Asia/Tokyo" });
         let [item] = await s.getCalendarItems(WEEK_START, WEEK_END);
-        expect(item.start).toBe("2026-08-05T00:00:00.000Z"); // 09:00 JST
+        expect(item.start).toBe("2026-08-05T09:00:00.000Z");
+        expect((await s.listTasks())[0].due).toMatchObject({ date: "2026-08-05", time: "18:00" });
 
         await s.setPreferences({ timeZone: "America/Chicago" });
         [item] = await s.getCalendarItems(WEEK_START, WEEK_END);
-        expect(item.start).toBe("2026-08-05T14:00:00.000Z"); // still 09:00 wall clock, now CDT
+        expect(item.start).toBe("2026-08-05T09:00:00.000Z");
+        expect((await s.listTasks())[0].due).toMatchObject({ date: "2026-08-05", time: "04:00" });
     });
 
     it("marks an undated-time task as all day", async () => {

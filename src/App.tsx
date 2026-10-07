@@ -315,12 +315,12 @@ export function App() {
     const importTasks = useCallback(
         async (text: string) => {
             if (!state) return;
-            await api.importTasks(text, state.preferences.timeZone);
+            await api.importTasks(text, state.preferences.timeZone, view.name === "project" ? view.id : undefined);
             // Refetch: imported "#name" tokens may have created projects.
             setState(await api.getState());
             setRevision((r) => r + 1);
         },
-        [state],
+        [state, view],
     );
 
     const togglePinProject = useCallback(

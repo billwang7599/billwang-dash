@@ -70,8 +70,8 @@ app.get("/api/tasks/completed", async (c) =>
 );
 
 app.post("/api/tasks/import", async (c) => {
-    const { text, timeZone } = await body(c, schemas.importBody);
-    return c.json(await service.importTasks(stub(c), text, timeZone), 201);
+    const { text, timeZone, projectId } = await body(c, schemas.importBody);
+    return c.json(await service.importTasks(stub(c), text, timeZone, projectId), 201);
 });
 
 app.patch("/api/tasks/:id", async (c) =>

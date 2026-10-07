@@ -24,8 +24,8 @@ export function eventIdForTask(taskId: string): string {
  * or no due date. Whether the task is trashed is the caller's call, since that
  * needs the project too.
  *
- * Times are wall-clock in `timeZone` (the profile zone), matching how tasks
- * float. A recurring task is one event at its current due date; completing it
+ * Times are written in `timeZone` (the profile zone), the zone the task is read
+ * in; the moment itself is the task's own. A recurring task is one event at its current due date; completing it
  * rolls the date and the event follows.
  */
 export function eventForTask(

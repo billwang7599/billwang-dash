@@ -64,10 +64,10 @@ export const api = {
             body: JSON.stringify({ text, timeZone, goalId, projectId }),
         }),
 
-    importTasks: (text: string, timeZone: string) =>
+    importTasks: (text: string, timeZone: string, projectId?: string) =>
         request<{ created: Task[]; skipped: { line: string; reason: string }[] }>(
             "/api/tasks/import",
-            { method: "POST", body: JSON.stringify({ text, timeZone }) },
+            { method: "POST", body: JSON.stringify({ text, timeZone, projectId }) },
         ),
 
     updateTask: (id: string, patch: Record<string, unknown>) =>

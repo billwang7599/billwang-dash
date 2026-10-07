@@ -74,6 +74,7 @@ export async function quickAddTask(
     projectId?: string,
 ): Promise<{ task: Task; parsed: ParsedQuickAdd }> {
     if (goalId && !(await stub.hasGoal(goalId))) throw new ServiceError(400, "goal not found");
+    if (projectId && !(await stub.hasProject(projectId))) throw new ServiceError(400, "project not found");
     const prefs = await stub.getPreferences();
     const parsed = parseQuickAdd(text, {
         timeZone: timeZone ?? prefs.timeZone,
@@ -95,7 +96,9 @@ export async function importTasks(
     stub: Stub,
     text: string,
     timeZone: string | undefined,
+    projectId?: string,
 ): Promise<ImportResult> {
+    if (projectId && !(await stub.hasProject(projectId))) throw new ServiceError(400, "project not found");
     const lines = splitImportLines(text);
     if (lines.length === 0) throw new ServiceError(400, "nothing to import");
     if (lines.length > MAX_IMPORT_LINES) {
@@ -112,7 +115,9 @@ export async function importTasks(
         if (p.content) parsed.push(p);
         else skipped.push({ line, reason: "no content" });
     }
-    return { created: await stub.createTasks(parsed), skipped };
+    // A "#project" on a line wins over the project the user was looking at.
+    const inputs = parsed.map((p) => ({ ...p, projectId: p.projectName ? undefined : projectId }));
+    return { created: await stub.createTasks(inputs), skipped };
 }
 
 /** "Today" has to be resolved in the user's zone, not the Worker's. */

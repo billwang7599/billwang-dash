@@ -46,6 +46,8 @@ const dueDate = z.object({
 export const importBody = z.object({
     text: nonEmpty.max(100_000),
     timeZone: timeZone.optional(),
+    /** Where lines that don't name a #project go. */
+    projectId: z.string().min(1).optional(),
 });
 
 export const quickAddBody = z.object({

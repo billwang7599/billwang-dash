@@ -45,7 +45,7 @@ describe("eventProblem", () => {
 });
 
 describe("dash events on the calendar", () => {
-    it("places a timed event at its wall-clock time in the user's zone, and floats with the zone", async () => {
+    it("pins a timed event to its moment, so a zone change moves its clock time", async () => {
         const s = stub("ev-zone");
         await s.createEvent(timed());
         let [item] = await eventsIn("ev-zone");
@@ -53,8 +53,9 @@ describe("dash events on the calendar", () => {
 
         await s.setPreferences({ timeZone: "America/Chicago" });
         [item] = await eventsIn("ev-zone");
-        expect(item.start).toBe("2026-08-04T15:00:00.000Z"); // still 10:00 wall clock, now CDT
-        expect(item.end).toBe("2026-08-04T15:30:00.000Z");
+        expect(item.start).toBe("2026-08-04T10:00:00.000Z"); // the same moment...
+        expect(item.end).toBe("2026-08-04T10:30:00.000Z");
+        expect(item.event).toMatchObject({ startDate: "2026-08-04", startTime: "05:00" }); // ...5am in Chicago
     });
 
     it("carries the editable wall-clock fields", async () => {

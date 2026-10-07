@@ -228,15 +228,15 @@ describe("google push: following task changes", () => {
         expect(g.live()).toHaveLength(1);
     });
 
-    it("rewrites every event when the time zone changes", async () => {
+    it("rewrites every event in the new zone when the time zone changes, at the same moment", async () => {
         const { g, stub } = await enabled("gp-zone");
-        const t = await stub.createTask(timed("Floats"));
+        const t = await stub.createTask(timed("Pinned"));
         await runDurableObjectAlarm(stub);
         expect(g.event(t.id)!.body.start.timeZone).toBe("UTC");
 
         await stub.setPreferences({ timeZone: "Asia/Tokyo" });
         await runDurableObjectAlarm(stub);
-        expect(g.event(t.id)!.body.start).toEqual({ dateTime: "2026-08-04T17:00:00", timeZone: "Asia/Tokyo" });
+        expect(g.event(t.id)!.body.start).toEqual({ dateTime: "2026-08-05T02:00:00", timeZone: "Asia/Tokyo" });
     });
 
     it("drops the event when a task loses its due date", async () => {
@@ -446,13 +446,13 @@ describe("google push: dash events", () => {
         expect(g.live().map(([id]) => id).sort()).toEqual([eventIdForTask(e.id), eventIdForTask(t.id)].sort());
     });
 
-    it("moves events when the time zone changes", async () => {
+    it("rewrites events in the new zone, at the same moment, when the time zone changes", async () => {
         const { g, stub } = await enabled("gpe-zone");
         const e = await stub.createEvent(meeting());
         await runDurableObjectAlarm(stub);
         await stub.setPreferences({ timeZone: "Asia/Tokyo" });
         await runDurableObjectAlarm(stub);
-        expect(g.event(e.id)!.body.start).toEqual({ dateTime: "2026-08-04T10:00:00", timeZone: "Asia/Tokyo" });
+        expect(g.event(e.id)!.body.start).toEqual({ dateTime: "2026-08-04T19:00:00", timeZone: "Asia/Tokyo" });
     });
 
     it("never shows the pushed event twice in the in-app calendar", async () => {

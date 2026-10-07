@@ -22,7 +22,7 @@ export interface Recurrence {
 }
 
 export interface DueDate {
-    /** YYYY-MM-DD, read in the user's current time zone (floating, not pinned). */
+    /** YYYY-MM-DD, as the user's current time zone sees the moment the task is due. */
     date: string;
     /** HH:MM 24h, or null for an all-day task. */
     time: string | null;
@@ -113,8 +113,8 @@ export interface ParsedQuickAdd {
 /** A task or a Google Calendar event, normalised for the calendar view. */
 /**
  * An event owned by dash, drawn on the calendar next to tasks and Google events.
- * Like tasks, times are floating wall-clock in the user's zone. All-day events have
- * null times and an inclusive end date; timed events may end on a later day.
+ * A timed event is a moment, read here in the user's current zone. All-day events are
+ * plain dates: null times and an inclusive end date. Timed events may end on a later day.
  */
 export interface CalEvent {
     id: string;

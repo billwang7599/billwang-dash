@@ -27,6 +27,7 @@ import type {
 } from "../../shared/types.ts";
 import { addDays, civilFromDate, civilFromKey, civilKey, weekday, zonedToUtcMs } from "../../shared/civil.ts";
 import * as cache from "./gcal-cache.ts";
+import { toIso, toIsoOrNull } from "./time.ts";
 import * as eventStore from "./events.ts";
 import * as taskStore from "./tasks.ts";
 
@@ -104,7 +105,7 @@ export class GoogleSync {
                 scope, dash_calendar_id, push_enabled)
            VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)`,
             tokens.email, tokens.refreshToken, tokens.accessToken, tokens.expiresAt,
-            new Date().toISOString(),
+            Date.now(),
             tokens.scope,
             sameAccount ? prev.dash_calendar_id : null,
             sameAccount && canWrite ? prev.push_enabled : 0,
@@ -125,8 +126,8 @@ export class GoogleSync {
         const rows = this.sql
             .exec<{
                 email: string | null;
-                connected_at: string;
-                last_synced_at: string | null;
+                connected_at: number;
+                last_synced_at: number | null;
                 scope: string | null;
                 push_enabled: number;
                 push_error: string | null;
@@ -159,8 +160,8 @@ export class GoogleSync {
                 error: rows[0].push_error,
             },
             email: rows[0].email,
-            connectedAt: rows[0].connected_at,
-            lastSyncedAt: rows[0].last_synced_at,
+            connectedAt: toIso(rows[0].connected_at),
+            lastSyncedAt: toIsoOrNull(rows[0].last_synced_at),
             calendars: this.storedCalendars(),
         };
     }
@@ -209,7 +210,7 @@ export class GoogleSync {
                 );
                 this.sql.exec(
                     "UPDATE google_account SET last_synced_at = ? WHERE id = 1",
-                    new Date(now).toISOString(),
+                    now,
                 );
                 cache.prune(this.sql, today, days[0]);
             }
@@ -404,7 +405,7 @@ export class GoogleSync {
         this.sql.exec(
             `INSERT INTO google_outbox (task_id, attempts, next_try_at, rev)
              SELECT id, 0, ?, 1 FROM tasks
-              WHERE deleted_at IS NULL AND completed = 0 AND due_date IS NOT NULL
+              WHERE deleted_at IS NULL AND completed = 0 AND due_at IS NOT NULL
              UNION
              SELECT id, 0, ?, 1 FROM events
              UNION
@@ -554,7 +555,7 @@ export class GoogleSync {
             `INSERT INTO google_task_events (task_id, fingerprint, synced_at) VALUES (?, ?, ?)
              ON CONFLICT(task_id) DO UPDATE
                SET fingerprint = excluded.fingerprint, synced_at = excluded.synced_at`,
-            taskId, fp, new Date().toISOString(),
+            taskId, fp, Date.now(),
         );
     }
 

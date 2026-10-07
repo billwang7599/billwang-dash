@@ -9,6 +9,7 @@ import {
     type HabitSummary,
 } from "../../shared/habits.ts";
 import { nextOrder } from "./common.ts";
+import { toIso } from "./time.ts";
 
 /**
  * Habit storage. Plain functions over the DO's SQL handle; UserDO keeps the RPC
@@ -24,7 +25,7 @@ interface HabitRow extends Record<string, SqlStorageValue> {
     per_week: number | null;
     weekdays: string;
     sort_order: number;
-    created_at: string;
+    created_at: number;
     start_date: string;
 }
 
@@ -42,7 +43,7 @@ export function createHabit(
     input: HabitInput,
 ): HabitSummary {
     const id = crypto.randomUUID();
-    const now = new Date().toISOString();
+    const now = Date.now();
     sql.exec(
         `INSERT INTO habits (id, name, description, freq, per_week, weekdays, sort_order, created_at, start_date)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -133,7 +134,7 @@ export function setHabitCheckin(
             `INSERT INTO habit_checkins (habit_id, day, status, note, created_at)
              VALUES (?, ?, ?, ?, ?)
              ON CONFLICT(habit_id, day) DO UPDATE SET status = excluded.status, note = excluded.note`,
-            id, day, status, note ?? existing?.note ?? "", new Date().toISOString(),
+            id, day, status, note ?? existing?.note ?? "", Date.now(),
         );
     }
     return getHabit(sql, today, id);
@@ -172,7 +173,7 @@ function summarize(sql: SqlStorage, today: string, rows: HabitRow[]): HabitSumma
             perWeek: r.per_week,
             weekdays: JSON.parse(r.weekdays) as number[],
             order: r.sort_order,
-            createdAt: r.created_at,
+            createdAt: toIso(r.created_at),
             startDate,
         };
         return { ...habit, stats: computeStats(habit, startDate, checkins, today), today: checkins.get(today) ?? null };

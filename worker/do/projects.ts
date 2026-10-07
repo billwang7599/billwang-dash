@@ -1,5 +1,6 @@
 import type { Project } from "../../shared/types.ts";
 import { INBOX_ID, nextOrder } from "./common.ts";
+import { toIso } from "./time.ts";
 
 /**
  * Project storage. Plain functions over the DO's SQL handle; UserDO keeps the RPC
@@ -12,9 +13,9 @@ export interface ProjectRow extends Record<string, SqlStorageValue> {
     color: string;
     is_inbox: number;
     sort_order: number;
-    created_at: string;
+    created_at: number;
     pinned: number;
-    deleted_at: string | null;
+    deleted_at: number | null;
 }
 
 export const toProject = (r: ProjectRow): Project => ({
@@ -23,7 +24,7 @@ export const toProject = (r: ProjectRow): Project => ({
     color: r.color,
     isInbox: r.is_inbox === 1,
     order: r.sort_order,
-    createdAt: r.created_at,
+    createdAt: toIso(r.created_at),
     pinned: r.pinned === 1,
 });
 
@@ -48,12 +49,12 @@ export function createProject(sql: SqlStorage, name: string, color = "slate"): P
 
     const id = crypto.randomUUID();
     const order = nextOrder(sql, "projects");
-    const createdAt = new Date().toISOString();
+    const createdAt = Date.now();
     sql.exec(
         "INSERT INTO projects (id, name, color, is_inbox, sort_order, created_at) VALUES (?, ?, ?, 0, ?, ?)",
         id, name, color, order, createdAt,
     );
-    return { id, name, color, isInbox: false, order, createdAt, pinned: false };
+    return { id, name, color, isInbox: false, order, createdAt: toIso(createdAt), pinned: false };
 }
 
 export function setProjectPinned(sql: SqlStorage, id: string, pinned: boolean): Project | null {
@@ -78,7 +79,7 @@ export function setProjectColor(sql: SqlStorage, id: string, color: string): Pro
 /** Moves the project and its live tasks to the trash. False if the Inbox was targeted. */
 export function trashProject(sql: SqlStorage, id: string): boolean {
     if (id === INBOX_ID) return false;
-    const now = new Date().toISOString();
+    const now = Date.now();
     // Tasks already in the trash were deleted on their own, so they are not
     // tagged and a restore of the project leaves them there.
     sql.exec(

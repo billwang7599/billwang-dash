@@ -1,4 +1,6 @@
+import { civilFromKey, parseTimeToMinutes, zonedToUtcMs } from "../../shared/civil.ts";
 import { INBOX_ID } from "./common.ts";
+import { END_OF_DAY_MINUTES, toMs } from "./time.ts";
 
 /**
  * Schema history, oldest first. UserDO runs every entry newer than the highest version
@@ -8,6 +10,107 @@ import { INBOX_ID } from "./common.ts";
 export interface Migration {
     version: number;
     sql: string;
+    /** Data work SQL can't do (time zones), run right after `sql` in the same version. */
+    after?: (sql: SqlStorage) => void;
+}
+
+/**
+ * Gives every task that has a due_date a due_at instant, read in the profile's zone
+ * (the only zone the old wall-clock columns ever meant). Date-only tasks land on the
+ * end of their day. The old due_date/due_time columns are left behind, unused.
+ */
+export function backfillDueAt(sql: SqlStorage): void {
+    const zone = sql.exec<{ time_zone: string }>("SELECT time_zone FROM profile WHERE id = 1").one().time_zone;
+    const rows = sql
+        .exec<{ id: string; due_date: string; due_time: string | null }>(
+            "SELECT id, due_date, due_time FROM tasks WHERE due_date IS NOT NULL AND due_at IS NULL",
+        )
+        .toArray();
+    for (const r of rows) {
+        const civil = civilFromKey(r.due_date);
+        if (!civil) continue;
+        const minutes = r.due_time ? parseTimeToMinutes(r.due_time) : END_OF_DAY_MINUTES;
+        sql.exec(
+            "UPDATE tasks SET due_at = ?, due_tz = ?, due_has_time = ? WHERE id = ?",
+            zonedToUtcMs(civil, minutes, zone), zone, r.due_time ? 1 : 0, r.id,
+        );
+    }
+}
+
+/** The end of a calendar day in `zone`, as epoch ms; what a date with no time means. */
+const endOfDay = (date: string, zone: string): number => {
+    const civil = civilFromKey(date);
+    return civil ? zonedToUtcMs(civil, END_OF_DAY_MINUTES, zone) : 0;
+};
+
+/**
+ * Fills the columns migration 23 added, from the text ones they replace. Dates are read
+ * in the profile's zone, the only zone they ever meant. Unparseable timestamps become 0.
+ */
+export function backfillInstants(sql: SqlStorage): void {
+    const zone = sql.exec<{ time_zone: string }>("SELECT time_zone FROM profile WHERE id = 1").one().time_zone;
+    const rows = <T extends Record<string, SqlStorageValue>>(query: string) => sql.exec<T>(query).toArray();
+    const ms = (iso: SqlStorageValue) => toMs(iso as string | null);
+
+    for (const r of rows<{ id: string; deadline: string | null; created_at: string; updated_at: string; completed_at: string | null; deleted_at: string | null }>(
+        "SELECT id, deadline, created_at, updated_at, completed_at, deleted_at FROM tasks",
+    )) {
+        sql.exec(
+            `UPDATE tasks SET deadline_at = ?, deadline_tz = ?, created_ms = ?, updated_ms = ?,
+                              completed_ms = ?, deleted_ms = ? WHERE id = ?`,
+            r.deadline ? endOfDay(r.deadline, zone) : null, r.deadline ? zone : null,
+            ms(r.created_at) ?? 0, ms(r.updated_at) ?? 0, ms(r.completed_at), ms(r.deleted_at), r.id,
+        );
+    }
+    for (const r of rows<{ id: string; created_at: string; deleted_at: string | null }>(
+        "SELECT id, created_at, deleted_at FROM projects",
+    )) {
+        sql.exec("UPDATE projects SET created_ms = ?, deleted_ms = ? WHERE id = ?", ms(r.created_at) ?? 0, ms(r.deleted_at), r.id);
+    }
+    for (const r of rows<{ id: string; created_at: string }>("SELECT id, created_at FROM habits")) {
+        sql.exec("UPDATE habits SET created_ms = ? WHERE id = ?", ms(r.created_at) ?? 0, r.id);
+    }
+    for (const r of rows<{ habit_id: string; day: string; created_at: string }>(
+        "SELECT habit_id, day, created_at FROM habit_checkins",
+    )) {
+        sql.exec(
+            "UPDATE habit_checkins SET created_ms = ? WHERE habit_id = ? AND day = ?",
+            ms(r.created_at) ?? 0, r.habit_id, r.day,
+        );
+    }
+    for (const r of rows<{ id: string; deadline: string; created_at: string; updated_at: string }>(
+        "SELECT id, deadline, created_at, updated_at FROM goals",
+    )) {
+        sql.exec(
+            "UPDATE goals SET deadline_at = ?, deadline_tz = ?, created_ms = ?, updated_ms = ? WHERE id = ?",
+            endOfDay(r.deadline, zone), zone, ms(r.created_at) ?? 0, ms(r.updated_at) ?? 0, r.id,
+        );
+    }
+    for (const r of rows<{ connected_at: string; last_synced_at: string | null }>(
+        "SELECT connected_at, last_synced_at FROM google_account",
+    )) {
+        sql.exec("UPDATE google_account SET connected_ms = ?, last_synced_ms = ?", ms(r.connected_at) ?? 0, ms(r.last_synced_at));
+    }
+    for (const r of rows<{ task_id: string; synced_at: string }>("SELECT task_id, synced_at FROM google_task_events")) {
+        sql.exec("UPDATE google_task_events SET synced_ms = ? WHERE task_id = ?", ms(r.synced_at) ?? 0, r.task_id);
+    }
+    for (const r of rows<{
+        id: string; title: string; description: string; start_date: string; start_time: string | null;
+        end_date: string; end_time: string | null; created_at: string; updated_at: string;
+    }>("SELECT * FROM events")) {
+        const allDay = r.start_time === null || r.end_time === null;
+        const first = civilFromKey(r.start_date);
+        const last = civilFromKey(r.end_date);
+        sql.exec(
+            `INSERT INTO events_new (id, title, description, all_day, start_date, end_date, start_at, end_at, tz, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            r.id, r.title, r.description, allDay ? 1 : 0,
+            allDay ? r.start_date : null, allDay ? r.end_date : null,
+            allDay || !first ? null : zonedToUtcMs(first, parseTimeToMinutes(r.start_time!), zone),
+            allDay || !last ? null : zonedToUtcMs(last, parseTimeToMinutes(r.end_time!), zone),
+            allDay ? null : zone, ms(r.created_at) ?? 0, ms(r.updated_at) ?? 0,
+        );
+    }
 }
 
 export const migrations: Migration[] = [
@@ -325,6 +428,109 @@ export const migrations: Migration[] = [
                 PRIMARY KEY (calendar_id, event_id)
             );
             CREATE INDEX idx_gcal_cache_events_start ON gcal_cache_events(calendar_id, start);
+        `,
+    },
+    // Due dates become instants: due_at is epoch ms, due_tz the zone it was set in (so a
+    // repeating task keeps its local time there), due_has_time 0 for a date-only task,
+    // which sits on the end of its day. due_date/due_time are no longer written.
+    {
+        version: 22,
+        sql: `
+            ALTER TABLE tasks ADD COLUMN due_at INTEGER;
+            ALTER TABLE tasks ADD COLUMN due_tz TEXT;
+            ALTER TABLE tasks ADD COLUMN due_has_time INTEGER NOT NULL DEFAULT 0;
+            CREATE INDEX idx_tasks_due_at ON tasks(completed, due_at);
+        `,
+        after: backfillDueAt,
+    },
+    // Everything else that was text becomes epoch ms: bookkeeping timestamps everywhere,
+    // task and goal deadlines (end of their day, like a date-only due date, plus the
+    // zone they were set in), and timed events (start_at/end_at; an all-day event stays
+    // a plain date). New columns are added and filled here; version 24 swaps them in.
+    {
+        version: 23,
+        sql: `
+            ALTER TABLE tasks ADD COLUMN deadline_at INTEGER;
+            ALTER TABLE tasks ADD COLUMN deadline_tz TEXT;
+            ALTER TABLE tasks ADD COLUMN created_ms INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE tasks ADD COLUMN updated_ms INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE tasks ADD COLUMN completed_ms INTEGER;
+            ALTER TABLE tasks ADD COLUMN deleted_ms INTEGER;
+
+            ALTER TABLE projects ADD COLUMN created_ms INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE projects ADD COLUMN deleted_ms INTEGER;
+
+            ALTER TABLE habits ADD COLUMN created_ms INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE habit_checkins ADD COLUMN created_ms INTEGER NOT NULL DEFAULT 0;
+
+            ALTER TABLE goals ADD COLUMN deadline_at INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE goals ADD COLUMN deadline_tz TEXT;
+            ALTER TABLE goals ADD COLUMN created_ms INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE goals ADD COLUMN updated_ms INTEGER NOT NULL DEFAULT 0;
+
+            ALTER TABLE google_account ADD COLUMN connected_ms INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE google_account ADD COLUMN last_synced_ms INTEGER;
+            ALTER TABLE google_task_events ADD COLUMN synced_ms INTEGER NOT NULL DEFAULT 0;
+
+            CREATE TABLE events_new (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                all_day INTEGER NOT NULL,
+                start_date TEXT,
+                end_date TEXT,
+                start_at INTEGER,
+                end_at INTEGER,
+                tz TEXT,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+        `,
+        after: backfillInstants,
+    },
+    {
+        version: 24,
+        sql: `
+            DROP INDEX idx_tasks_due;
+            ALTER TABLE tasks DROP COLUMN due_date;
+            ALTER TABLE tasks DROP COLUMN due_time;
+            ALTER TABLE tasks DROP COLUMN deadline;
+            ALTER TABLE tasks DROP COLUMN created_at;
+            ALTER TABLE tasks DROP COLUMN updated_at;
+            ALTER TABLE tasks DROP COLUMN completed_at;
+            ALTER TABLE tasks DROP COLUMN deleted_at;
+            ALTER TABLE tasks RENAME COLUMN created_ms TO created_at;
+            ALTER TABLE tasks RENAME COLUMN updated_ms TO updated_at;
+            ALTER TABLE tasks RENAME COLUMN completed_ms TO completed_at;
+            ALTER TABLE tasks RENAME COLUMN deleted_ms TO deleted_at;
+
+            ALTER TABLE projects DROP COLUMN created_at;
+            ALTER TABLE projects DROP COLUMN deleted_at;
+            ALTER TABLE projects RENAME COLUMN created_ms TO created_at;
+            ALTER TABLE projects RENAME COLUMN deleted_ms TO deleted_at;
+
+            ALTER TABLE habits DROP COLUMN created_at;
+            ALTER TABLE habits RENAME COLUMN created_ms TO created_at;
+            ALTER TABLE habit_checkins DROP COLUMN created_at;
+            ALTER TABLE habit_checkins RENAME COLUMN created_ms TO created_at;
+
+            ALTER TABLE goals DROP COLUMN deadline;
+            ALTER TABLE goals DROP COLUMN created_at;
+            ALTER TABLE goals DROP COLUMN updated_at;
+            ALTER TABLE goals RENAME COLUMN created_ms TO created_at;
+            ALTER TABLE goals RENAME COLUMN updated_ms TO updated_at;
+
+            ALTER TABLE google_account DROP COLUMN connected_at;
+            ALTER TABLE google_account DROP COLUMN last_synced_at;
+            ALTER TABLE google_account RENAME COLUMN connected_ms TO connected_at;
+            ALTER TABLE google_account RENAME COLUMN last_synced_ms TO last_synced_at;
+            ALTER TABLE google_task_events DROP COLUMN synced_at;
+            ALTER TABLE google_task_events RENAME COLUMN synced_ms TO synced_at;
+
+            DROP TABLE events;
+            ALTER TABLE events_new RENAME TO events;
+            CREATE INDEX idx_events_timed ON events(start_at, end_at);
+            CREATE INDEX idx_events_days ON events(start_date, end_date);
         `,
     },
 ];

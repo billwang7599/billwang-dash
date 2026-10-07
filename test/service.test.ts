@@ -52,6 +52,31 @@ describe("service layer", () => {
     });
 });
 
+describe("tasks added from inside a project", () => {
+    it("go to that project, unless the text names another with #", async () => {
+        const s = stub("s-in-project");
+        const work = await s.createProject("Work");
+        const home = await s.createProject("Home");
+
+        const plain = await service.quickAddTask(s, "Write specs tomorrow", "UTC", undefined, work.id);
+        expect(plain.task.projectId).toBe(work.id);
+
+        const tagged = await service.quickAddTask(s, "Water plants #Home", "UTC", undefined, work.id);
+        expect(tagged.task.projectId).toBe(home.id);
+
+        await expect(service.quickAddTask(s, "Orphan", "UTC", undefined, "nope")).rejects.toMatchObject({ status: 400 });
+    });
+
+    it("applies to pasted lines too, line by line", async () => {
+        const s = stub("s-import-project");
+        const work = await s.createProject("Work");
+        const home = await s.createProject("Home");
+
+        const { created } = await service.importTasks(s, "Write specs\nWater plants #Home", "UTC", work.id);
+        expect(created.map((t) => t.projectId)).toEqual([work.id, home.id]);
+    });
+});
+
 describe("ServiceError maps to HTTP status", () => {
     it("400 for an empty quick add", async () => {
         const res = await SELF.fetch("https://example.com/api/tasks", {

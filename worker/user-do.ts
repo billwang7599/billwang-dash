@@ -59,6 +59,7 @@ export class UserDO extends DurableObject<Env> {
         for (const migration of migrations) {
             if (migration.version <= current) continue;
             sql.exec(migration.sql);
+            migration.after?.(sql);
             sql.exec("INSERT INTO _migrations (id) VALUES (?)", migration.version);
         }
     }

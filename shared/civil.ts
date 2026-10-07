@@ -1,7 +1,7 @@
 /**
- * Wall-clock date math. Tasks are scheduled against the calendar day the user
- * sees, not an instant — "tomorrow at 5pm" stays 5pm across a DST change or a
- * flight. Conversion to a real instant happens only in zonedToUtcMs().
+ * Wall-clock date math. Dates and times are typed and shown against the calendar
+ * the user sees; what is stored is an instant (epoch ms), pinned to the zone it was
+ * set in. Conversion between the two happens in zonedToUtcMs() and civilFromDate().
  */
 
 export interface Civil {
