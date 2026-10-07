@@ -5,6 +5,7 @@ import type { HabitInput, HabitSummary } from "../shared/habits.ts";
 import type { ProjectColor, Task } from "../shared/types.ts";
 import { api, type AppState, type Preferences } from "./api.ts";
 import { AccountSetup } from "./components/AccountSetup.tsx";
+import { AssistantView } from "./components/AssistantView.tsx";
 import { CompletedView } from "./components/CompletedView.tsx";
 import { MobileNav } from "./components/MobileNav.tsx";
 import { ProjectsView } from "./components/ProjectsView.tsx";
@@ -38,6 +39,7 @@ export type View =
     /** With a project id, only that project's completed tasks. */
     | { name: "completed"; projectId?: string }
     | { name: "projects" }
+    | { name: "assistant" }
     | { name: "habit"; id: string }
     | { name: "project"; id: string };
 
@@ -54,6 +56,7 @@ function viewFromPath(pathname: string): View {
     if (rest === "habits") return { name: "habits" };
     if (rest === "completed") return { name: "completed" };
     if (rest === "projects") return { name: "projects" };
+    if (rest === "assistant") return { name: "assistant" };
     if (rest.startsWith("habit/")) return { name: "habit", id: rest.slice(6) };
     // Old bookmarks to /app or /app/upcoming land here too; Inbox is the home view.
     return { name: "inbox" };
@@ -448,6 +451,8 @@ export function App() {
 
     const today = todayKey(state.preferences.timeZone);
     const hasQuickAdd = view.name === "inbox" || view.name === "project";
+    // The assistant's composer sits in the same sticky dock as quick-add.
+    const hasDock = hasQuickAdd || view.name === "assistant";
     const overdueCount = state.tasks.filter((t) => t.due && t.due.date < today).length;
     const todayCount = state.tasks.filter((t) => t.due && t.due.date <= today).length;
 
@@ -475,7 +480,7 @@ export function App() {
                 />
             )}
 
-            <main className={`main${view.name === "calendar" ? " main-full" : ""}${hasQuickAdd ? " has-dock" : ""}`}>
+            <main className={`main${view.name === "calendar" ? " main-full" : ""}${hasDock ? " has-dock" : ""}`}>
                 <TimeZoneNotice
                     preferences={state.preferences}
                     onSwitch={(timeZone) =>
@@ -578,6 +583,8 @@ export function App() {
                             onProgress={setGoalProgress}
                             onDelete={deleteGoal}
                         />
+                    ) : view.name === "assistant" ? (
+                        <AssistantView onChanged={reload} />
                     ) : view.name === "trash" ? (
                         <Trash projects={state.projects} onChanged={reload} onBack={() => navigate("/app/settings")} />
                     ) : view.name === "calendar" ? (

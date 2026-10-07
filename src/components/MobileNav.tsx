@@ -16,6 +16,7 @@ const ITEMS: { label: string; path: string; active: (v: View) => boolean }[] = [
     { label: "Projects", path: "/app/projects", active: (v) => v.name === "projects" || v.name === "project" },
     { label: "Goals", path: "/app/goals", active: (v) => v.name === "goals" },
     { label: "Habits", path: "/app/habits", active: (v) => v.name === "habits" || v.name === "habit" },
+    { label: "Assistant", path: "/app/assistant", active: (v) => v.name === "assistant" },
     { label: "Settings", path: "/app/settings", active: (v) => v.name === "settings" || v.name === "trash" },
 ];
 

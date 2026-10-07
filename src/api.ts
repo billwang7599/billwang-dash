@@ -9,6 +9,7 @@ import type {
     Task,
     Trash,
 } from "../shared/types.ts";
+import type { Approval, ChatMessage, ChatReply } from "../shared/chat.ts";
 import type { Goal, GoalInput } from "../shared/goals.ts";
 import type { DayStatus, HabitDay, HabitDetail, HabitInput, HabitSummary } from "../shared/habits.ts";
 
@@ -184,6 +185,10 @@ export const api = {
         request<{ items: CalendarItem[] }>(
             `/api/calendar?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}`,
         ),
+
+    /** One assistant turn; `approvals` answers the cards from the previous reply. */
+    chat: (body: { messages: ChatMessage[]; approvals?: Approval[] }) =>
+        request<ChatReply>("/api/ai/chat", { method: "POST", body: JSON.stringify(body) }),
 
     googleStatus: () => request<GoogleAccountStatus>("/api/google/status"),
 

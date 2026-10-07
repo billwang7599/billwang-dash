@@ -35,10 +35,11 @@ interface Props {
     onCheckHabit: (habit: HabitSummary) => void;
 }
 
-/** The two fixed views. Order is fixed too -- not user-reorderable. */
-const NAV_VIEWS: { key: "inbox" | "calendar"; label: string; path: string }[] = [
+/** The fixed views. Order is fixed too -- not user-reorderable. */
+const NAV_VIEWS: { key: "inbox" | "calendar" | "assistant"; label: string; path: string }[] = [
     { key: "inbox", label: "Inbox", path: "/app" },
     { key: "calendar", label: "Calendar", path: "/app/calendar" },
+    { key: "assistant", label: "Assistant", path: "/app/assistant" },
 ];
 
 export function Sidebar({
