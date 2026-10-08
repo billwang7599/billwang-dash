@@ -455,6 +455,11 @@ export function App() {
     const hasDock = hasQuickAdd || view.name === "assistant";
     const overdueCount = state.tasks.filter((t) => t.due && t.due.date < today).length;
     const todayCount = state.tasks.filter((t) => t.due && t.due.date <= today).length;
+    /** The calendar and the assistant only know a task's id. */
+    const openTask = (id: string) => {
+        const task = state.tasks.find((t) => t.id === id);
+        if (task) setEditing(task);
+    };
 
     return (
         <div className="shell">
@@ -584,7 +589,12 @@ export function App() {
                             onDelete={deleteGoal}
                         />
                     ) : view.name === "assistant" ? (
-                        <AssistantView onChanged={reload} />
+                        <AssistantView
+                            timeZone={state.preferences.timeZone}
+                            today={today}
+                            onChanged={reload}
+                            onOpenTask={openTask}
+                        />
                     ) : view.name === "trash" ? (
                         <Trash projects={state.projects} onChanged={reload} onBack={() => navigate("/app/settings")} />
                     ) : view.name === "calendar" ? (
@@ -592,10 +602,7 @@ export function App() {
                             timeZone={state.preferences.timeZone}
                             colors={colors}
                             revision={revision}
-                            onOpenTask={(id) => {
-                                const task = state.tasks.find((t) => t.id === id);
-                                if (task) setEditing(task);
-                            }}
+                            onOpenTask={openTask}
                         />
                     ) : (
                         <>

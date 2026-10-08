@@ -5,6 +5,8 @@
  * it fresh on every request.
  */
 
+import type { Priority } from "./types.ts";
+
 export interface ToolCall {
     id: string;
     type: "function";
@@ -16,13 +18,42 @@ export type ChatMessage =
     | { role: "assistant"; content: string | null; tool_calls?: ToolCall[] }
     | { role: "tool"; tool_call_id: string; content: string };
 
+/**
+ * A write, described for the approval card and, once it has run, the receipt. It
+ * also rides along in the write's tool result, so the receipt can be drawn from
+ * history alone.
+ */
+export interface ActionSummary {
+    /** What the change does, e.g. "Add to calendar". */
+    action: string;
+    /** The same once done, e.g. "Added to calendar". */
+    done: string;
+    /** What it changes, e.g. "Make dinner". */
+    title: string;
+    /** When or how, e.g. "Sun, 11 Oct 2026 · 5pm–6pm". */
+    detail?: string;
+}
+
 /** A write the model asked for, waiting on the user. */
 export interface PendingAction {
     toolCallId: string;
     name: string;
-    /** One line for the approval card, e.g. `Complete "Call mom"`. */
-    summary: string;
+    summary: ActionSummary;
 }
+
+/** A task as the show_tasks tool hands it to the chat, to draw as a card row. */
+export interface ShownTask {
+    id: string;
+    content: string;
+    projectId: string;
+    priority: Priority;
+    due: { date: string; time: string | null; recurring: boolean } | null;
+    deadline?: string;
+    completed?: boolean;
+}
+
+/** The tool whose results the chat draws as task cards. */
+export const SHOW_TASKS = "show_tasks";
 
 export interface Approval {
     toolCallId: string;

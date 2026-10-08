@@ -61,7 +61,9 @@ describe("runAgent", () => {
 
         const reply = await runAgent({ model, stub: s, timeZone: "UTC", messages: user("I called mom") });
 
-        expect(reply.pending).toEqual([{ toolCallId: "c1", name: "complete_task", summary: 'Complete "Call mom"' }]);
+        expect(reply.pending).toEqual([
+            { toolCallId: "c1", name: "complete_task", summary: { action: "Complete", done: "Completed", title: "Call mom" } },
+        ]);
         expect((await s.getTask(task.id))?.completed).toBe(false);
     });
 
@@ -83,7 +85,35 @@ describe("runAgent", () => {
         expect(reply.changed).toBe(true);
         expect((await s.getTask(task.id))?.completed).toBe(true);
         expect(lastToolResult(second.seen[0])).toHaveProperty("result");
+        // The chat draws its receipt from this, so it must survive in history.
+        expect(lastToolResult(second.seen[0]).summary).toEqual({ action: "Complete", done: "Completed", title: "Call mom" });
         expect(reply.messages.at(-1)).toMatchObject({ content: "Marked it done." });
+    });
+
+    it("describes an event's time in words on its card", async () => {
+        const event = { title: "Make dinner", startDate: "2026-10-07", startTime: "17:00", endDate: "2026-10-07", endTime: "18:00" };
+        const { model } = fakeModel([{ tool_calls: [call("c1", "create_event", event)] }]);
+        const reply = await runAgent({ model, stub: stub("ai-event-card"), timeZone: "UTC", messages: user("dinner 5-6") });
+
+        expect(reply.pending[0].summary).toEqual({
+            action: "Add to calendar",
+            done: "Added to calendar",
+            title: "Make dinner",
+            detail: "Wed, 7 Oct 2026 · 5pm–6pm",
+        });
+    });
+
+    it("shows tasks by id as cards, skipping ids that don't exist", async () => {
+        const s = stub("ai-show");
+        const task = await s.createTask({ content: "Call mom" });
+        const { model, seen } = fakeModel([{ tool_calls: [call("c1", "show_tasks", { ids: [task.id, "nope"] })] }, { content: "One thing." }]);
+
+        const reply = await runAgent({ model, stub: s, timeZone: "UTC", messages: user("what's open?") });
+
+        expect(reply.pending).toEqual([]);
+        expect(lastToolResult(seen[1]).result.tasks).toEqual([
+            expect.objectContaining({ id: task.id, content: "Call mom", due: null }),
+        ]);
     });
 
     describe("approving the same call twice", () => {

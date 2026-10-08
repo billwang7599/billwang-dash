@@ -530,9 +530,10 @@ html:has(.mnav.is-open) { overflow: hidden; }
 
 /* ---- Assistant ----------------------------------------------------------- */
 
-/* Your turns read as big display lines; replies are colour cards like the rest
-   of the app; changes waiting on you are ink cards, so no reply colour can pass
-   for one. */
+/* The words stay quiet: your turns are small paper bubbles, replies plain text.
+   What the assistant finds or changes comes back as app cards, where colour means
+   something: task cards by date like the Inbox, a green receipt for a change made,
+   and an ink card for a change waiting on you, so no other colour can pass for one. */
 .chat { display: flex; flex-direction: column; gap: 0.9rem; max-width: 46rem; width: 100%; }
 
 .chat-intro { margin: 0 0 0.4rem; max-width: 34rem; font-size: 0.95rem; color: var(--ink-2); animation: rise 0.24s var(--ease) backwards; }
@@ -563,30 +564,69 @@ html:has(.mnav.is-open) { overflow: hidden; }
 
 .chat-q,
 .chat-a,
-.chat-action { margin: 0; overflow-wrap: anywhere; animation: rise 0.22s var(--ease) backwards; }
+.chat-action,
+.chat-cards,
+.chat-receipt { margin: 0; overflow-wrap: anywhere; animation: rise 0.22s var(--ease) backwards; }
 
 .chat-q {
-    margin-top: 0.9rem;
-    font-family: var(--display);
-    font-weight: 400;
-    font-size: clamp(1.55rem, 3.2vw, 2.15rem);
-    line-height: 1.08;
-    letter-spacing: -0.04em;
+    align-self: flex-end;
+    max-width: 80%;
+    margin-top: 0.6rem;
+    padding: 0.55rem 0.95rem;
+    border-radius: 18px 18px 6px 18px;
+    background: var(--card);
+    font-size: 1.05rem;
+    font-weight: 500;
+    line-height: 1.35;
+    letter-spacing: -0.02em;
 }
 .chat-q:first-child { margin-top: 0; }
 
 .chat-a {
-    padding: 1rem 1.25rem;
-    border-radius: var(--r-lg);
-    background: var(--card-c, var(--card));
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35);
-    font-size: 1rem;
-    line-height: 1.55;
+    font-size: 0.98rem;
+    line-height: 1.5;
+    color: var(--ink-2);
     /* Replies come back as plain text with "- " lists and line breaks. */
     white-space: pre-wrap;
 }
 
-.chat-thinking { display: flex; gap: 0.4rem; align-self: flex-start; padding: 1.15rem 1.3rem; background: var(--c-stone); }
+/* Task rows on an answer card open the task; there's no checkbox to tick here. */
+.chat-task {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.8rem;
+    width: 100%;
+    padding: 0.45rem 0;
+    border: 0;
+    border-top: 1px solid rgb(0 0 0 / 0.1);
+    background: none;
+    font: inherit;
+    font-size: 0.95rem;
+    color: var(--ink);
+    text-align: left;
+    cursor: pointer;
+}
+.chat-task:hover .chat-task-title { text-decoration: underline; text-underline-offset: 0.15em; }
+.chat-task.is-done .chat-task-title { text-decoration: line-through; opacity: 0.6; }
+.chat-task-when { flex: none; opacity: 0.6; white-space: nowrap; }
+
+.chat-receipt {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.3rem 0.8rem;
+    padding: 0.7rem 0.95rem;
+    border-radius: var(--r-md);
+    background: var(--c-sage);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35);
+}
+.chat-receipt p { margin: 0; }
+.chat-receipt-kicker { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.6; }
+.chat-receipt-title { font-size: 1.1rem; font-weight: 500; letter-spacing: -0.03em; }
+.chat-receipt-detail { margin-left: auto; font-size: 0.85rem; opacity: 0.7; }
+
+.chat-thinking { display: flex; gap: 0.4rem; align-self: flex-start; padding: 1.15rem 1.3rem; border-radius: var(--r-lg); background: var(--c-stone); }
 .chat-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--ink); opacity: 0.25; animation: chat-dot 1.1s var(--ease) infinite; }
 .chat-dot:nth-child(2) { animation-delay: 0.15s; }
 .chat-dot:nth-child(3) { animation-delay: 0.3s; }
@@ -604,6 +644,7 @@ html:has(.mnav.is-open) { overflow: hidden; }
 }
 .chat-action-kicker { margin: 0 0 0.25rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--c-mustard); }
 .chat-action-text { margin: 0; font-size: 1.45rem; font-weight: 500; line-height: 1.15; letter-spacing: -0.04em; }
+.chat-action-detail { margin: 0.2rem 0 0; font-size: 0.9rem; opacity: 0.7; }
 .chat-action-buttons,
 .chat-action-all { display: flex; gap: 0.5rem; margin-top: 0.9rem; }
 .chat-action-all { justify-content: flex-end; margin-top: 0; }
@@ -646,6 +687,7 @@ html:has(.mnav.is-open) { overflow: hidden; }
     position: relative;
     flex: 1;
     min-width: 0;
+    margin-inline: -4px;
 }
 
 .qa-highlight,
@@ -654,7 +696,9 @@ html:has(.mnav.is-open) { overflow: hidden; }
     font-size: 0.92rem;
     line-height: 1.6;
     letter-spacing: 0;
-    padding: 0.15rem 0;
+    /* Side room for the token's 4px bleed, which overflow: hidden would clip at the
+       ends; the wrap's negative margin below keeps the text where it was. */
+    padding: 0.15rem 4px;
     border: 0;
     white-space: pre;
     overflow: hidden;
@@ -2142,6 +2186,10 @@ html:has(.mnav.is-open) { overflow: hidden; }
     outline: none;
 }
 .modal-desc:focus { border-color: var(--ink-3); }
+/* Grow with the text instead of scrolling; browsers without field-sizing keep `rows` and the drag handle. */
+@supports (field-sizing: content) {
+    .modal-desc { field-sizing: content; min-height: 2lh; max-height: 50vh; resize: none; }
+}
 
 .modal-grid {
     display: grid;
@@ -2240,7 +2288,7 @@ html:has(.mnav.is-open) { overflow: hidden; }
 /* ---- Import ------------------------------------------------------------- */
 
 .import-modal { width: min(44rem, 100%); }
-.import-input { font-family: var(--mono); font-size: 0.82rem; margin: 0.8rem 0 0.9rem; }
+.import-input { font-family: var(--mono); font-size: 0.82rem; margin: 0.8rem 0 0.9rem; min-height: 6lh; }
 .import-summary {
     font-size: 0.78rem;
     color: var(--ink-3);

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Approval, ChatMessage, ChatReply, PendingAction, ToolCall } from "../../shared/chat.ts";
+import { SHOW_TASKS, type Approval, type ChatMessage, type ChatReply, type PendingAction, type ToolCall } from "../../shared/chat.ts";
 import { civilFromDate, civilKey, minutesOfDay, minutesToTime, weekday } from "../../shared/civil.ts";
 import { ServiceError } from "../service.ts";
 import { type Stub, type Tool, type ToolContext, tools, toolsByName } from "./tools.ts";
@@ -132,8 +132,11 @@ async function settleOpenCalls(ctx: ToolContext, history: ChatMessage[], approva
             changed = true;
             continue;
         }
+        // Worked out before the change, while what it names still exists. It goes in the
+        // result so the chat can draw a receipt from history alone.
+        const summary = await tool.summarize!(ctx, args.data);
         const result = await runTool(ctx, tool, args.data);
-        const message = toolResult(call, result);
+        const message = toolResult(call, { summary, ...result });
         await ctx.stub.finishToolRun(call.id, message.content);
         changed ||= !("error" in result);
         history.push(message);
@@ -202,5 +205,7 @@ How to work:
 - Use the tools for every fact. Never invent ids or data. Call get_overview before acting on something the user names.
 - To add a task, prefer quick_add_task and put the date, #Project and priority in the text the way the user would type it.
 - Changes need the user's approval in the app, so make the change rather than asking first in words. Once a change is done or declined, say so in one short sentence.
-- Keep answers short. Write plain text, not Markdown: no **bold**, headings or tables. For more than three items, put each on its own line starting with "- ".`;
+- When an answer is about particular tasks, call ${SHOW_TASKS} with their ids. The app shows them as cards grouped by date, so don't list them in words: say one short sentence, e.g. "Five things, one overdue."
+- Changes you make show up as cards too, so don't repeat their details either.
+- Keep answers short. Write plain text, not Markdown: no **bold**, headings or tables. For more than three other items, put each on its own line starting with "- ".`;
 }

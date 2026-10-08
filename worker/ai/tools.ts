@@ -1,5 +1,7 @@
 import { z } from "zod";
+import { SHOW_TASKS, type ActionSummary, type ShownTask } from "../../shared/chat.ts";
 import { addDays, civilFromKey, zonedToUtcMs } from "../../shared/civil.ts";
+import { formatPlainDate, formatTime } from "../../shared/format.ts";
 import type { Task } from "../../shared/types.ts";
 import * as schemas from "../schemas.ts";
 import * as service from "../service.ts";
@@ -11,7 +13,9 @@ import type { UserDO } from "../user-do.ts";
  * trash rules, and Google sync all apply. Nothing here touches SQL, which keeps
  * the Google tokens in the DO out of the model's reach.
  *
- * Kept free of anything chat-specific so an MCP server can expose the same list.
+ * Kept free of anything chat-specific so an MCP server can expose the same list,
+ * except show_tasks: it only exists to draw cards in the app's chat, so an MCP
+ * server should leave it out.
  */
 
 export type Stub = DurableObjectStub<UserDO>;
@@ -28,8 +32,8 @@ export interface Tool {
     kind: "read" | "write";
     args: z.ZodType;
     run(ctx: ToolContext, args: unknown): Promise<unknown>;
-    /** Writes only: the line on the approval card. */
-    summarize?(ctx: ToolContext, args: unknown): Promise<string>;
+    /** Writes only: what the approval card and the receipt say. */
+    summarize?(ctx: ToolContext, args: unknown): Promise<ActionSummary>;
 }
 
 function tool<S extends z.ZodType>(def: {
@@ -38,7 +42,7 @@ function tool<S extends z.ZodType>(def: {
     kind: "read" | "write";
     args: S;
     run(ctx: ToolContext, args: z.output<S>): Promise<unknown>;
-    summarize?(ctx: ToolContext, args: z.output<S>): Promise<string>;
+    summarize?(ctx: ToolContext, args: z.output<S>): Promise<ActionSummary>;
 }): Tool {
     return def as Tool;
 }
@@ -48,36 +52,46 @@ const id = z.object({ id: z.string().min(1) });
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD");
 const month = z.string().regex(/^\d{4}-\d{2}$/, "expected YYYY-MM").optional();
 
-/** Only what the model needs to reason about a task; ids, never internals. */
-const taskView = (t: Task) => ({
+/** What a task card row needs, which is also the core of what the model sees. */
+const shownTask = (t: Task): ShownTask => ({
     id: t.id,
     content: t.content,
-    description: t.description.slice(0, 200) || undefined,
     projectId: t.projectId,
     priority: t.priority,
     due: t.due && { date: t.due.date, time: t.due.time, recurring: t.due.recurrence !== null },
     deadline: t.deadline ?? undefined,
-    goalId: t.goalId ?? undefined,
     completed: t.completed || undefined,
 });
 
+/** Only what the model needs to reason about a task; ids, never internals. */
+const taskView = (t: Task) => ({
+    ...shownTask(t),
+    description: t.description.slice(0, 200) || undefined,
+    goalId: t.goalId ?? undefined,
+});
+
 async function taskName(stub: Stub, taskId: string): Promise<string> {
-    const task = await stub.getTask(taskId);
-    return task ? `"${task.content}"` : `task ${taskId}`;
+    return (await stub.getTask(taskId))?.content ?? `task ${taskId}`;
 }
 
 async function goalName(stub: Stub, goalId: string): Promise<string> {
-    const goal = (await stub.listGoals()).find((g) => g.id === goalId);
-    return goal ? `"${goal.title}"` : `goal ${goalId}`;
+    return (await stub.listGoals()).find((g) => g.id === goalId)?.title ?? `goal ${goalId}`;
 }
 
 async function habitName(stub: Stub, habitId: string): Promise<string> {
-    const habit = (await stub.listHabits()).find((h) => h.id === habitId);
-    return habit ? `"${habit.name}"` : `habit ${habitId}`;
+    return (await stub.listHabits()).find((h) => h.id === habitId)?.name ?? `habit ${habitId}`;
 }
 
-const when = (e: { startDate: string; startTime: string | null }) =>
-    e.startTime ? `${e.startDate} ${e.startTime}` : e.startDate;
+/** "Sun, 11 Oct 2026 · 5pm–6pm", or "… · all day". */
+function when(e: { startDate: string; startTime: string | null; endDate: string; endTime: string | null }) {
+    const day = formatPlainDate(e.startDate);
+    if (!e.startTime) return e.endDate > e.startDate ? `${day} – ${formatPlainDate(e.endDate)}` : `${day} · all day`;
+    const end = e.endTime ? `–${formatTime(e.endTime)}` : "";
+    return `${day} · ${formatTime(e.startTime)}${end}`;
+}
+
+/** At most this many cards per answer; more than a screenful stops being an answer. */
+const MAX_SHOWN = 30;
 
 export const tools: Tool[] = [
     // ---- Reads ---------------------------------------------------------------
@@ -118,6 +132,17 @@ export const tools: Tool[] = [
                     stats: h.stats,
                 })),
             };
+        },
+    }),
+
+    tool({
+        name: SHOW_TASKS,
+        description: `Show tasks to the user as cards in the chat, by id (up to ${MAX_SHOWN}). Call it whenever your answer is about particular tasks, then don't list them again in words.`,
+        kind: "read",
+        args: z.object({ ids: z.array(z.string().min(1)).min(1).max(MAX_SHOWN) }),
+        async run({ stub }, { ids }) {
+            const tasks = await Promise.all(ids.map((taskId) => stub.getTask(taskId)));
+            return { tasks: tasks.filter((t): t is Task => t !== null).map(shownTask) };
         },
     }),
 
@@ -190,7 +215,7 @@ export const tools: Tool[] = [
             goalId: z.string().min(1).optional(),
         }),
         run: ({ stub, timeZone }, a) => service.quickAddTask(stub, a.text, timeZone, a.goalId, a.projectId),
-        summarize: async (_, a) => `Add task "${a.text}"`,
+        summarize: async (_, a) => ({ action: "Add task", done: "Added task", title: a.text }),
     }),
 
     tool({
@@ -199,8 +224,12 @@ export const tools: Tool[] = [
         kind: "write",
         args: z.object({ id: z.string().min(1), patch: schemas.taskPatchBody }),
         run: ({ stub }, a) => service.updateTask(stub, a.id, a.patch),
-        summarize: async ({ stub }, a) =>
-            `Update ${await taskName(stub, a.id)}: ${Object.keys(a.patch).join(", ") || "nothing"}`,
+        summarize: async ({ stub }, a) => ({
+            action: "Update task",
+            done: "Updated task",
+            title: await taskName(stub, a.id),
+            detail: `Changes ${Object.keys(a.patch).join(", ") || "nothing"}`,
+        }),
     }),
 
     tool({
@@ -209,7 +238,7 @@ export const tools: Tool[] = [
         kind: "write",
         args: id,
         run: ({ stub }, a) => service.completeTask(stub, a.id),
-        summarize: async ({ stub }, a) => `Complete ${await taskName(stub, a.id)}`,
+        summarize: async ({ stub }, a) => ({ action: "Complete", done: "Completed", title: await taskName(stub, a.id) }),
     }),
 
     tool({
@@ -218,7 +247,7 @@ export const tools: Tool[] = [
         kind: "write",
         args: id,
         run: ({ stub }, a) => service.uncompleteTask(stub, a.id),
-        summarize: async ({ stub }, a) => `Reopen ${await taskName(stub, a.id)}`,
+        summarize: async ({ stub }, a) => ({ action: "Reopen", done: "Reopened", title: await taskName(stub, a.id) }),
     }),
 
     tool({
@@ -227,7 +256,11 @@ export const tools: Tool[] = [
         kind: "write",
         args: id,
         run: ({ stub }, a) => service.deleteTask(stub, a.id),
-        summarize: async ({ stub }, a) => `Move ${await taskName(stub, a.id)} to the trash`,
+        summarize: async ({ stub }, a) => ({
+            action: "Move to trash",
+            done: "Moved to trash",
+            title: await taskName(stub, a.id),
+        }),
     }),
 
     tool({
@@ -237,7 +270,7 @@ export const tools: Tool[] = [
         kind: "write",
         args: schemas.eventBody,
         run: ({ stub }, a) => service.createEvent(stub, a),
-        summarize: async (_, a) => `Add event "${a.title}" on ${when(a)}`,
+        summarize: async (_, a) => ({ action: "Add to calendar", done: "Added to calendar", title: a.title, detail: when(a) }),
     }),
 
     tool({
@@ -246,7 +279,12 @@ export const tools: Tool[] = [
         kind: "write",
         args: z.object({ id: z.string().min(1), event: schemas.eventBody }),
         run: ({ stub }, a) => service.updateEvent(stub, a.id, a.event),
-        summarize: async (_, a) => `Change event "${a.event.title}" to ${when(a.event)}`,
+        summarize: async (_, a) => ({
+            action: "Change event",
+            done: "Changed event",
+            title: a.event.title,
+            detail: when(a.event),
+        }),
     }),
 
     tool({
@@ -255,7 +293,7 @@ export const tools: Tool[] = [
         kind: "write",
         args: z.object({ id: z.string().min(1), title: z.string() }),
         run: ({ stub }, a) => service.deleteEvent(stub, a.id),
-        summarize: async (_, a) => `Delete event "${a.title}"`,
+        summarize: async (_, a) => ({ action: "Delete event", done: "Deleted event", title: a.title }),
     }),
 
     tool({
@@ -265,7 +303,12 @@ export const tools: Tool[] = [
         kind: "write",
         args: schemas.goalBody,
         run: ({ stub }, a) => service.createGoal(stub, a),
-        summarize: async (_, a) => `Add goal "${a.title}" by ${a.deadline}`,
+        summarize: async (_, a) => ({
+            action: "Add goal",
+            done: "Added goal",
+            title: a.title,
+            detail: `By ${formatPlainDate(a.deadline)}`,
+        }),
     }),
 
     tool({
@@ -274,7 +317,7 @@ export const tools: Tool[] = [
         kind: "write",
         args: z.object({ id: z.string().min(1), goal: schemas.goalBody }),
         run: ({ stub }, a) => service.updateGoal(stub, a.id, a.goal),
-        summarize: async ({ stub }, a) => `Update goal ${await goalName(stub, a.id)}`,
+        summarize: async ({ stub }, a) => ({ action: "Update goal", done: "Updated goal", title: await goalName(stub, a.id) }),
     }),
 
     tool({
@@ -283,7 +326,12 @@ export const tools: Tool[] = [
         kind: "write",
         args: z.object({ id: z.string().min(1), current: schemas.goalProgressBody.shape.current }),
         run: ({ stub }, a) => service.setGoalProgress(stub, a.id, a.current),
-        summarize: async ({ stub }, a) => `Set ${await goalName(stub, a.id)} progress to ${a.current}`,
+        summarize: async ({ stub }, a) => ({
+            action: "Set progress",
+            done: "Progress set",
+            title: await goalName(stub, a.id),
+            detail: `Now at ${a.current}`,
+        }),
     }),
 
     tool({
@@ -293,8 +341,11 @@ export const tools: Tool[] = [
         kind: "write",
         args: schemas.habitCheckinBody.extend({ id: z.string().min(1), day: date }),
         run: ({ stub }, a) => service.setHabitCheckin(stub, a.id, a.day, a.status, a.note),
-        summarize: async ({ stub }, a) =>
-            `${a.status === null ? "Clear" : a.status === "done" ? "Check off" : "Skip"} ${await habitName(stub, a.id)} on ${a.day}`,
+        summarize: async ({ stub }, a) => {
+            const [action, done] =
+                a.status === null ? ["Clear habit", "Cleared"] : a.status === "done" ? ["Check off", "Checked off"] : ["Skip habit", "Skipped"];
+            return { action, done, title: await habitName(stub, a.id), detail: formatPlainDate(a.day) };
+        },
     }),
 
     tool({
@@ -303,7 +354,7 @@ export const tools: Tool[] = [
         kind: "write",
         args: schemas.createProjectBody,
         run: ({ stub }, a) => service.createProject(stub, a.name, a.color),
-        summarize: async (_, a) => `Add project "${a.name}"`,
+        summarize: async (_, a) => ({ action: "Add project", done: "Added project", title: a.name }),
     }),
 ];
 
