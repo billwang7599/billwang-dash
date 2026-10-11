@@ -18,7 +18,7 @@ import { EventDetails } from "./EventDetails.tsx";
 import { Hero } from "./Hero.tsx";
 import { EventModal } from "./EventModal.tsx";
 import { layoutEvents } from "../eventLayout.ts";
-import { formatInstant } from "../format.ts";
+import { allDayDates, formatInstant } from "../format.ts";
 import { NARROW, useMediaQuery } from "../useMediaQuery.ts";
 
 const HOUR_PX = 46;
@@ -120,12 +120,19 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
         for (const day of days) map.set(civilKey(day), { timed: [], allDay: [] });
 
         for (const item of items) {
-            if (item.allDay && item.event) {
-                // A dash all-day event is dates, not instants: it covers every day from
-                // its first to its last, however many that is.
+            // All-day events, dash's and Google's, are dates, not instants: each covers every
+            // day from its first to its last, however many that is.
+            const dates = !item.allDay
+                ? null
+                : item.event
+                  ? { first: item.event.startDate, last: item.event.endDate }
+                  : item.kind === "gcal"
+                    ? allDayDates(item)
+                    : null;
+            if (dates) {
                 for (const day of days) {
                     const key = civilKey(day);
-                    if (key >= item.event.startDate && key <= item.event.endDate) map.get(key)?.allDay.push(item);
+                    if (key >= dates.first && key <= dates.last) map.get(key)?.allDay.push(item);
                 }
             } else if (item.allDay) {
                 map.get(civilKey(civilFromDate(new Date(item.start), timeZone)))?.allDay.push(item);

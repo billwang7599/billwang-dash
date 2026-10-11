@@ -39,6 +39,18 @@ export function formatDueLabel(due: DueDate, timeZone: string): string {
 }
 
 /**
+ * A Google all-day event's dates, first to last inclusive (Google's end date is exclusive).
+ * The server stores those dates as UTC midnight, so they're read off the string, never
+ * shifted into the user's zone: west of UTC that would land them a day early.
+ */
+export function allDayDates(item: { start: string; end: string }): { first: string; last: string } {
+    const first = item.start.slice(0, 10);
+    const endExclusive = civilFromKey(item.end.slice(0, 10));
+    const last = endExclusive ? civilKey(addDays(endExclusive, -1)) : first;
+    return { first, last: last < first ? first : last };
+}
+
+/**
  * "Tue, 4 Aug 2026 · 10:00–11:00", "… · All day", or "Tue, 4 Aug 2026 – Thu, 6 Aug 2026".
  * An all-day event's bounds are bare dates that the server stored as UTC midnight,
  * so they are read as dates, never shifted into the user's zone.
@@ -48,9 +60,7 @@ export function formatEventWhen(
     timeZone: string,
 ): string {
     if (item.allDay) {
-        const first = item.start.slice(0, 10);
-        const endExclusive = civilFromKey(item.end.slice(0, 10));
-        const last = endExclusive ? civilKey(addDays(endExclusive, -1)) : first;
+        const { first, last } = allDayDates(item);
         return last > first
             ? `${formatPlainDate(first)} – ${formatPlainDate(last)}`
             : `${formatPlainDate(first)} · All day`;

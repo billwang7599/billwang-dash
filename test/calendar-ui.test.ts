@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CalendarItem } from "../shared/types.ts";
 import { layoutEvents } from "../src/eventLayout.ts";
-import { formatEventWhen } from "../src/format.ts";
+import { allDayDates, formatEventWhen } from "../src/format.ts";
 
 const ev = (id: string, from: string, to: string): CalendarItem => ({
     id,
@@ -83,5 +83,19 @@ describe("formatEventWhen", () => {
     it("shows a multi-day all-day event as an inclusive range", () => {
         const trip = { start: "2026-08-04T00:00:00.000Z", end: "2026-08-07T00:00:00.000Z", allDay: true };
         expect(formatEventWhen(trip, "UTC")).toBe("Tue, 4 Aug 2026 \u2013 Thu, 6 Aug 2026");
+    });
+});
+
+describe("allDayDates", () => {
+    it("reads a Google all-day event's dates off the string, with the exclusive end made inclusive", () => {
+        // A birthday on 10 Oct: UTC midnight is still 9 Oct in Toronto, and must not land there.
+        expect(allDayDates({ start: "2026-10-10T00:00:00.000Z", end: "2026-10-11T00:00:00.000Z" })).toEqual({
+            first: "2026-10-10",
+            last: "2026-10-10",
+        });
+        expect(allDayDates({ start: "2026-08-04T00:00:00.000Z", end: "2026-08-07T00:00:00.000Z" })).toEqual({
+            first: "2026-08-04",
+            last: "2026-08-06",
+        });
     });
 });
