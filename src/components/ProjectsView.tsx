@@ -5,6 +5,7 @@ import { projectDeleteMessage } from "../projectDelete.ts";
 import { usePopover } from "../usePopover.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { Hero } from "./Hero.tsx";
+import { SearchField } from "./SearchField.tsx";
 
 type Sort = "alphabetical" | "recent";
 
@@ -96,13 +97,7 @@ export function ProjectsView({ projects, tasks, colors, timeZone, today, onOpen,
     return (
         <div className="projects-view">
             <div className="view-bar">
-                <input
-                    className="projects-search"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Filter projects"
-                    aria-label="Filter projects"
-                />
+                <SearchField value={query} onChange={setQuery} placeholder="Filter projects" label="Filter projects" />
                 <div className="pill-group" role="group" aria-label="Sort projects">
                     {(["alphabetical", "recent"] as const).map((s) => (
                         <button

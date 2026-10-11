@@ -55,6 +55,14 @@ const toCalEvent = (r: EventRow, zone: string): CalEvent => {
     };
 };
 
+export function listEvents(sql: SqlStorage): CalEvent[] {
+    const zone = profileTimeZone(sql);
+    return sql
+        .exec<EventRow>("SELECT * FROM events ORDER BY COALESCE(start_at, 0) DESC, start_date DESC")
+        .toArray()
+        .map((r) => toCalEvent(r, zone));
+}
+
 export function getEvent(sql: SqlStorage, id: string): CalEvent | null {
     const [row] = sql.exec<EventRow>("SELECT * FROM events WHERE id = ?", id).toArray();
     return row ? toCalEvent(row, profileTimeZone(sql)) : null;

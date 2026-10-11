@@ -210,6 +210,7 @@ body { font-variant-numeric: tabular-nums; }
     padding: 0.1rem 0.4rem;
     border-radius: 100px;
 }
+.nav-hint { font-size: 0.72rem; color: var(--ink-3); }
 .nav-item.is-active .nav-count:not(.is-urgent) { color: #a9a79f; }
 .nav-count.is-urgent { background: var(--accent); color: var(--paper); }
 
@@ -1404,6 +1405,8 @@ html:has(.mnav.is-open) { overflow: hidden; }
 .habit-day .modal-desc { background: rgb(255 255 255 / 0.45); border-color: transparent; color: var(--ink); }
 .habit-day-actions { display: flex; gap: 0.4rem; margin-bottom: 0.7rem; }
 .habit-note { margin-bottom: 0; }
+.habit-note-count { margin: 0.35rem 0 0; font-size: 0.8rem; text-align: right; opacity: 0.75; }
+.habit-note-count.is-full { opacity: 1; font-weight: 600; }
 
 /* All habits: colour cards (tick today, last 7 days) beside the selected habit's month. */
 .habits-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 1.8rem; align-items: start; }
@@ -1483,19 +1486,6 @@ html:has(.mnav.is-open) { overflow: hidden; }
 
 /* ---- Projects page ------------------------------------------------------- */
 
-.projects-search {
-    width: min(20rem, 100%);
-    margin-right: auto;
-    padding: 0.45rem 0.9rem;
-    font: inherit;
-    font-size: 0.88rem;
-    border: 1px solid var(--rule-2);
-    border-radius: 100px;
-    background: transparent;
-    color: var(--ink);
-    outline: none;
-}
-.projects-search:focus { border-color: var(--ink); }
 .projects-empty { margin-inline: 0; }
 .new-project { display: flex; gap: 0.4rem; }
 .new-project input {
@@ -2315,38 +2305,103 @@ html:has(.mnav.is-open) { overflow: hidden; }
 .import-row.is-skipped { opacity: 0.55; }
 .import-content { font-size: 0.9rem; font-weight: 500; margin-right: 0.2rem; }
 
-/* ---- Project search (⌘K) ------------------------------------------------- */
+/* ---- Search (⌘K and the project filter) --------------------------------- */
 
-.search-modal { width: min(26rem, 100%); padding-bottom: 0.6rem; }
+/* ⌘K: each kind of result is a card tinted in its colour, spaced apart rather than stacked,
+   so the groups read as a dropdown and not as page content. */
+.modal.search-modal { width: min(32rem, 100%); padding: 1.3rem 0.7rem 0.7rem; }
+.search-head { display: flex; align-items: baseline; gap: 0.6rem; padding: 0 0.7rem 0.5rem; }
+.search-head .modal-title { flex: 1; min-width: 0; padding-bottom: 0; }
+.search-count { flex: none; font-size: 0.8rem; color: var(--ink-3); }
 
-.search-results {
-    list-style: none;
-    margin: 0.6rem 0 0;
-    padding: 0;
-    max-height: 20rem;
-    overflow-y: auto;
-}
+.search-results { display: flex; flex-direction: column; gap: 0.4rem; max-height: min(28rem, 60vh); overflow-y: auto; }
+.search-group { border-radius: 18px; background: color-mix(in srgb, var(--card-c) 38%, var(--card)); padding: 0.55rem 0.4rem 0.4rem; }
+.search-group-head { display: flex; justify-content: space-between; margin: 0 0.7rem 0.15rem; font-size: 0.85rem; font-weight: 600; letter-spacing: -0.01em; }
+.search-group-head span { font-weight: 400; opacity: 0.5; }
+.search-list { list-style: none; margin: 0; padding: 0; }
 
 .search-result {
-    display: block;
+    display: grid;
+    grid-template-columns: 1.9rem minmax(0, 1fr);
+    align-items: center;
+    gap: 0.7rem;
     width: 100%;
     border: 0;
+    border-radius: 12px;
     background: none;
     font: inherit;
-    font-size: 0.9rem;
-    color: var(--ink-2);
+    color: var(--ink);
     text-align: left;
-    padding: 0.5rem 0.5rem;
-    border-radius: var(--r-sm);
+    padding: 0.45rem 0.6rem;
     cursor: pointer;
+    transition: background 0.12s var(--ease);
 }
-.search-result:hover { background: var(--paper-3); color: var(--ink); }
+/* The mouse moves the active row too, so this is the hover state as well. */
+.search-result.is-active { background: color-mix(in srgb, var(--card-c) 75%, var(--card)); }
+.search-icon-tile { width: 1.9rem; height: 1.9rem; border-radius: 8px; background: var(--card-c); display: grid; place-items: center; }
+.search-text { min-width: 0; }
+.search-line { display: flex; align-items: baseline; gap: 0.5rem; }
+.search-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; letter-spacing: -0.015em; }
+.search-meta { font-size: 0.75rem; color: rgb(0 0 0 / 0.55); white-space: nowrap; }
+.match-tag { flex: none; white-space: nowrap; color: var(--ink-2); }
+.match-snippet {
+    display: block;
+    margin-top: 0.1rem;
+    font-size: 0.8rem;
+    color: rgb(0 0 0 / 0.6);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.task-body .match-snippet { white-space: normal; }
+/* The hit inside a result. A class, not bare `mark`, so Quick add's token marks are left alone. */
+.hit { background: rgb(255 255 255 / 0.75); box-shadow: 0 0 0 1px rgb(0 0 0 / 0.08); color: inherit; border-radius: 3px; padding: 0 0.08em; }
 
 .search-empty {
     font-size: 0.85rem;
     color: var(--ink-3);
-    padding: 0.5rem;
+    padding: 0.5rem 0.7rem;
 }
+
+/* The pill search box on view bars (a project, the Projects page). */
+.search-field {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: min(20rem, 100%);
+    margin-right: auto;
+}
+.search-field .search-icon { position: absolute; left: 0.8rem; color: var(--ink-3); pointer-events: none; }
+.search-field input {
+    width: 100%;
+    padding: 0.45rem 2rem 0.45rem 2.1rem;
+    font: inherit;
+    font-size: 0.88rem;
+    border: 1px solid var(--rule-2);
+    border-radius: 100px;
+    background: transparent;
+    color: var(--ink);
+    outline: none;
+    transition: border-color 0.16s var(--ease), background 0.16s var(--ease);
+}
+.search-field input:focus { border-color: var(--ink); background: var(--card); }
+.search-field input:focus + .search-clear,
+.search-field:focus-within .search-icon { color: var(--ink); }
+.search-clear {
+    position: absolute;
+    right: 0.35rem;
+    width: 1.5rem;
+    height: 1.5rem;
+    border: 0;
+    border-radius: 50%;
+    background: var(--paper-3);
+    color: var(--ink-2);
+    font: inherit;
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+}
+.search-clear:hover { background: var(--ink); color: var(--paper); }
 
 /* ---- Touch --------------------------------------------------------------- */
 
@@ -2436,10 +2491,11 @@ html:has(.mnav.is-open) { overflow: hidden; }
     .habit-page-cols,
     .settings-cols { grid-template-columns: minmax(0, 1fr); }
     .view-bar { flex-wrap: wrap; }
-    .projects-search { width: 100%; }
+    .search-field { width: 100%; }
 
     .modal-backdrop { padding: 1rem 0.75rem calc(1rem + env(safe-area-inset-bottom)); }
     .modal { padding: 1.1rem 1rem 1rem; }
+    .modal.search-modal { padding: 1.1rem 0.5rem 0.5rem; }
     .modal-actions { flex-wrap: wrap; }
     .panel { padding: 1.1rem 1rem; }
 }

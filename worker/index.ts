@@ -221,6 +221,11 @@ app.get("/api/calendar", async (c) =>
     }),
 );
 
+app.get("/api/search", async (c) => {
+    const q = (c.req.query("q") ?? "").trim().slice(0, 100);
+    return c.json(q ? await stub(c).search(q) : { tasks: [], events: [], habits: [] });
+});
+
 // ---- Assistant -----------------------------------------------------------
 
 // The binding's run() is overloaded per model; runAgent only needs the chat shape.

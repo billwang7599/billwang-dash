@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
     addDays,
     civilFromDate,
+    civilFromKey,
     civilKey,
     minutesOfDay,
     minutesToTime,
@@ -30,6 +31,12 @@ const MODES: { mode: Mode; label: string; days: number; unit: string }[] = [
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+/** Where a search result wants the calendar: that day, with the event's editor open. */
+export interface CalendarJump {
+    day: string;
+    event?: CalEvent;
+}
+
 interface Props {
     timeZone: string;
     /** Project id -> card colour; a task on the calendar is outlined in its project's. */
@@ -38,6 +45,8 @@ interface Props {
     revision: number;
     /** A task on the calendar was clicked; the parent opens its editor. */
     onOpenTask: (taskId: string) => void;
+    /** A search result asked to see this; each new object moves the calendar there. */
+    jump?: CalendarJump | null;
 }
 
 /**
@@ -47,7 +56,7 @@ interface Props {
  * created as "5pm in Chicago" should sit at 5pm on the Chicago row even when
  * you open the app from another country.
  */
-export function WeekCalendar({ timeZone, colors, revision, onOpenTask }: Props) {
+export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: Props) {
     // Until a view is picked, a phone shows one day and anything wider the week.
     // Not persisted: a session-only preference, like the sidebar's collapse.
     const narrow = useMediaQuery(NARROW);
@@ -57,6 +66,11 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask }: Props) 
     // The focused day, not the range, is the state: switching views or resizing
     // keeps you on the same day. The week snaps to Monday; day and 3-day start on it.
     const [focus, setFocus] = useState<Civil>(() => civilFromDate(new Date(), timeZone));
+    useEffect(() => {
+        const day = jump && civilFromKey(jump.day);
+        if (day) setFocus(day);
+        if (jump?.event) setEditor({ initial: toInput(jump.event), id: jump.event.id });
+    }, [jump]);
     const rangeStart = useMemo(() => (mode === "week" ? startOfWeek(focus) : focus), [focus, mode]);
     const [selected, setSelected] = useState<CalendarItem | null>(null);
     const gridRef = useRef<HTMLDivElement>(null);

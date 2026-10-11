@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { civilFromKey, diffDays } from "../../shared/civil.ts";
 import type { Goal } from "../../shared/goals.ts";
+import type { SearchMatch } from "../../shared/search.ts";
 import type { Project, Task } from "../../shared/types.ts";
 import { formatDateLabel, formatRecurrence, formatTime, priorityName } from "../format.ts";
 import { playDone } from "../sounds.ts";
+import { Highlight, hasMatchTag, MatchSnippet, MatchTag } from "./MatchTag.tsx";
 
 /**
  * - inbox: date groups, each split into one colour card per project.
@@ -37,6 +39,10 @@ interface Props {
     onOpenProject?: (id: string) => void;
     /** ◎ goal labels link to the Goals page. */
     onOpenGoal?: (id: string) => void;
+    /** While searching: why each task matched, shown on its row. */
+    matches?: Map<string, SearchMatch>;
+    /** Flat rows name their project; leave that off when every row is from the same one. */
+    sameProject?: boolean;
 }
 
 export function TaskList({
@@ -53,6 +59,8 @@ export function TaskList({
     onOpen,
     onOpenProject,
     onOpenGoal,
+    matches,
+    sameProject,
 }: Props) {
     // Not persisted: Later starts folded each visit.
     const [laterOpen, setLaterOpen] = useState(false);
@@ -71,7 +79,7 @@ export function TaskList({
         <TaskRow
             key={task.id}
             task={task}
-            project={layout === "flat" ? projectOf(task.projectId) : null}
+            project={layout === "flat" && !sameProject ? projectOf(task.projectId) : null}
             goal={goalFor(task.goalId)}
             timeZone={timeZone}
             group={inGroup}
@@ -80,11 +88,23 @@ export function TaskList({
             onOpen={onOpen}
             onOpenProject={onOpenProject}
             onOpenGoal={onOpenGoal}
+            match={matches?.get(task.id)}
         />
     );
 
     if (layout === "flat") {
-        return <ul className="tasks">{undatedFirst(tasks).map((t) => row(t, null))}</ul>;
+        const list = <ul className="tasks">{undatedFirst(tasks).map((t) => row(t, null))}</ul>;
+        if (!matches) return list;
+        // Search results: one card in the project's colour, like the date cards they replace.
+        const color = colors?.get(tasks[0].projectId);
+        return (
+            <div className="stack" style={color ? { ["--card-c" as string]: color } : undefined}>
+                <section className="tcard">
+                    <h3 className="tcard-head">{tasks.length === 1 ? "1 match" : `${tasks.length} matches`}</h3>
+                    {list}
+                </section>
+            </div>
+        );
     }
 
     const groups = groupTasks(tasks, today);
@@ -276,6 +296,7 @@ function TaskRow({
     onOpen,
     onOpenProject,
     onOpenGoal,
+    match,
 }: {
     task: Task;
     /** Shown only where the row isn't already inside its project's card. */
@@ -289,6 +310,7 @@ function TaskRow({
     onOpen: (task: Task) => void;
     onOpenProject?: (id: string) => void;
     onOpenGoal?: (id: string) => void;
+    match?: SearchMatch;
 }) {
     const due = task.due;
     // Inside a single-date group the date is the heading, so only the time is left to say.
@@ -325,9 +347,17 @@ function TaskRow({
                 edit button rather than inside it (a button can't hold another). */}
             <div className="task-main">
                 <button className="task-body" onClick={() => onOpen(task)} aria-label={`Edit ${task.content}`}>
-                    <p className="task-title">{task.content}</p>
-                    {(due?.recurrence || task.deadline) && (
+                    <p className="task-title">
+                        {match?.field === "title" ? (
+                            <Highlight text={match.text} start={match.start} end={match.end} />
+                        ) : (
+                            task.content
+                        )}
+                    </p>
+                    {match && <MatchSnippet match={match} />}
+                    {((match && hasMatchTag(match)) || due?.recurrence || task.deadline) && (
                         <div className="task-chips">
+                            {match && <MatchTag match={match} />}
                             {due?.recurrence && <span className="chip">{formatRecurrence(due.recurrence)}</span>}
                             {task.deadline && <span className="chip chip-deadline">deadline {task.deadline}</span>}
                         </div>

@@ -10,6 +10,8 @@ import { CompletedView } from "./components/CompletedView.tsx";
 import { MobileNav } from "./components/MobileNav.tsx";
 import { ProjectsView } from "./components/ProjectsView.tsx";
 import { ConfirmDialog } from "./components/ConfirmDialog.tsx";
+import { GlobalSearch } from "./components/GlobalSearch.tsx";
+import { SearchField } from "./components/SearchField.tsx";
 import { GoalsView } from "./components/GoalsView.tsx";
 import { HabitModal } from "./components/HabitModal.tsx";
 import { HabitView } from "./components/HabitView.tsx";
@@ -23,9 +25,10 @@ import { TimeZoneNotice } from "./components/TimeZoneNotice.tsx";
 import { Trash } from "./components/Trash.tsx";
 import { TaskList } from "./components/TaskList.tsx";
 import { Hero, heroDate } from "./components/Hero.tsx";
+import { matchFields, type SearchMatch } from "../shared/search.ts";
 import { cardColor, projectColors } from "./projectColors.ts";
 import { TaskModal } from "./components/TaskModal.tsx";
-import { WeekCalendar } from "./components/WeekCalendar.tsx";
+import { WeekCalendar, type CalendarJump } from "./components/WeekCalendar.tsx";
 import { deviceTimeZone, todayKey } from "./format.ts";
 import { NARROW, useMediaQuery } from "./useMediaQuery.ts";
 
@@ -85,6 +88,11 @@ export function App() {
     const [pendingTaskDelete, setPendingTaskDelete] = useState<Task | null>(null);
     // Set when several lines are pasted into the quick-add bar; opens the import modal.
     const [importText, setImportText] = useState<string | null>(null);
+    const [searchOpen, setSearchOpen] = useState(false);
+    // Filters the open project's tasks; cleared whenever the view changes.
+    const [projectQuery, setProjectQuery] = useState("");
+    // A day a search result wants shown on the calendar or habit page.
+    const [jump, setJump] = useState<CalendarJump | null>(null);
     const [view, setView] = useState<View>(() => viewFromPath(window.location.pathname));
     // Phones get MobileNav (round menu button) instead of the sidebar.
     const narrow = useMediaQuery(NARROW);
@@ -114,7 +122,20 @@ export function App() {
             .catch(() => {}); // best effort: Settings still lets the user pick
     }, [state]);
 
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+                // Ctrl+K opens the browser's own search bar in Firefox otherwise.
+                e.preventDefault();
+                setSearchOpen(true);
+            }
+        };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, []);
+
     const navigate = useCallback((path: string) => {
+        setProjectQuery("");
         window.history.pushState({}, "", path);
         withTransition(() => setView(viewFromPath(path)));
     }, []);
@@ -433,6 +454,20 @@ export function App() {
         );
     }, [state, view]);
 
+    // On a project page, the tasks matching the filter box and why each one does.
+    const projectMatches = useMemo(() => {
+        if (view.name !== "project" || !projectQuery.trim()) return null;
+        const matches = new Map<string, SearchMatch>();
+        for (const t of filtered) {
+            const m = matchFields(projectQuery, [
+                { label: "title", text: t.content },
+                { label: "notes", text: t.description },
+            ]);
+            if (m) matches.set(t.id, m);
+        }
+        return matches;
+    }, [view, projectQuery, filtered]);
+
     const colors = useMemo(() => projectColors(state?.projects ?? []), [state?.projects]);
 
     if (error) {
@@ -470,6 +505,7 @@ export function App() {
                     todayCount={todayCount}
                     overdueCount={overdueCount}
                     navigate={navigate}
+                    onSearch={() => setSearchOpen(true)}
                 />
             ) : (
                 <Sidebar
@@ -482,6 +518,7 @@ export function App() {
                     onTogglePin={togglePinProject}
                     onDeleteProject={deleteProject}
                     onCheckHabit={checkHabitToday}
+                    onSearch={() => setSearchOpen(true)}
                 />
             )}
 
@@ -525,6 +562,7 @@ export function App() {
                                     onChanged={applyHabit}
                                     onUpdate={updateHabit}
                                     onDelete={deleteHabit}
+                                    jump={jump}
                                 />
                             ) : (
                                 <p className="habit-empty">That habit doesn't exist any more.</p>
@@ -603,6 +641,7 @@ export function App() {
                             colors={colors}
                             revision={revision}
                             onOpenTask={openTask}
+                            jump={jump}
                         />
                     ) : (
                         <>
@@ -636,6 +675,15 @@ export function App() {
                                     />
                                 </>
                             ) : (
+                                <>
+                                <div className="view-bar">
+                                    <SearchField
+                                        value={projectQuery}
+                                        onChange={setProjectQuery}
+                                        placeholder={`Search ${titleFor(view, state)}…`}
+                                        label="Search this project"
+                                    />
+                                </div>
                                 <Hero
                                     kicker="Project"
                                     title={titleFor(view, state)}
@@ -662,17 +710,22 @@ export function App() {
                                             : []),
                                     ]}
                                 />
+                                </>
                             )}
                             <TaskList
-                                tasks={filtered}
+                                tasks={projectMatches ? filtered.filter((t) => projectMatches.has(t.id)) : filtered}
+                                matches={projectMatches ?? undefined}
+                                sameProject={view.name === "project"}
                                 projects={state.projects}
                                 goals={state.goals}
                                 timeZone={state.preferences.timeZone}
                                 today={today}
-                                layout={view.name === "project" ? "project" : "inbox"}
+                                layout={projectMatches ? "flat" : view.name === "project" ? "project" : "inbox"}
                                 colors={colors}
                                 emptyMessage={
-                                    filtered.length < state.tasks.length && view.name === "inbox"
+                                    projectMatches
+                                        ? `No tasks match “${projectQuery.trim()}”.`
+                                        : filtered.length < state.tasks.length && view.name === "inbox"
                                         ? "Nothing matches your filter."
                                         : emptyFor(view)
                                 }
@@ -713,6 +766,23 @@ export function App() {
 
             {/* First run: the name the sidebar greets you by. */}
             {!state.preferences.firstName && <AccountSetup onDone={setPreferences} />}
+
+            {searchOpen && (
+                <GlobalSearch
+                    projects={state.projects}
+                    onClose={() => setSearchOpen(false)}
+                    onOpenProject={(p) => navigate(`/app/project/${p.id}`)}
+                    onOpenTask={setEditing}
+                    onOpenEvent={(event) => {
+                        setJump({ day: event.startDate, event });
+                        navigate("/app/calendar");
+                    }}
+                    onOpenHabit={(id, day) => {
+                        setJump(day ? { day } : null);
+                        navigate(`/app/habit/${id}`);
+                    }}
+                />
+            )}
 
             {newHabit && <HabitModal onSave={createHabit} onClose={() => setNewHabit(false)} />}
 

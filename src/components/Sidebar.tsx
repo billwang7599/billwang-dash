@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { AppState } from "../api.ts";
 import type { View } from "../App.tsx";
 import { HORIZONS, isDone, progress } from "../../shared/goals.ts";
@@ -7,7 +7,6 @@ import type { Project } from "../../shared/types.ts";
 import { goalColors } from "../projectColors.ts";
 import { projectDeleteMessage } from "../projectDelete.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
-import { ProjectSearch } from "./ProjectSearch.tsx";
 
 type ProjectSort = "alphabetical" | "recent";
 
@@ -33,6 +32,8 @@ interface Props {
     onDeleteProject: (id: string) => void;
     /** Check today off (or undo it) from the sidebar. */
     onCheckHabit: (habit: HabitSummary) => void;
+    /** Opens the search box (also ⌘K, handled by App). */
+    onSearch: () => void;
 }
 
 /** The fixed views. Order is fixed too -- not user-reorderable. */
@@ -52,6 +53,7 @@ export function Sidebar({
     onTogglePin,
     onDeleteProject,
     onCheckHabit,
+    onSearch,
 }: Props) {
     // Desktop only: on a phone App shows MobileNav instead of this sidebar.
     // Not persisted: collapsing is a session-only UI preference, not a saved one.
@@ -59,19 +61,6 @@ export function Sidebar({
     const go = navigate;
     // Not persisted either -- same reasoning as collapsed.
     const [projectSort, setProjectSort] = useState<ProjectSort>("alphabetical");
-    const [searchOpen, setSearchOpen] = useState(false);
-
-    useEffect(() => {
-        const onKey = (e: KeyboardEvent) => {
-            if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-                // Ctrl+K opens the browser's own search bar in Firefox otherwise.
-                e.preventDefault();
-                setSearchOpen(true);
-            }
-        };
-        window.addEventListener("keydown", onKey);
-        return () => window.removeEventListener("keydown", onKey);
-    }, []);
 
     const [pendingDelete, setPendingDelete] = useState<Project | null>(null);
 
@@ -124,6 +113,7 @@ export function Sidebar({
                 </div>
 
                 <nav>
+                    <NavItem label="Search" hint="⌘K" active={false} collapsed={collapsed} onClick={onSearch} />
                     {NAV_VIEWS.map(({ key, label, path }) => (
                         <NavItem
                             key={key}
@@ -170,14 +160,6 @@ export function Sidebar({
                                     Projects
                                 </button>
                                 <div className="nav-head-actions">
-                                    <button
-                                        className="sort-toggle"
-                                        onClick={() => setSearchOpen(true)}
-                                        title="Search projects (⌘K)"
-                                        aria-label="Search projects"
-                                    >
-                                        Search
-                                    </button>
                                     <button
                                         className="sort-toggle"
                                         onClick={() => setProjectSort(NEXT_SORT[projectSort])}
@@ -321,17 +303,6 @@ export function Sidebar({
                     onCancel={() => setPendingDelete(null)}
                 />
             )}
-
-            {searchOpen && (
-                <ProjectSearch
-                    projects={[...pinned, ...unpinned]}
-                    onSelect={(project) => {
-                        setSearchOpen(false);
-                        go(`/app/project/${project.id}`);
-                    }}
-                    onClose={() => setSearchOpen(false)}
-                />
-            )}
         </>
     );
 }
@@ -340,12 +311,15 @@ function NavItem({
     label,
     swatch,
     count,
+    hint,
     urgent,
     active,
     collapsed,
     onClick,
 }: {
     label: string;
+    /** Muted text after the label, e.g. a keyboard shortcut. */
+    hint?: string;
     /** A colour dot before the label (projects). */
     swatch?: string;
     count?: number;
@@ -367,6 +341,7 @@ function NavItem({
                 {swatch && <span className="nav-swatch" style={{ background: swatch }} aria-hidden="true" />}
                 {collapsed ? label.slice(0, 1).toUpperCase() : label}
             </span>
+            {hint && !collapsed && <span className="nav-hint">{hint}</span>}
             {hasCount && !collapsed && (
                 <span className={`nav-count${urgent ? " is-urgent" : ""}`}>{count}</span>
             )}

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { eventProblem } from "../shared/events.ts";
 import { goalInputSchema } from "../shared/goals.ts";
-import { habitInputSchema } from "../shared/habits.ts";
+import { habitInputSchema, MAX_NOTE_LENGTH } from "../shared/habits.ts";
 import { PROJECT_COLORS } from "../shared/types.ts";
 
 /**
@@ -117,7 +117,7 @@ export const eventBody = z
 
 export const habitCheckinBody = z.object({
     status: z.enum(["done", "skipped"]).nullable(),
-    note: z.string().max(500).optional(),
+    note: z.string().max(MAX_NOTE_LENGTH).optional(),
 });
 
 /** One shape for create and edit; the rules live in shared/goals.ts so the editor applies the same ones. */

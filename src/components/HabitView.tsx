@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { civilKey, daysInMonth, weekday } from "../../shared/civil.ts";
-import { describeFrequency, type DayStatus, type HabitDay, type HabitInput, type HabitSummary } from "../../shared/habits.ts";
+import { describeFrequency, MAX_NOTE_LENGTH, type DayStatus, type HabitDay, type HabitInput, type HabitSummary } from "../../shared/habits.ts";
 import { api } from "../api.ts";
 import { formatPlainDate } from "../format.ts";
 import { cellState } from "../habitCells.ts";
@@ -21,12 +21,14 @@ interface Props {
     onUpdate: (id: string, input: HabitInput) => Promise<void>;
     onDelete: (id: string) => Promise<void>;
     onBack: () => void;
+    /** A search result asked to see this day; each new object moves the page there. */
+    jump?: { day: string } | null;
 }
 
 const WEEKDAY_HEADS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-export function HabitView({ habit, color, today, revision, onChanged, onUpdate, onDelete, onBack }: Props) {
+export function HabitView({ habit, color, today, revision, onChanged, onUpdate, onDelete, onBack, jump }: Props) {
     const [month, setMonth] = useState(today.slice(0, 7));
     const [days, setDays] = useState<HabitDay[]>([]);
     const [selected, setSelected] = useState(today);
@@ -39,6 +41,12 @@ export function HabitView({ habit, color, today, revision, onChanged, onUpdate, 
         setMonth(today.slice(0, 7));
         setSelected(today);
     }, [habit.id, today]);
+
+    useEffect(() => {
+        if (!jump) return;
+        setMonth(jump.day.slice(0, 7));
+        setSelected(jump.day);
+    }, [jump]);
 
     useEffect(() => {
         let stale = false;
@@ -189,18 +197,13 @@ export function HabitView({ habit, color, today, revision, onChanged, onUpdate, 
                             </button>
                         )}
                     </div>
-                    <textarea
+                    <NoteField
                         // Re-mounting per day and status keeps the draft from leaking between days.
                         key={`${selected}:${sel?.status ?? "none"}`}
-                        className="modal-desc habit-note"
-                        defaultValue={sel?.note ?? ""}
-                        disabled={!sel}
-                        maxLength={500}
-                        rows={3}
-                        placeholder={sel ? "Add a note about this day" : "Mark the day done or skipped to add a note"}
-                        aria-label="Note for this day"
-                        onBlur={(e) => {
-                            if (sel && e.target.value !== sel.note) void setDay(selected, sel.status, e.target.value);
+                        initial={sel?.note ?? ""}
+                        enabled={!!sel}
+                        onCommit={(note) => {
+                            if (sel && note !== sel.note) void setDay(selected, sel.status, note);
                         }}
                     />
                 </section>
@@ -222,5 +225,32 @@ export function HabitView({ habit, color, today, revision, onChanged, onUpdate, 
                 />
             )}
         </div>
+    );
+}
+
+const NOTE_WARN_AT = Math.floor(MAX_NOTE_LENGTH * 0.8);
+
+function NoteField({ initial, enabled, onCommit }: { initial: string; enabled: boolean; onCommit: (note: string) => void }) {
+    const [length, setLength] = useState(initial.length);
+    const remaining = MAX_NOTE_LENGTH - length;
+    return (
+        <>
+            <textarea
+                className="modal-desc habit-note"
+                defaultValue={initial}
+                disabled={!enabled}
+                maxLength={MAX_NOTE_LENGTH}
+                rows={3}
+                placeholder={enabled ? "Add a note about this day" : "Mark the day done or skipped to add a note"}
+                aria-label="Note for this day"
+                onChange={(e) => setLength(e.target.value.length)}
+                onBlur={(e) => onCommit(e.target.value)}
+            />
+            {length >= NOTE_WARN_AT && (
+                <p className={`habit-note-count${remaining === 0 ? " is-full" : ""}`} role="status">
+                    {remaining === 0 ? "Character limit reached" : `${remaining} characters left`}
+                </p>
+            )}
+        </>
     );
 }

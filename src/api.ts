@@ -10,6 +10,7 @@ import type {
     Trash,
 } from "../shared/types.ts";
 import type { Approval, ChatMessage, ChatReply } from "../shared/chat.ts";
+import type { SearchResults } from "../shared/search.ts";
 import type { Goal, GoalInput } from "../shared/goals.ts";
 import type { DayStatus, HabitDay, HabitDetail, HabitInput, HabitSummary } from "../shared/habits.ts";
 
@@ -180,6 +181,9 @@ export const api = {
             method: "PATCH",
             body: JSON.stringify(prefs),
         }),
+
+    search: (q: string, signal?: AbortSignal) =>
+        request<SearchResults>(`/api/search?q=${encodeURIComponent(q)}`, { signal }),
 
     calendar: (startISO: string, endISO: string) =>
         request<{ items: CalendarItem[] }>(

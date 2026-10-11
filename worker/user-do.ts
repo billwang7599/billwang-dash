@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { addDays, civilFromDate, civilKey, weekday, zonedToUtcMs } from "../shared/civil.ts";
 import type { Goal, GoalInput } from "../shared/goals.ts";
+import type { SearchResults } from "../shared/search.ts";
 import type { DayStatus, HabitDay, HabitDetail, HabitInput, HabitSummary } from "../shared/habits.ts";
 import * as aiRuns from "./do/ai-runs.ts";
 import type { ToolRunClaim } from "./do/ai-runs.ts";
@@ -9,6 +10,7 @@ import * as goalStore from "./do/goals.ts";
 import * as habitStore from "./do/habits.ts";
 import { GoogleSync } from "./do/google.ts";
 import { migrations } from "./do/migrations.ts";
+import * as searchStore from "./do/search.ts";
 import * as projectStore from "./do/projects.ts";
 import * as taskStore from "./do/tasks.ts";
 import type { TaskInput } from "./do/tasks.ts";
@@ -295,6 +297,10 @@ export class UserDO extends DurableObject<Env> {
             .exec<{ time_zone: string }>("SELECT time_zone FROM profile WHERE id = 1")
             .one();
         return civilKey(civilFromDate(new Date(), time_zone));
+    }
+
+    async search(query: string): Promise<SearchResults> {
+        return searchStore.search(this.sql, this.todayKey(), query);
     }
 
     async listHabits(): Promise<HabitSummary[]> {

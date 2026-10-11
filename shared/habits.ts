@@ -235,3 +235,6 @@ function weeklyRun(
 
     return { streak: run, bestStreak: best, rate: target > 0 ? met / target : null };
 }
+
+/** Longest check-in note, enforced by the textarea and the Worker. */
+export const MAX_NOTE_LENGTH = 500;

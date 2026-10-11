@@ -7,6 +7,7 @@ interface Props {
     todayCount: number;
     overdueCount: number;
     navigate: (path: string) => void;
+    onSearch: () => void;
 }
 
 /** One entry per feature; on a phone the menu doesn't list each project, goal or habit. */
@@ -27,7 +28,7 @@ type MenuState = "closed" | "open" | "closing";
  * pills. Pills rise in one after another (nearest the button first); closing
  * plays a quick fade before the menu unmounts.
  */
-export function MobileNav({ view, firstName, todayCount, overdueCount, navigate }: Props) {
+export function MobileNav({ view, firstName, todayCount, overdueCount, navigate, onSearch }: Props) {
     const [menu, setMenu] = useState<MenuState>("closed");
     const shown = menu !== "closed";
 
@@ -78,7 +79,17 @@ export function MobileNav({ view, firstName, todayCount, overdueCount, navigate 
                                 </button>
                             );
                         })}
-                        <p className="mnav-hello" style={{ "--i": ITEMS.length } as React.CSSProperties}>
+                        <button
+                            className="mnav-pill"
+                            style={{ "--i": ITEMS.length } as React.CSSProperties}
+                            onClick={() => {
+                                close();
+                                onSearch();
+                            }}
+                        >
+                            Search
+                        </button>
+                        <p className="mnav-hello" style={{ "--i": ITEMS.length + 1 } as React.CSSProperties}>
                             {firstName ? `Hello, ${firstName}!` : "Hello!"}
                         </p>
                     </nav>
