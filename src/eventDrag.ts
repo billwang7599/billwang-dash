@@ -29,6 +29,11 @@ export function dragRange(anchor: number, current: number, moved: boolean): { st
     return { start: Math.min(a, c), end: Math.max(a, c) + SNAP_MINUTES };
 }
 
+/** Where a resized event ends: the bottom of the slot under the pointer (minutes into the day). */
+export function resizedEndMinutes(current: number): number {
+    return Math.min(DAY_MINUTES, slotStart(current) + SNAP_MINUTES);
+}
+
 /**
  * Turns a dragged range into the event fields. A block that runs to the end of the day
  * ends at midnight, which is 00:00 on the next date.

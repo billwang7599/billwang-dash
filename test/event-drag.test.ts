@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CLICK_MINUTES, dragRange, minutesAtOffset, rangeToEvent } from "../src/eventDrag.ts";
+import { CLICK_MINUTES, dragRange, minutesAtOffset, rangeToEvent, resizedEndMinutes } from "../src/eventDrag.ts";
 
 const at = (h: number, m = 0) => h * 60 + m;
 
@@ -51,5 +51,17 @@ describe("rangeToEvent", () => {
         expect(rangeToEvent("2026-08-31", at(23), 1440)).toMatchObject({
             startDate: "2026-08-31", startTime: "23:00", endDate: "2026-09-01", endTime: "00:00",
         });
+    });
+});
+
+describe("resizedEndMinutes", () => {
+    it("ends at the bottom of the slot under the pointer", () => {
+        expect(resizedEndMinutes(at(10, 7))).toBe(at(10, 15));
+        expect(resizedEndMinutes(at(10, 15))).toBe(at(10, 30));
+    });
+
+    it("stops at midnight", () => {
+        expect(resizedEndMinutes(at(23, 50))).toBe(1440);
+        expect(resizedEndMinutes(1440)).toBe(1440);
     });
 });

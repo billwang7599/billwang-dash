@@ -1290,6 +1290,8 @@ html:has(.mnav.is-open) { overflow: hidden; }
 }
 /* dash's own events are solid ink; the one being drawn is lighter and ignores the pointer. */
 .cal-ev.event { background: var(--ink); color: var(--card); }
+/* Shift+drag resizes dash's own events, so say so while shift is down. */
+.is-shift .cal-ev.event { cursor: ns-resize; }
 .cal-ev.is-draft {
     opacity: 0.8;
     pointer-events: none;

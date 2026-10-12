@@ -13,7 +13,7 @@ import {
 import type { CalEvent, CalendarItem, EventInput } from "../../shared/types.ts";
 import { api } from "../api.ts";
 import { useCalendarRange } from "../useCalendarRange.ts";
-import { dragRange, minutesAtOffset, rangeToEvent } from "../eventDrag.ts";
+import { SNAP_MINUTES, dragRange, minutesAtOffset, rangeToEvent, resizedEndMinutes } from "../eventDrag.ts";
 import { EventDetails } from "./EventDetails.tsx";
 import { Hero } from "./Hero.tsx";
 import { EventModal } from "./EventModal.tsx";
@@ -75,11 +75,22 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
     const [selected, setSelected] = useState<CalendarItem | null>(null);
     const gridRef = useRef<HTMLDivElement>(null);
 
-    // Press and drag on a day column draws a new event. `drag` holds the gesture; `draft`
-    // is what is drawn so far.
-    const dragRef = useRef<{ day: string; anchor: number; moved: boolean; startY: number } | null>(null);
+    // Press and drag on a day column draws a new event; shift+drag on one of dash's own events
+    // moves its end instead. `drag` holds the gesture; `draft` and `resize` are what is shown so far.
+    const dragRef = useRef<{
+        day: string;
+        anchor: number;
+        moved: boolean;
+        startY: number;
+        /** Pressed on an event: nothing starts until the pointer moves, so a click still opens it. */
+        onEvent: boolean;
+        resize?: CalendarItem;
+    } | null>(null);
     const lastPointer = useRef("");
     const [draft, setDraft] = useState<{ day: string; start: number; end: number } | null>(null);
+    // `saving` keeps the new end on screen until the refetch brings it back from the server.
+    const [resize, setResize] = useState<{ id: string; end: string; saving: boolean } | null>(null);
+    const [shiftHeld, setShiftHeld] = useState(false);
     const [editor, setEditor] = useState<{ initial: EventInput; id: string | null } | null>(null);
     const [reload, setReload] = useState(0);
     // Cached ranges paint at once and revalidate behind; only a range never seen gets a spinner.
@@ -115,11 +126,32 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
         if (gridRef.current) gridRef.current.scrollTop = 7 * HOUR_PX;
     }, []);
 
+    const shown = useMemo(
+        () => (resize ? items.map((i) => (i.id === resize.id ? { ...i, end: resize.end } : i)) : items),
+        [items, resize],
+    );
+
+    useEffect(() => {
+        if (!resize?.saving) return;
+        const saved = items.find((i) => i.id === resize.id);
+        if (!saved || Date.parse(saved.end) === Date.parse(resize.end)) setResize(null);
+    }, [items, resize]);
+
+    useEffect(() => {
+        const track = (e: KeyboardEvent) => setShiftHeld(e.shiftKey);
+        window.addEventListener("keydown", track);
+        window.addEventListener("keyup", track);
+        return () => {
+            window.removeEventListener("keydown", track);
+            window.removeEventListener("keyup", track);
+        };
+    }, []);
+
     const byDay = useMemo(() => {
         const map = new Map<string, { timed: CalendarItem[]; allDay: CalendarItem[] }>();
         for (const day of days) map.set(civilKey(day), { timed: [], allDay: [] });
 
-        for (const item of items) {
+        for (const item of shown) {
             // All-day events, dash's and Google's, are dates, not instants: each covers every
             // day from its first to its last, however many that is.
             const dates = !item.allDay
@@ -149,7 +181,7 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
             }
         }
         return map;
-    }, [items, days, timeZone]);
+    }, [shown, days, timeZone]);
 
     const todayK = civilKey(civilFromDate(new Date(), timeZone));
     const nowMinutes = minutesOfDay(new Date(), timeZone);
@@ -169,11 +201,42 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
         lastPointer.current = e.pointerType;
         // Touch scrolls the grid, so it can't also draw; tapping a slot works there instead.
         if (e.pointerType === "touch" || e.button !== 0) return;
-        if ((e.target as HTMLElement).closest(".cal-ev")) return;
         const anchor = minutesAt(e);
-        dragRef.current = { day, anchor, moved: false, startY: e.clientY };
+        const onEvent = (e.target as HTMLElement).closest<HTMLElement>(".cal-ev");
+        if (onEvent) {
+            const resizable = e.shiftKey
+                ? items.find((i) => i.event && i.event.id === onEvent.dataset.eventId && !i.allDay)
+                : undefined;
+            if (e.shiftKey && !resizable) return;
+            dragRef.current = { day, anchor, moved: false, startY: e.clientY, onEvent: true, resize: resizable };
+            return;
+        }
+        dragRef.current = { day, anchor, moved: false, startY: e.clientY, onEvent: false };
         e.currentTarget.setPointerCapture(e.pointerId);
         setDraft({ day, ...dragRange(anchor, anchor, false) });
+    }
+
+    /** The ISO end for `item` resized to the pointer, in `day`'s column. At least one slot long. */
+    function resizedEnd(item: CalendarItem, day: string, minutes: number) {
+        const ms = zonedToUtcMs(civilFromKey(day)!, resizedEndMinutes(minutes), timeZone);
+        return new Date(Math.max(ms, Date.parse(item.start) + SNAP_MINUTES * 60_000)).toISOString();
+    }
+
+    async function saveResize(item: CalendarItem, end: string) {
+        const event = item.event!;
+        const endAt = new Date(end);
+        setResize({ id: item.id, end, saving: true });
+        try {
+            await api.updateEvent(event.id, {
+                ...toInput(event),
+                endDate: civilKey(civilFromDate(endAt, timeZone)),
+                endTime: minutesToTime(minutesOfDay(endAt, timeZone)),
+            });
+            setReload((n) => n + 1);
+        } catch (err) {
+            setResize(null);
+            setError((err as Error).message);
+        }
     }
 
     function onDayPointerMove(e: React.PointerEvent<HTMLDivElement>) {
@@ -181,14 +244,24 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
         if (!drag) return;
         // A few pixels of wobble is still a click.
         if (!drag.moved && Math.abs(e.clientY - drag.startY) < 4) return;
+        if (!drag.moved && drag.onEvent) e.currentTarget.setPointerCapture(e.pointerId);
         drag.moved = true;
-        setDraft({ day: drag.day, ...dragRange(drag.anchor, minutesAt(e), true) });
+        if (drag.resize) {
+            setResize({ id: drag.resize.id, end: resizedEnd(drag.resize, drag.day, minutesAt(e)), saving: false });
+        } else {
+            setDraft({ day: drag.day, ...dragRange(drag.anchor, minutesAt(e), true) });
+        }
     }
 
     function onDayPointerUp(e: React.PointerEvent<HTMLDivElement>) {
         const drag = dragRef.current;
         if (!drag) return; // cancelled with Escape
         dragRef.current = null;
+        if (drag.onEvent && !drag.moved) return; // a click: the event opens itself
+        if (drag.resize) {
+            void saveResize(drag.resize, resizedEnd(drag.resize, drag.day, minutesAt(e)));
+            return;
+        }
         const { start, end } = dragRange(drag.anchor, minutesAt(e), drag.moved);
         setDraft(null);
         setEditor({ initial: rangeToEvent(drag.day, start, end), id: null });
@@ -208,14 +281,15 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
     function cancelDrag() {
         dragRef.current = null;
         setDraft(null);
+        setResize((r) => (r?.saving ? r : null));
     }
 
     useEffect(() => {
-        if (!draft) return;
+        if (!draft && !resize) return;
         const onKey = (e: KeyboardEvent) => e.key === "Escape" && cancelDrag();
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
-    }, [draft]);
+    }, [draft, resize]);
 
     /** The "New event" button: the next whole hour today, or 9am on the first day shown. */
     function newEventDefaults(): EventInput {
@@ -251,7 +325,7 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
     }
 
     return (
-        <div className="cal-wrap" style={{ ["--days" as string]: dayCount }}>
+        <div className={`cal-wrap${shiftHeld ? " is-shift" : ""}`} style={{ ["--days" as string]: dayCount }}>
             <header className="cal-head">
                 <div className="cal-bar">
                     <div className="cal-modes" role="group" aria-label="Calendar view">
@@ -402,6 +476,7 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
                                             type="button"
                                             className={`cal-ev ${item.kind}`}
                                             data-p={item.priority}
+                                            data-event-id={item.event?.id}
                                             style={{
                                                 top: (startMin / 60) * HOUR_PX,
                                                 height,
