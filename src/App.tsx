@@ -140,6 +140,15 @@ export function App() {
         withTransition(() => setView(viewFromPath(path)));
     }, []);
 
+    // The assistant is admin-only; anyone else landing on its URL goes to the inbox.
+    const isAdmin = state?.user.isAdmin ?? false;
+    useEffect(() => {
+        if (state && !isAdmin && view.name === "assistant") {
+            window.history.replaceState({}, "", "/app");
+            setView({ name: "inbox" });
+        }
+    }, [state, isAdmin, view]);
+
     /**
      * Wraps a mutation so a failure surfaces instead of becoming an unhandled
      * rejection. Without this a failed complete/delete silently does nothing and
@@ -506,6 +515,7 @@ export function App() {
                     overdueCount={overdueCount}
                     navigate={navigate}
                     onSearch={() => setSearchOpen(true)}
+                    showAssistant={isAdmin}
                 />
             ) : (
                 <Sidebar
@@ -519,6 +529,7 @@ export function App() {
                     onDeleteProject={deleteProject}
                     onCheckHabit={checkHabitToday}
                     onSearch={() => setSearchOpen(true)}
+                    showAssistant={isAdmin}
                 />
             )}
 

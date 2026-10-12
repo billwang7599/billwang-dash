@@ -8,6 +8,8 @@ interface Props {
     overdueCount: number;
     navigate: (path: string) => void;
     onSearch: () => void;
+    /** The assistant is admin-only. */
+    showAssistant: boolean;
 }
 
 /** One entry per feature; on a phone the menu doesn't list each project, goal or habit. */
@@ -28,7 +30,7 @@ type MenuState = "closed" | "open" | "closing";
  * pills. Pills rise in one after another (nearest the button first); closing
  * plays a quick fade before the menu unmounts.
  */
-export function MobileNav({ view, firstName, todayCount, overdueCount, navigate, onSearch }: Props) {
+export function MobileNav({ view, firstName, todayCount, overdueCount, navigate, onSearch, showAssistant }: Props) {
     const [menu, setMenu] = useState<MenuState>("closed");
     const shown = menu !== "closed";
 
@@ -62,7 +64,7 @@ export function MobileNav({ view, firstName, todayCount, overdueCount, navigate,
                     >
                         {/* Laid out bottom-up (column-reverse): Inbox sits nearest the button,
                             and --i, the stagger step, is just the position from the bottom. */}
-                        {ITEMS.map((item, i) => {
+                        {ITEMS.filter((item) => showAssistant || item.path !== "/app/assistant").map((item, i) => {
                             const count = item.path === "/app" ? todayCount : 0;
                             return (
                                 <button

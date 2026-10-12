@@ -231,6 +231,11 @@ app.get("/api/search", async (c) => {
 // The binding's run() is overloaded per model; runAgent only needs the chat shape.
 const workersAi = (ai: Ai): Model => ({ run: (model, input) => ai.run(model as keyof AiModels, input as never) });
 
+app.use("/api/ai/*", async (c, next) => {
+    if (!c.get("user").isAdmin) return c.json({ error: "forbidden" }, 403);
+    await next();
+});
+
 app.post("/api/ai/chat", async (c) => {
     const { messages, timeZone, approvals } = await body(c, schemas.chatBody);
     return c.json(await runAgent({ model: workersAi(c.env.AI), stub: stub(c), timeZone, messages, approvals }));

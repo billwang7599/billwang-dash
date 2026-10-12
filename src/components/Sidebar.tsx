@@ -34,6 +34,8 @@ interface Props {
     onCheckHabit: (habit: HabitSummary) => void;
     /** Opens the search box (also ⌘K, handled by App). */
     onSearch: () => void;
+    /** The assistant is admin-only. */
+    showAssistant: boolean;
 }
 
 /** The fixed views. Order is fixed too -- not user-reorderable. */
@@ -54,6 +56,7 @@ export function Sidebar({
     onDeleteProject,
     onCheckHabit,
     onSearch,
+    showAssistant,
 }: Props) {
     // Desktop only: on a phone App shows MobileNav instead of this sidebar.
     // Not persisted: collapsing is a session-only UI preference, not a saved one.
@@ -114,7 +117,7 @@ export function Sidebar({
 
                 <nav>
                     <NavItem label="Search" hint="⌘K" active={false} collapsed={collapsed} onClick={onSearch} />
-                    {NAV_VIEWS.map(({ key, label, path }) => (
+                    {NAV_VIEWS.filter(({ key }) => showAssistant || key !== "assistant").map(({ key, label, path }) => (
                         <NavItem
                             key={key}
                             label={label}
