@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import type { SharedTask, SharedView } from "../shared/share.ts";
 import { PROJECT_COLORS, type ProjectColor } from "../shared/types.ts";
 import "./app.css";
-import { isLang, LANGUAGES, pickLanguage, translate, type Key, type Lang } from "./shareI18n.ts";
+import { isLang, LANGUAGES, matchLanguage, pickLanguage, translate, type Key, type Lang } from "./shareI18n.ts";
 
 /**
  * The page behind a project's share link: its open tasks, an add box, and a tick. No
@@ -29,8 +29,20 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 
 const STORAGE_KEY = "share-lang";
 
-/** The visitor's saved choice, else the browser's language. Storage can be blocked, so it is optional. */
+/**
+ * `?lang=fr` in the link wins, so the sender can pick the language; it is then taken out of the
+ * address so it doesn't override the dropdown on a reload. Otherwise the visitor's saved choice,
+ * else the browser's language. Storage can be blocked, so it is optional.
+ */
 function initialLanguage(): Lang {
+    const url = new URL(window.location.href);
+    const requested = url.searchParams.get("lang");
+    if (requested !== null) {
+        url.searchParams.delete("lang");
+        window.history.replaceState(null, "", url);
+        const lang = matchLanguage(requested);
+        if (lang) return lang;
+    }
     try {
         const saved = localStorage.getItem(STORAGE_KEY);
         if (isLang(saved)) return saved;

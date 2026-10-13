@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LANGUAGES, pickLanguage, translate, type Key, type Lang } from "../src/shareI18n.ts";
+import { LANGUAGES, matchLanguage, pickLanguage, translate, type Key, type Lang } from "../src/shareI18n.ts";
 
 const KEYS: Key[] = [
     "sharedBy", "todo", "addPlaceholder", "addLabel", "add", "adding", "complete", "completed",
@@ -43,5 +43,15 @@ describe("pickLanguage", () => {
     it("falls back to English", () => {
         expect(pickLanguage(["de", "ja"])).toBe("en");
         expect(pickLanguage([])).toBe("en");
+    });
+});
+
+describe("matchLanguage", () => {
+    it("reads a code from a link, any case, and says null for one we lack", () => {
+        expect(matchLanguage("FR")).toBe("fr");
+        expect(matchLanguage("zh-tw")).toBe("zh-Hant");
+        expect(matchLanguage("ko")).toBe("ko");
+        expect(matchLanguage("de")).toBeNull();
+        expect(matchLanguage("")).toBeNull();
     });
 });

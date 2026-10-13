@@ -134,15 +134,21 @@ export function translate(lang: Lang, key: Key, vars: Record<string, string> = {
     return strings[lang][key].replace(/\{(\w+)\}/g, (_, name: string) => vars[name] ?? "");
 }
 
+/** A BCP 47 tag ("fr", "zh-TW", "zh-Hant-HK") as one of ours, or null if we have no such language. */
+export function matchLanguage(tag: string): Lang | null {
+    const [base, ...rest] = tag.toLowerCase().split("-");
+    if (base === "zh") {
+        // Traditional for Taiwan, Hong Kong, Macau and an explicit Hant; Simplified otherwise.
+        return rest.includes("hant") || rest.some((p) => ["tw", "hk", "mo"].includes(p)) ? "zh-Hant" : "zh-Hans";
+    }
+    return base in LANGUAGES ? (base as Lang) : null;
+}
+
 /** The best supported language for the browser's list, e.g. ["zh-TW", "en"] -> "zh-Hant". English if none fit. */
 export function pickLanguage(preferred: readonly string[]): Lang {
     for (const tag of preferred) {
-        const [base, ...rest] = tag.toLowerCase().split("-");
-        if (base === "zh") {
-            // Traditional for Taiwan, Hong Kong, Macau and an explicit Hant; Simplified otherwise.
-            return rest.includes("hant") || rest.some((p) => ["tw", "hk", "mo"].includes(p)) ? "zh-Hant" : "zh-Hans";
-        }
-        if (base in LANGUAGES) return base as Lang;
+        const lang = matchLanguage(tag);
+        if (lang) return lang;
     }
     return "en";
 }
