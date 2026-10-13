@@ -403,6 +403,8 @@ html:has(.mnav.is-open) { overflow: hidden; }
     padding: clamp(1.5rem, 3.5vw, 2.25rem) clamp(1.25rem, 4vw, 2.75rem) calc(4rem + env(safe-area-inset-bottom));
     max-width: 80rem;
     width: 100%;
+    /* On a wide screen the column sits in the middle of what the sidebar leaves, not against it. */
+    margin-inline: auto;
 }
 
 .view-title {
