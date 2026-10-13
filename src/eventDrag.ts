@@ -34,6 +34,16 @@ export function resizedEndMinutes(current: number): number {
     return Math.min(DAY_MINUTES, slotStart(current) + SNAP_MINUTES);
 }
 
+/** Where a resized event starts: the top of the slot under the pointer (minutes into the day). */
+export function resizedStartMinutes(current: number): number {
+    return slotStart(current);
+}
+
+/** How far a dragged event has moved, in minutes: the pointer's travel, rounded to whole slots. */
+export function movedMinutes(anchor: number, current: number): number {
+    return Math.round((current - anchor) / SNAP_MINUTES) * SNAP_MINUTES;
+}
+
 /**
  * Turns a dragged range into the event fields. A block that runs to the end of the day
  * ends at midnight, which is 00:00 on the next date.

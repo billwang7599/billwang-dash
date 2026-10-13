@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CLICK_MINUTES, dragRange, minutesAtOffset, rangeToEvent, resizedEndMinutes } from "../src/eventDrag.ts";
+import { CLICK_MINUTES, dragRange, minutesAtOffset, movedMinutes, rangeToEvent, resizedEndMinutes, resizedStartMinutes } from "../src/eventDrag.ts";
 
 const at = (h: number, m = 0) => h * 60 + m;
 
@@ -63,5 +63,25 @@ describe("resizedEndMinutes", () => {
     it("stops at midnight", () => {
         expect(resizedEndMinutes(at(23, 50))).toBe(1440);
         expect(resizedEndMinutes(1440)).toBe(1440);
+    });
+});
+
+describe("resizedStartMinutes", () => {
+    it("is the top of the slot under the pointer", () => {
+        expect(resizedStartMinutes(at(10, 7))).toBe(at(10));
+        expect(resizedStartMinutes(at(10, 20))).toBe(at(10, 15));
+    });
+
+    it("never starts past the last slot of the day", () => {
+        expect(resizedStartMinutes(1440)).toBe(at(23, 45));
+    });
+});
+
+describe("movedMinutes", () => {
+    it("is the pointer's travel rounded to whole slots, either way", () => {
+        expect(movedMinutes(at(10), at(10, 6))).toBe(0);
+        expect(movedMinutes(at(10), at(10, 8))).toBe(15);
+        expect(movedMinutes(at(10), at(11, 20))).toBe(75);
+        expect(movedMinutes(at(10), at(9, 20))).toBe(-45);
     });
 });

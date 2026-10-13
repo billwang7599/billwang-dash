@@ -4,6 +4,7 @@ import {
     civilFromDate,
     civilFromKey,
     civilKey,
+    diffDays,
     minutesOfDay,
     minutesToTime,
     nextWeekday,
@@ -13,7 +14,15 @@ import {
 import type { CalEvent, CalendarItem, EventInput } from "../../shared/types.ts";
 import { api } from "../api.ts";
 import { useCalendarRange } from "../useCalendarRange.ts";
-import { SNAP_MINUTES, dragRange, minutesAtOffset, rangeToEvent, resizedEndMinutes } from "../eventDrag.ts";
+import {
+    SNAP_MINUTES,
+    dragRange,
+    minutesAtOffset,
+    movedMinutes,
+    rangeToEvent,
+    resizedEndMinutes,
+    resizedStartMinutes,
+} from "../eventDrag.ts";
 import { EventDetails } from "./EventDetails.tsx";
 import { Hero } from "./Hero.tsx";
 import { EventModal } from "./EventModal.tsx";
@@ -22,6 +31,9 @@ import { allDayDates, formatInstant } from "../format.ts";
 import { NARROW, useMediaQuery } from "../useMediaQuery.ts";
 
 const HOUR_PX = 46;
+
+/** Which part of an event a shift+drag takes hold of. */
+type Edge = "start" | "end" | "move";
 type Mode = "day" | "3day" | "week";
 const MODES: { mode: Mode; label: string; days: number; unit: string }[] = [
     { mode: "day", label: "Day", days: 1, unit: "day" },
@@ -75,8 +87,10 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
     const [selected, setSelected] = useState<CalendarItem | null>(null);
     const gridRef = useRef<HTMLDivElement>(null);
 
-    // Press and drag on a day column draws a new event; shift+drag on one of dash's own events
-    // moves its end instead. `drag` holds the gesture; `draft` and `resize` are what is shown so far.
+    // Press and drag on a day column draws a new event. Shift+drag on one of dash's own events
+    // reshapes it: from its top edge it moves the start, from its bottom edge the end, and from
+    // anywhere else it moves the whole event. `drag` holds the gesture; `draft` and `reshape` are
+    // what is shown so far.
     const dragRef = useRef<{
         day: string;
         anchor: number;
@@ -84,12 +98,12 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
         startY: number;
         /** Pressed on an event: nothing starts until the pointer moves, so a click still opens it. */
         onEvent: boolean;
-        resize?: CalendarItem;
+        reshape?: { item: CalendarItem; edge: Edge };
     } | null>(null);
     const lastPointer = useRef("");
     const [draft, setDraft] = useState<{ day: string; start: number; end: number } | null>(null);
-    // `saving` keeps the new end on screen until the refetch brings it back from the server.
-    const [resize, setResize] = useState<{ id: string; end: string; saving: boolean } | null>(null);
+    // `saving` keeps the new times on screen until the refetch brings them back from the server.
+    const [reshape, setReshape] = useState<{ id: string; start: string; end: string; saving: boolean } | null>(null);
     const [shiftHeld, setShiftHeld] = useState(false);
     const [editor, setEditor] = useState<{ initial: EventInput; id: string | null } | null>(null);
     const [reload, setReload] = useState(0);
@@ -127,15 +141,20 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
     }, []);
 
     const shown = useMemo(
-        () => (resize ? items.map((i) => (i.id === resize.id ? { ...i, end: resize.end } : i)) : items),
-        [items, resize],
+        () =>
+            reshape
+                ? items.map((i) => (i.id === reshape.id ? { ...i, start: reshape.start, end: reshape.end } : i))
+                : items,
+        [items, reshape],
     );
 
     useEffect(() => {
-        if (!resize?.saving) return;
-        const saved = items.find((i) => i.id === resize.id);
-        if (!saved || Date.parse(saved.end) === Date.parse(resize.end)) setResize(null);
-    }, [items, resize]);
+        if (!reshape?.saving) return;
+        const saved = items.find((i) => i.id === reshape.id);
+        if (!saved || (Date.parse(saved.start) === Date.parse(reshape.start) && Date.parse(saved.end) === Date.parse(reshape.end))) {
+            setReshape(null);
+        }
+    }, [items, reshape]);
 
     useEffect(() => {
         const track = (e: KeyboardEvent) => setShiftHeld(e.shiftKey);
@@ -204,11 +223,21 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
         const anchor = minutesAt(e);
         const onEvent = (e.target as HTMLElement).closest<HTMLElement>(".cal-ev");
         if (onEvent) {
-            const resizable = e.shiftKey
+            const item = e.shiftKey
                 ? items.find((i) => i.event && i.event.id === onEvent.dataset.eventId && !i.allDay)
                 : undefined;
-            if (e.shiftKey && !resizable) return;
-            dragRef.current = { day, anchor, moved: false, startY: e.clientY, onEvent: true, resize: resizable };
+            if (e.shiftKey && !item) return;
+            // The edge strips only exist where the event really starts or ends, so on a
+            // continuation segment shift+drag moves the whole event.
+            const edge = ((e.target as HTMLElement).closest<HTMLElement>(".cal-ev-edge")?.dataset.edge ?? "move") as Edge;
+            dragRef.current = {
+                day,
+                anchor,
+                moved: false,
+                startY: e.clientY,
+                onEvent: true,
+                reshape: item && { item, edge },
+            };
             return;
         }
         dragRef.current = { day, anchor, moved: false, startY: e.clientY, onEvent: false };
@@ -216,25 +245,60 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
         setDraft({ day, ...dragRange(anchor, anchor, false) });
     }
 
-    /** The ISO end for `item` resized to the pointer, in `day`'s column. At least one slot long. */
-    function resizedEnd(item: CalendarItem, day: string, minutes: number) {
-        const ms = zonedToUtcMs(civilFromKey(day)!, resizedEndMinutes(minutes), timeZone);
-        return new Date(Math.max(ms, Date.parse(item.start) + SNAP_MINUTES * 60_000)).toISOString();
+    /** The day column under the pointer's x, the nearest one when it is outside the grid. */
+    function dayUnder(e: React.PointerEvent<HTMLDivElement>, fallback: string): string {
+        const columns = [...(gridRef.current?.querySelectorAll<HTMLElement>(".cal-day") ?? [])];
+        if (columns.length === 0) return fallback;
+        const hit = columns.find((c) => {
+            const r = c.getBoundingClientRect();
+            return e.clientX >= r.left && e.clientX < r.right;
+        });
+        const nearest = e.clientX < columns[0].getBoundingClientRect().left ? columns[0] : columns[columns.length - 1];
+        return (hit ?? nearest).dataset.day ?? fallback;
     }
 
-    async function saveResize(item: CalendarItem, end: string) {
+    /**
+     * `item` reshaped to the pointer, which is at `minutes` in column `day`; the drag began at
+     * `anchor` in column `from`. Never shorter than one slot.
+     */
+    function reshaped(item: CalendarItem, edge: Edge, from: string, anchor: number, day: string, minutes: number) {
+        const start = Date.parse(item.start);
+        const end = Date.parse(item.end);
+        const slot = SNAP_MINUTES * 60_000;
+        const at = (m: number) => zonedToUtcMs(civilFromKey(day)!, m, timeZone);
+        let next: { start: number; end: number };
+        if (edge === "start") next = { start: Math.min(at(resizedStartMinutes(minutes)), end - slot), end };
+        else if (edge === "end") next = { start, end: Math.max(at(resizedEndMinutes(minutes)), start + slot) };
+        else {
+            // Whole days by the calendar, so a move across a clock change keeps the local time;
+            // the minutes the pointer travelled are added on top.
+            const days = diffDays(civilFromKey(from)!, civilFromKey(day)!);
+            const by = movedMinutes(anchor, minutes) * 60_000;
+            const shift = (ms: number) => {
+                const d = new Date(ms);
+                return zonedToUtcMs(addDays(civilFromDate(d, timeZone), days), minutesOfDay(d, timeZone), timeZone) + by;
+            };
+            next = { start: shift(start), end: shift(end) };
+        }
+        return { start: new Date(next.start).toISOString(), end: new Date(next.end).toISOString() };
+    }
+
+    async function saveReshape(item: CalendarItem, start: string, end: string) {
         const event = item.event!;
+        const startAt = new Date(start);
         const endAt = new Date(end);
-        setResize({ id: item.id, end, saving: true });
+        setReshape({ id: item.id, start, end, saving: true });
         try {
             await api.updateEvent(event.id, {
                 ...toInput(event),
+                startDate: civilKey(civilFromDate(startAt, timeZone)),
+                startTime: minutesToTime(minutesOfDay(startAt, timeZone)),
                 endDate: civilKey(civilFromDate(endAt, timeZone)),
                 endTime: minutesToTime(minutesOfDay(endAt, timeZone)),
             });
             setReload((n) => n + 1);
         } catch (err) {
-            setResize(null);
+            setReshape(null);
             setError((err as Error).message);
         }
     }
@@ -246,8 +310,9 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
         if (!drag.moved && Math.abs(e.clientY - drag.startY) < 4) return;
         if (!drag.moved && drag.onEvent) e.currentTarget.setPointerCapture(e.pointerId);
         drag.moved = true;
-        if (drag.resize) {
-            setResize({ id: drag.resize.id, end: resizedEnd(drag.resize, drag.day, minutesAt(e)), saving: false });
+        if (drag.reshape) {
+            const { item, edge } = drag.reshape;
+            setReshape({ id: item.id, ...reshaped(item, edge, drag.day, drag.anchor, dayUnder(e, drag.day), minutesAt(e)), saving: false });
         } else {
             setDraft({ day: drag.day, ...dragRange(drag.anchor, minutesAt(e), true) });
         }
@@ -258,8 +323,10 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
         if (!drag) return; // cancelled with Escape
         dragRef.current = null;
         if (drag.onEvent && !drag.moved) return; // a click: the event opens itself
-        if (drag.resize) {
-            void saveResize(drag.resize, resizedEnd(drag.resize, drag.day, minutesAt(e)));
+        if (drag.reshape) {
+            const { item, edge } = drag.reshape;
+            const { start, end } = reshaped(item, edge, drag.day, drag.anchor, dayUnder(e, drag.day), minutesAt(e));
+            void saveReshape(item, start, end);
             return;
         }
         const { start, end } = dragRange(drag.anchor, minutesAt(e), drag.moved);
@@ -281,15 +348,15 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
     function cancelDrag() {
         dragRef.current = null;
         setDraft(null);
-        setResize((r) => (r?.saving ? r : null));
+        setReshape((r) => (r?.saving ? r : null));
     }
 
     useEffect(() => {
-        if (!draft && !resize) return;
+        if (!draft && !reshape) return;
         const onKey = (e: KeyboardEvent) => e.key === "Escape" && cancelDrag();
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
-    }, [draft, resize]);
+    }, [draft, reshape]);
 
     /** The "New event" button: the next whole hour today, or 9am on the first day shown. */
     function newEventDefaults(): EventInput {
@@ -445,6 +512,7 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
                             <div
                                 className={`cal-day${isToday ? " is-today" : ""}`}
                                 key={key}
+                                data-day={key}
                                 onPointerDown={(e) => onDayPointerDown(e, key)}
                                 onPointerMove={onDayPointerMove}
                                 onPointerUp={onDayPointerUp}
@@ -488,6 +556,17 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
                                             title={`${item.title} — ${formatInstant(item.start, timeZone)}`}
                                             onClick={() => open(item)}
                                         >
+                                            {/* Where shift+drag changes the start or the end; see onDayPointerDown. */}
+                                            {item.kind === "event" && item.event && !item.allDay && (
+                                                <>
+                                                    {Date.parse(item.start) >= dayStartMs && (
+                                                        <span className="cal-ev-edge is-top" data-edge="start" />
+                                                    )}
+                                                    {Date.parse(item.end) <= zonedToUtcMs(addDays(day, 1), 0, timeZone) && (
+                                                        <span className="cal-ev-edge is-bottom" data-edge="end" />
+                                                    )}
+                                                </>
+                                            )}
                                             <span className="ev-title">{item.title}</span>
                                             {showTime && (
                                                 <span className="ev-time">{formatInstant(item.start, timeZone)}</span>
