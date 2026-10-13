@@ -544,4 +544,14 @@ export const migrations: Migration[] = [
             );
         `,
     },
+    {
+        // Project share links; see do/share.ts. A project is shared while share_token is set.
+        version: 26,
+        sql: `
+            ALTER TABLE projects ADD COLUMN share_token TEXT;
+            ALTER TABLE projects ADD COLUMN share_limit INTEGER NOT NULL DEFAULT 25;
+            CREATE UNIQUE INDEX idx_projects_share ON projects(share_token) WHERE share_token IS NOT NULL;
+            ALTER TABLE tasks ADD COLUMN via_link INTEGER NOT NULL DEFAULT 0;
+        `,
+    },
 ];

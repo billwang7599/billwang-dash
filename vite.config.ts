@@ -12,11 +12,12 @@ export default defineConfig({
         client: {
             build: {
                 rollupOptions: {
-                    // Two documents: a public landing page and the SPA shell. The Worker
-                    // decides which one a request gets — see worker/index.ts.
+                    // Three documents: a public landing page, the SPA shell and the share-link
+                    // page. The Worker decides which one a request gets — see worker/index.ts.
                     input: {
                         landing: resolve(import.meta.dirname, "index.html"),
                         app: resolve(import.meta.dirname, "app/index.html"),
+                        share: resolve(import.meta.dirname, "s/index.html"),
                     },
                 },
             },

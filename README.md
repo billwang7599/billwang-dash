@@ -88,6 +88,17 @@ Then set the two values from the Worker's **Access tab → Application values**:
 | `/app*` | covered | Login screen, then the SPA |
 | `/api*` | covered | JSON API |
 
+### Share links
+
+A project can be shared by link (project tile menu → Share). `/s/*` serves that
+page and its small API; it is deliberately **outside** the Access application, so
+never widen the Access paths to cover it. The link is `/s/<DO id>.<token>`: the DO
+id routes the request to the owner's Durable Object without revealing their
+identity, and `projects.share_token` is the credential. It reaches one project:
+open tasks, add (up to `share_limit` a day, plain text) and tick off. Rotating
+overwrites the token; turning sharing off clears it. Responses are `no-store` with
+`Referrer-Policy: no-referrer`, since the URL is the secret.
+
 ### Admin routes
 
 `ADMIN_EMAILS` and `ADMIN_GROUPS` (comma-separated) feed `isAdmin()` in

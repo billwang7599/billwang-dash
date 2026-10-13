@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { addDays, civilFromDate, civilKey, weekday, zonedToUtcMs } from "../shared/civil.ts";
 import type { Goal, GoalInput } from "../shared/goals.ts";
 import type { SearchResults } from "../shared/search.ts";
+import type { ShareInfo, SharedView } from "../shared/share.ts";
 import type { DayStatus, HabitDay, HabitDetail, HabitInput, HabitSummary } from "../shared/habits.ts";
 import * as aiRuns from "./do/ai-runs.ts";
 import type { ToolRunClaim } from "./do/ai-runs.ts";
@@ -11,6 +12,7 @@ import * as habitStore from "./do/habits.ts";
 import { GoogleSync } from "./do/google.ts";
 import { migrations } from "./do/migrations.ts";
 import * as searchStore from "./do/search.ts";
+import * as shareStore from "./do/share.ts";
 import * as projectStore from "./do/projects.ts";
 import * as taskStore from "./do/tasks.ts";
 import type { TaskInput } from "./do/tasks.ts";
@@ -161,6 +163,46 @@ export class UserDO extends DurableObject<Env> {
 
     async hasProject(id: string): Promise<boolean> {
         return projectStore.hasProject(this.sql, id);
+    }
+
+    // ---- Share links -------------------------------------------------------
+
+    async getShare(projectId: string): Promise<ShareInfo | null> {
+        return shareStore.getShare(this.sql, projectId);
+    }
+
+    async enableShare(projectId: string): Promise<ShareInfo | null> {
+        return shareStore.enableShare(this.sql, projectId);
+    }
+
+    async rotateShare(projectId: string): Promise<ShareInfo | null> {
+        return shareStore.rotateShare(this.sql, projectId);
+    }
+
+    async disableShare(projectId: string): Promise<ShareInfo | null> {
+        return shareStore.disableShare(this.sql, projectId);
+    }
+
+    async setShareLimit(projectId: string, limit: number): Promise<ShareInfo | null> {
+        return shareStore.setShareLimit(this.sql, projectId, limit);
+    }
+
+    /** The calls below are what a visitor holding the link reaches; each is keyed by the token alone. */
+    async sharedView(token: string): Promise<SharedView | null> {
+        return shareStore.sharedView(this.sql, token);
+    }
+
+    /** "limit" when today's quota is spent; null when the token matches nothing. */
+    async addShared(token: string, content: string): Promise<Task | "limit" | null> {
+        const task = shareStore.addShared(this.sql, token, content);
+        if (task && task !== "limit") await this.google.markDirty([task.id]);
+        return task;
+    }
+
+    async completeShared(token: string, taskId: string): Promise<Task | null> {
+        const task = shareStore.completeShared(this.sql, token, taskId);
+        if (task) await this.google.markDirty([task.id]);
+        return task;
     }
 
     // ---- Tasks -------------------------------------------------------------

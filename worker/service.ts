@@ -25,7 +25,7 @@ type Stub = DurableObjectStub<UserDO>;
 /** index.ts maps this onto a response in app.onError. */
 export class ServiceError extends Error {
     constructor(
-        readonly status: 400 | 403 | 404 | 409 | 503,
+        readonly status: 400 | 403 | 404 | 409 | 429 | 503,
         message: string,
     ) {
         super(message);

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { eventProblem } from "../shared/events.ts";
 import { goalInputSchema } from "../shared/goals.ts";
 import { habitInputSchema, MAX_NOTE_LENGTH } from "../shared/habits.ts";
+import { SHARE_MAX_CONTENT, SHARE_MAX_LIMIT } from "../shared/share.ts";
 import { PROJECT_COLORS } from "../shared/types.ts";
 
 /**
@@ -77,6 +78,15 @@ export const taskPatchBody = z.object({
 export const createProjectBody = z.object({
     name: nonEmpty,
     color: z.string().optional(),
+});
+
+export const shareLimitBody = z.object({
+    limit: z.int().min(1).max(SHARE_MAX_LIMIT),
+});
+
+/** A visitor's new task: plain text, never parsed. */
+export const sharedTaskBody = z.object({
+    text: z.string().trim().min(1, "is required").max(SHARE_MAX_CONTENT),
 });
 
 export const projectColorBody = z.object({

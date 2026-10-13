@@ -16,6 +16,14 @@ import type { DayStatus, HabitDay, HabitDetail, HabitInput, HabitSummary } from 
 
 export type { Preferences };
 
+/** A project's share link as the owner's API returns it; `url` is null while sharing is off. */
+export interface Share {
+    enabled: boolean;
+    url: string | null;
+    limit: number;
+    usedToday: number;
+}
+
 export interface AppState {
     projects: Project[];
     tasks: Task[];
@@ -163,6 +171,22 @@ export const api = {
 
     deleteProject: (id: string) =>
         request<void>(`/api/projects/${id}`, { method: "DELETE" }),
+
+    getShare: (projectId: string) => request<{ share: Share }>(`/api/projects/${projectId}/share`),
+
+    enableShare: (projectId: string) => request<{ share: Share }>(`/api/projects/${projectId}/share`, { method: "PUT" }),
+
+    rotateShare: (projectId: string) =>
+        request<{ share: Share }>(`/api/projects/${projectId}/share/rotate`, { method: "POST" }),
+
+    disableShare: (projectId: string) =>
+        request<{ share: Share }>(`/api/projects/${projectId}/share`, { method: "DELETE" }),
+
+    setShareLimit: (projectId: string, limit: number) =>
+        request<{ share: Share }>(`/api/projects/${projectId}/share`, {
+            method: "PATCH",
+            body: JSON.stringify({ limit }),
+        }),
 
     setProjectColor: (id: string, color: ProjectColor) =>
         request<{ project: Project }>(`/api/projects/${id}/color`, {

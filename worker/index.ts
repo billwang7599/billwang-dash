@@ -2,6 +2,7 @@ import { Hono, type Context } from "hono";
 import type { z } from "zod";
 import { runAgent, type Model } from "./ai/agent.ts";
 import { getUser, type AuthedUser } from "./auth.ts";
+import type { ShareInfo } from "../shared/share.ts";
 import { UserDO } from "./user-do.ts";
 import { buildAuthUrl } from "./google.ts";
 import * as schemas from "./schemas.ts";
@@ -206,6 +207,31 @@ app.patch("/api/projects/:id/color", async (c) => {
     return c.json({ project: await service.setProjectColor(stub(c), c.req.param("id"), color) });
 });
 
+// ---- Share links (owner) --------------------------------------------------
+
+/** The link is `/s/<DO id>.<token>`: the id routes a visitor to this user's DO without exposing their identity. */
+function shareResponse(c: Context<Ctx>, info: ShareInfo | null) {
+    if (!info) throw new ServiceError(404, "project not found");
+    const doId = c.env.USER_DO.idFromName(c.get("user").id).toString();
+    const url = info.token ? `${new URL(c.env.APP_ORIGIN).origin}/s/${doId}.${info.token}` : null;
+    return c.json({ share: { enabled: info.enabled, url, limit: info.limit, usedToday: info.usedToday } });
+}
+
+app.get("/api/projects/:id/share", async (c) => shareResponse(c, await stub(c).getShare(c.req.param("id"))));
+
+app.put("/api/projects/:id/share", async (c) => shareResponse(c, await stub(c).enableShare(c.req.param("id"))));
+
+app.post("/api/projects/:id/share/rotate", async (c) =>
+    shareResponse(c, await stub(c).rotateShare(c.req.param("id"))),
+);
+
+app.delete("/api/projects/:id/share", async (c) => shareResponse(c, await stub(c).disableShare(c.req.param("id"))));
+
+app.patch("/api/projects/:id/share", async (c) => {
+    const { limit } = await body(c, schemas.shareLimitBody);
+    return shareResponse(c, await stub(c).setShareLimit(c.req.param("id"), limit));
+});
+
 app.patch("/api/preferences", async (c) =>
     c.json({
         preferences: await service.setPreferences(
@@ -275,6 +301,61 @@ app.use("/api/admin/*", async (c, next) => {
 });
 
 app.get("/api/admin/whoami", (c) => c.json({ user: c.get("user"), admin: true }));
+
+// ---- Share links (visitors) -----------------------------------------------
+
+// No sign-in here: the token in the URL is the credential, and it only reaches the one
+// project it belongs to. Access covers /app* and /api* only, so none of this is behind it.
+// The URL is a secret, so it must not travel in a Referer (the page loads Google Fonts) or sit in a cache.
+app.use("/s/*", async (c, next) => {
+    await next();
+    c.header("Referrer-Policy", "no-referrer");
+    c.header("Cache-Control", "no-store");
+    c.header("X-Robots-Tag", "noindex");
+});
+
+/** `<DO id>.<token>` to the owner's stub and the token; null when it is malformed. */
+function sharedStub(c: Context<Ctx>) {
+    const match = /^([0-9a-f]{64})\.([0-9a-f-]{36})$/.exec(c.req.param("ref") ?? "");
+    if (!match) return null;
+    try {
+        return { stub: c.env.USER_DO.get(c.env.USER_DO.idFromString(match[1])), token: match[2] };
+    } catch {
+        return null;
+    }
+}
+
+const gone = new ServiceError(404, "This link is no longer active");
+
+app.get("/s/:ref", (c) => {
+    const url = new URL(c.req.url);
+    url.pathname = "/s/index.html";
+    return c.env.ASSETS.fetch(new Request(url));
+});
+
+app.get("/s/:ref/data", async (c) => {
+    const shared = sharedStub(c);
+    const view = shared && (await shared.stub.sharedView(shared.token));
+    if (!view) throw gone;
+    return c.json(view);
+});
+
+app.post("/s/:ref/tasks", async (c) => {
+    const shared = sharedStub(c);
+    if (!shared) throw gone;
+    const { text } = await body(c, schemas.sharedTaskBody);
+    const task = await shared.stub.addShared(shared.token, text);
+    if (!task) throw gone;
+    if (task === "limit") throw new ServiceError(429, "Daily limit reached. Try again tomorrow.");
+    return c.json({ task: { id: task.id, content: task.content, viaLink: true, completed: false } }, 201);
+});
+
+app.post("/s/:ref/tasks/:id/complete", async (c) => {
+    const shared = sharedStub(c);
+    if (!shared) throw gone;
+    if (!(await shared.stub.completeShared(shared.token, c.req.param("id")))) throw gone;
+    return c.body(null, 204);
+});
 
 // ---- Documents -----------------------------------------------------------
 

@@ -4,6 +4,7 @@ import { formatDateLabel, formatTime } from "../format.ts";
 import { projectDeleteMessage } from "../projectDelete.ts";
 import { usePopover } from "../usePopover.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
+import { ShareModal } from "./ShareModal.tsx";
 import { Hero } from "./Hero.tsx";
 import { SearchField } from "./SearchField.tsx";
 
@@ -29,6 +30,7 @@ export function ProjectsView({ projects, tasks, colors, timeZone, today, onOpen,
     const [query, setQuery] = useState("");
     const [sort, setSort] = useState<Sort>("alphabetical");
     const [pendingDelete, setPendingDelete] = useState<Project | null>(null);
+    const [sharing, setSharing] = useState<Project | null>(null);
     const [newName, setNewName] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
 
@@ -73,6 +75,7 @@ export function ProjectsView({ projects, tasks, colors, timeZone, today, onOpen,
                         label={`Actions for ${p.name}`}
                         actions={[
                             [p.pinned ? "Unpin" : "Pin", () => onTogglePin(p.id, !p.pinned)],
+                            ...(p.isInbox ? [] : [["Share", () => setSharing(p)] as [string, () => void]]),
                             ["Delete", () => setPendingDelete(p)],
                         ]}
                     />
@@ -168,6 +171,7 @@ export function ProjectsView({ projects, tasks, colors, timeZone, today, onOpen,
                 </>
             )}
 
+            {sharing && <ShareModal project={sharing} onClose={() => setSharing(null)} />}
             {pendingDelete && (
                 <ConfirmDialog
                     title="Delete project?"

@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { flushSync } from "react-dom";
 import { isDone, type Goal, type GoalInput } from "../shared/goals.ts";
 import type { HabitInput, HabitSummary } from "../shared/habits.ts";
-import type { ProjectColor, Task } from "../shared/types.ts";
+import type { Project, ProjectColor, Task } from "../shared/types.ts";
 import { api, type AppState, type Preferences } from "./api.ts";
 import { AccountSetup } from "./components/AccountSetup.tsx";
 import { AssistantView } from "./components/AssistantView.tsx";
@@ -27,6 +27,7 @@ import { TaskList } from "./components/TaskList.tsx";
 import { Hero, heroDate } from "./components/Hero.tsx";
 import { matchFields, type SearchMatch } from "../shared/search.ts";
 import { cardColor, projectColors } from "./projectColors.ts";
+import { ShareModal } from "./components/ShareModal.tsx";
 import { TaskModal } from "./components/TaskModal.tsx";
 import { WeekCalendar, type CalendarJump } from "./components/WeekCalendar.tsx";
 import { deviceTimeZone, todayKey } from "./format.ts";
@@ -78,6 +79,7 @@ function withTransition(update: () => void) {
 export function App() {
     const [state, setState] = useState<AppState | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [sharing, setSharing] = useState<Project | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
     const [editing, setEditing] = useState<Task | null>(null);
     const [newHabit, setNewHabit] = useState(false);
@@ -694,6 +696,14 @@ export function App() {
                                         placeholder={`Search ${titleFor(view, state)}…`}
                                         label="Search this project"
                                     />
+                                    {view.name === "project" && (() => {
+                                        const project = state.projects.find((p) => p.id === view.id);
+                                        return project && !project.isInbox ? (
+                                            <button className="btn btn-quiet" onClick={() => setSharing(project)}>
+                                                Share
+                                            </button>
+                                        ) : null;
+                                    })()}
                                 </div>
                                 <Hero
                                     kicker="Project"
@@ -819,6 +829,8 @@ export function App() {
                     onClose={() => setImportText(null)}
                 />
             )}
+
+            {sharing && <ShareModal project={sharing} onClose={() => setSharing(null)} />}
 
             {editing && state && (
                 <TaskModal
