@@ -277,7 +277,20 @@ body { font-variant-numeric: tabular-nums; }
 .row-actions:focus-within { opacity: 1; }
 .nav-row:hover .nav-count { opacity: 0; }
 
-.sidebar-foot { margin-top: auto; }
+/* The nav groups scroll under the greeting, which stays put, so a long list of projects,
+   goals and habits can't push it off the screen. */
+.sidebar-scroll {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--rule-2) transparent;
+}
 
 /* ---- Phone: no top bar; MobileNav's round button bottom-right ----------- */
 

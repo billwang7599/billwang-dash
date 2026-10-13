@@ -115,182 +115,181 @@ export function Sidebar({
                     </button>
                 </div>
 
-                <nav>
-                    <NavItem label="Search" hint="⌘K" active={false} collapsed={collapsed} onClick={onSearch} />
-                    {NAV_VIEWS.filter(({ key }) => showAssistant || key !== "assistant").map(({ key, label, path }) => (
+                <div className="sidebar-scroll">
+                    <nav>
+                        <NavItem label="Search" hint="⌘K" active={false} collapsed={collapsed} onClick={onSearch} />
+                        {NAV_VIEWS.filter(({ key }) => showAssistant || key !== "assistant").map(({ key, label, path }) => (
+                            <NavItem
+                                key={key}
+                                label={label}
+                                count={key === "inbox" ? todayCount : undefined}
+                                urgent={key === "inbox" && overdueCount > 0}
+                                active={view.name === key}
+                                collapsed={collapsed}
+                                onClick={() => go(path)}
+                            />
+                        ))}
+                        {/* Recently deleted and sign out live in Settings. */}
                         <NavItem
-                            key={key}
-                            label={label}
-                            count={key === "inbox" ? todayCount : undefined}
-                            urgent={key === "inbox" && overdueCount > 0}
-                            active={view.name === key}
+                            label="Settings"
+                            active={view.name === "settings" || view.name === "trash"}
                             collapsed={collapsed}
-                            onClick={() => go(path)}
+                            onClick={() => go("/app/settings")}
                         />
-                    ))}
-                </nav>
+                    </nav>
 
-                {pinned.length > 0 && (
-                    <>
-                        {!collapsed && <p className="nav-head">Pinned</p>}
-                        <nav className={collapsed ? "nav-divided" : undefined}>
-                            {pinned.map((project) => (
-                                <ProjectRow
-                                    key={project.id}
-                                    label={project.name}
-                                    swatch={colors.get(project.id)}
-                                    count={state.tasks.filter((t) => t.projectId === project.id).length}
-                                    active={view.name === "project" && view.id === project.id}
-                                    collapsed={collapsed}
-                                    pinned
-                                    onClick={() => go(`/app/project/${project.id}`)}
-                                    onTogglePin={() => onTogglePin(project.id, false)}
-                                    onDelete={() => setPendingDelete(project)}
-                                />
-                            ))}
-                        </nav>
-                    </>
-                )}
+                    {pinned.length > 0 && (
+                        <>
+                            {!collapsed && <p className="nav-head">Pinned</p>}
+                            <nav className={collapsed ? "nav-divided" : undefined}>
+                                {pinned.map((project) => (
+                                    <ProjectRow
+                                        key={project.id}
+                                        label={project.name}
+                                        swatch={colors.get(project.id)}
+                                        count={state.tasks.filter((t) => t.projectId === project.id).length}
+                                        active={view.name === "project" && view.id === project.id}
+                                        collapsed={collapsed}
+                                        pinned
+                                        onClick={() => go(`/app/project/${project.id}`)}
+                                        onTogglePin={() => onTogglePin(project.id, false)}
+                                        onDelete={() => setPendingDelete(project)}
+                                    />
+                                ))}
+                            </nav>
+                        </>
+                    )}
 
-                {unpinned.length > 0 && (
-                    <>
-                        {!collapsed && (
+                    {unpinned.length > 0 && (
+                        <>
+                            {!collapsed && (
+                                <div className="nav-head-row">
+                                    <button
+                                        className={`nav-head nav-head-link${view.name === "projects" ? " is-active" : ""}`}
+                                        onClick={() => go("/app/projects")}
+                                    >
+                                        Projects
+                                    </button>
+                                    <div className="nav-head-actions">
+                                        <button
+                                            className="sort-toggle"
+                                            onClick={() => setProjectSort(NEXT_SORT[projectSort])}
+                                            title="Change project sort order"
+                                        >
+                                            {SORT_LABEL[projectSort]}
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                            <nav className={collapsed ? "nav-divided" : undefined}>
+                                {unpinned.map((project) => (
+                                    <ProjectRow
+                                        key={project.id}
+                                        label={project.name}
+                                        swatch={colors.get(project.id)}
+                                        count={state.tasks.filter((t) => t.projectId === project.id).length}
+                                        active={view.name === "project" && view.id === project.id}
+                                        collapsed={collapsed}
+                                        pinned={false}
+                                        onClick={() => go(`/app/project/${project.id}`)}
+                                        onTogglePin={() => onTogglePin(project.id, true)}
+                                        onDelete={() => setPendingDelete(project)}
+                                    />
+                                ))}
+                            </nav>
+                        </>
+                    )}
+
+                    {!collapsed && (
+                        <>
                             <div className="nav-head-row">
                                 <button
-                                    className={`nav-head nav-head-link${view.name === "projects" ? " is-active" : ""}`}
-                                    onClick={() => go("/app/projects")}
-                                >
-                                    Projects
-                                </button>
-                                <div className="nav-head-actions">
-                                    <button
-                                        className="sort-toggle"
-                                        onClick={() => setProjectSort(NEXT_SORT[projectSort])}
-                                        title="Change project sort order"
-                                    >
-                                        {SORT_LABEL[projectSort]}
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                        <nav className={collapsed ? "nav-divided" : undefined}>
-                            {unpinned.map((project) => (
-                                <ProjectRow
-                                    key={project.id}
-                                    label={project.name}
-                                    swatch={colors.get(project.id)}
-                                    count={state.tasks.filter((t) => t.projectId === project.id).length}
-                                    active={view.name === "project" && view.id === project.id}
-                                    collapsed={collapsed}
-                                    pinned={false}
-                                    onClick={() => go(`/app/project/${project.id}`)}
-                                    onTogglePin={() => onTogglePin(project.id, true)}
-                                    onDelete={() => setPendingDelete(project)}
-                                />
-                            ))}
-                        </nav>
-                    </>
-                )}
-
-                {!collapsed && (
-                    <>
-                        <div className="nav-head-row">
-                            <button
-                                className={`nav-head nav-head-link${view.name === "goals" ? " is-active" : ""}`}
-                                onClick={() => go("/app/goals")}
-                            >
-                                Goals
-                            </button>
-                        </div>
-                        <nav>
-                            {openGoals.map((goal) => (
-                                <button
-                                    key={goal.id}
-                                    className="nav-item goal-nav"
+                                    className={`nav-head nav-head-link${view.name === "goals" ? " is-active" : ""}`}
                                     onClick={() => go("/app/goals")}
-                                    title={
-                                        goal.target === null
-                                            ? undefined
-                                            : `${goal.current} / ${goal.target}${goal.unit ? ` ${goal.unit}` : ""}`
-                                    }
                                 >
-                                    <span className="nav-label goal-nav-title">
-                                        <span
-                                            className="nav-swatch"
-                                            style={{ background: goalColor.get(goal.id) }}
-                                            aria-hidden="true"
-                                        />
-                                        {goal.title}
-                                    </span>
-                                    {goal.target !== null && (
-                                        <span className="goal-bar goal-bar-thin" aria-hidden="true">
-                                            <span style={{ width: `${progress(goal) * 100}%` }} />
-                                        </span>
-                                    )}
+                                    Goals
                                 </button>
-                            ))}
-                            {openGoals.length === 0 && (
-                                <p className="habit-empty">Set something specific to aim for.</p>
-                            )}
-                        </nav>
-                    </>
-                )}
-
-                {!collapsed && (
-                    <>
-                        <div className="nav-head-row">
-                            <button
-                                className={`nav-head nav-head-link${view.name === "habits" ? " is-active" : ""}`}
-                                onClick={() => go("/app/habits")}
-                            >
-                                Habits
-                            </button>
-                        </div>
-                        <nav>
-                            {state.habits.map((habit) => (
-                                <div className="habit-row" key={habit.id}>
+                            </div>
+                            <nav>
+                                {openGoals.map((goal) => (
                                     <button
-                                        className={`habit-check${habit.today ? ` is-${habit.today}` : ""}`}
-                                        onClick={() => onCheckHabit(habit)}
-                                        aria-label={`${habit.today === "done" ? "Undo" : "Check off"} ${habit.name} today`}
-                                        aria-pressed={habit.today === "done"}
-                                        title={habit.today === "done" ? "Done today. Click to undo" : "Check off today"}
+                                        key={goal.id}
+                                        className="nav-item goal-nav"
+                                        onClick={() => go("/app/goals")}
+                                        title={
+                                            goal.target === null
+                                                ? undefined
+                                                : `${goal.current} / ${goal.target}${goal.unit ? ` ${goal.unit}` : ""}`
+                                        }
                                     >
-                                        <svg viewBox="0 0 16 16" width="10" height="10" aria-hidden="true">
-                                            <path
-                                                d="M2.5 8.5l3.5 3.5 7.5-8"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                strokeWidth="2.4"
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
+                                        <span className="nav-label goal-nav-title">
+                                            <span
+                                                className="nav-swatch"
+                                                style={{ background: goalColor.get(goal.id) }}
+                                                aria-hidden="true"
                                             />
-                                        </svg>
+                                            {goal.title}
+                                        </span>
+                                        {goal.target !== null && (
+                                            <span className="goal-bar goal-bar-thin" aria-hidden="true">
+                                                <span style={{ width: `${progress(goal) * 100}%` }} />
+                                            </span>
+                                        )}
                                     </button>
-                                    <NavItem
-                                        label={habit.name}
-                                        count={habit.stats.streak}
-                                        active={view.name === "habit" && view.id === habit.id}
-                                        collapsed={false}
-                                        onClick={() => go(`/app/habit/${habit.id}`)}
-                                    />
-                                </div>
-                            ))}
-                            {state.habits.length === 0 && (
-                                <p className="habit-empty">Track something you want to do regularly.</p>
-                            )}
-                        </nav>
-                    </>
-                )}
+                                ))}
+                                {openGoals.length === 0 && (
+                                    <p className="habit-empty">Set something specific to aim for.</p>
+                                )}
+                            </nav>
+                        </>
+                    )}
 
-                <div className="sidebar-foot">
-                    {/* Recently deleted and sign out live in Settings. */}
-                    <NavItem
-                        label="Settings"
-                        active={view.name === "settings" || view.name === "trash"}
-                        collapsed={collapsed}
-                        onClick={() => go("/app/settings")}
-                    />
+                    {!collapsed && (
+                        <>
+                            <div className="nav-head-row">
+                                <button
+                                    className={`nav-head nav-head-link${view.name === "habits" ? " is-active" : ""}`}
+                                    onClick={() => go("/app/habits")}
+                                >
+                                    Habits
+                                </button>
+                            </div>
+                            <nav>
+                                {state.habits.map((habit) => (
+                                    <div className="habit-row" key={habit.id}>
+                                        <button
+                                            className={`habit-check${habit.today ? ` is-${habit.today}` : ""}`}
+                                            onClick={() => onCheckHabit(habit)}
+                                            aria-label={`${habit.today === "done" ? "Undo" : "Check off"} ${habit.name} today`}
+                                            aria-pressed={habit.today === "done"}
+                                            title={habit.today === "done" ? "Done today. Click to undo" : "Check off today"}
+                                        >
+                                            <svg viewBox="0 0 16 16" width="10" height="10" aria-hidden="true">
+                                                <path
+                                                    d="M2.5 8.5l3.5 3.5 7.5-8"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    strokeWidth="2.4"
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                />
+                                            </svg>
+                                        </button>
+                                        <NavItem
+                                            label={habit.name}
+                                            count={habit.stats.streak}
+                                            active={view.name === "habit" && view.id === habit.id}
+                                            collapsed={false}
+                                            onClick={() => go(`/app/habit/${habit.id}`)}
+                                        />
+                                    </div>
+                                ))}
+                                {state.habits.length === 0 && (
+                                    <p className="habit-empty">Track something you want to do regularly.</p>
+                                )}
+                            </nav>
+                        </>
+                    )}
                 </div>
             </aside>
 
