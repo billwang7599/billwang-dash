@@ -69,6 +69,18 @@ export function useCalendarRange(rangeStart: Civil, dayCount: number, timeZone: 
         [],
     );
 
+    /** Put an item on screen (replacing the one with its id), ahead of the server confirming it. */
+    const putItem = useCallback(
+        (item: CalendarItem) =>
+            setData((d) => ({
+                ...d,
+                items: d.items.some((i) => i.id === item.id)
+                    ? d.items.map((i) => (i.id === item.id ? item : i))
+                    : [...d.items, item],
+            })),
+        [],
+    );
+
     return {
         // Fetched data for this range is the freshest; the cache fills in before it lands.
         items: data.range === rangeKey ? data.items : (cached ?? data.items),
@@ -79,5 +91,6 @@ export function useCalendarRange(rangeStart: Civil, dayCount: number, timeZone: 
         error,
         setError,
         removeItem,
+        putItem,
     };
 }

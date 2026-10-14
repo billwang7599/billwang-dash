@@ -31,6 +31,8 @@ import { ShareModal } from "./components/ShareModal.tsx";
 import { TaskModal } from "./components/TaskModal.tsx";
 import { WeekCalendar, type CalendarJump } from "./components/WeekCalendar.tsx";
 import { deviceTimeZone, todayKey } from "./format.ts";
+import { tempId, withDraftTasks, withoutDrafts } from "./optimistic.ts";
+import { splitImportLines } from "../shared/import.ts";
 import { NARROW, useMediaQuery } from "./useMediaQuery.ts";
 
 export type View =
@@ -164,65 +166,63 @@ export function App() {
         [],
     );
 
+    /**
+     * For a change already applied on screen: sends it to the server in the
+     * background, then `onSaved` takes in the answer. A failure calls `rollback` and
+     * shows the error, so the screen never keeps something the server refused.
+     */
+    const optimistically = useCallback(
+        <T,>(save: () => Promise<T>, onSaved: (result: T) => void, rollback: () => void) => {
+            save()
+                .then((result) => {
+                    onSaved(result);
+                    setNotice(null);
+                })
+                .catch((e: Error) => {
+                    rollback();
+                    setNotice(e.message);
+                });
+        },
+        [],
+    );
+
+    /** Shows the task(s) at once, then saves them; a failed save takes them back out. */
+    const addDrafts = useCallback(
+        (
+            lines: string[],
+            opts: { goalId?: string; projectId?: string },
+            save: () => Promise<unknown>,
+            onSaved: () => void,
+        ) => {
+            if (!state) return;
+            const draft = withDraftTasks(state, lines, opts);
+            setState(draft.state);
+            optimistically(
+                save,
+                onSaved,
+                () => setState((prev) => (prev ? withoutDrafts(prev, draft.taskIds, draft.projectIds) : prev)),
+            );
+        },
+        [state, optimistically],
+    );
+
     const addTask = useCallback(
         /** `goalId` adds it as a step toward that goal; `projectId` files it in that project. */
         async (text: string, goalId?: string, projectId?: string) => {
             if (!state) return;
-            await api.createTask(text, state.preferences.timeZone, goalId, projectId);
             // Refetch rather than splice: a "#name" token may have created a project
             // server-side, so the sidebar can be stale too.
-            setState(await api.getState());
-            setRevision((r) => r + 1);
+            addDrafts(
+                [text],
+                { goalId, projectId },
+                () => api.createTask(text, state.preferences.timeZone, goalId, projectId),
+                () => {
+                    api.getState().then(setState).catch((e: Error) => setNotice(e.message));
+                    setRevision((r) => r + 1);
+                },
+            );
         },
-        [state],
-    );
-
-    const completeTask = useCallback(
-        (id: string) =>
-            run(async () => {
-                const { task } = await api.completeTask(id);
-                setState((prev) =>
-                    prev
-                        ? {
-                                ...prev,
-                                // A recurring task comes back rescheduled, not completed.
-                                tasks: task.completed
-                                    ? prev.tasks.filter((t) => t.id !== id)
-                                    : prev.tasks.map((t) => (t.id === id ? task : t)),
-                                completedThisWeek: prev.completedThisWeek + (task.completed ? 1 : 0),
-                                completedThisWeekByProject: task.completed
-                                    ? {
-                                          ...prev.completedThisWeekByProject,
-                                          [task.projectId]: (prev.completedThisWeekByProject[task.projectId] ?? 0) + 1,
-                                      }
-                                    : prev.completedThisWeekByProject,
-                                goals:
-                                    task.completed && task.goalId
-                                        ? prev.goals.map((g) =>
-                                                g.id === task.goalId ? { ...g, stepsDone: g.stepsDone + 1 } : g,
-                                            )
-                                        : prev.goals,
-                            }
-                        : prev,
-                );
-                // Only a real completion can be undone; a repeat just moved its date.
-                if (task.completed) setJustCompleted(task);
-                setRevision((r) => r + 1);
-            })(),
-        [run],
-    );
-
-
-    const deleteTask = useCallback(
-        (id: string) =>
-            run(async () => {
-                await api.deleteTask(id);
-                setState((prev) =>
-                    prev ? { ...prev, tasks: prev.tasks.filter((t) => t.id !== id) } : prev,
-                );
-                setRevision((r) => r + 1);
-            })(),
-        [run],
+        [state, addDrafts],
     );
 
     /** After the trash restores something, projects and tasks may both have changed. */
@@ -230,6 +230,68 @@ export function App() {
         setState(await api.getState());
         setRevision((r) => r + 1);
     }, []);
+
+    /** Puts the server's state back on screen after a change it refused. */
+    const resync = useCallback(() => {
+        reload().catch((e: Error) => setNotice(e.message));
+    }, [reload]);
+
+    /** `state` with this task counted as completed: gone from the list, the weekly counts and its goal's steps up. */
+    const withCompleted = useCallback(
+        (prev: AppState, task: Task): AppState => ({
+            ...prev,
+            tasks: prev.tasks.filter((t) => t.id !== task.id),
+            completedThisWeek: prev.completedThisWeek + 1,
+            completedThisWeekByProject: {
+                ...prev.completedThisWeekByProject,
+                [task.projectId]: (prev.completedThisWeekByProject[task.projectId] ?? 0) + 1,
+            },
+            goals: task.goalId
+                ? prev.goals.map((g) => (g.id === task.goalId ? { ...g, stepsDone: g.stepsDone + 1 } : g))
+                : prev.goals,
+        }),
+        [],
+    );
+
+    const completeTask = useCallback(
+        (id: string) => {
+            const task = state?.tasks.find((t) => t.id === id);
+            if (!task) return;
+            // A recurring task comes back rescheduled, and only the server knows to when.
+            if (task.due?.recurrence) {
+                return run(async () => {
+                    const { task: next } = await api.completeTask(id);
+                    setState((prev) =>
+                        prev ? { ...prev, tasks: prev.tasks.map((t) => (t.id === id ? next : t)) } : prev,
+                    );
+                    setRevision((r) => r + 1);
+                })();
+            }
+            const done = { ...task, completed: true };
+            setState((prev) => (prev ? withCompleted(prev, done) : prev));
+            setJustCompleted(done);
+            optimistically(
+                () => api.completeTask(id),
+                ({ task: saved }) => {
+                    setJustCompleted((j) => (j?.id === id ? saved : j));
+                    setRevision((r) => r + 1);
+                },
+                () => {
+                    setJustCompleted((j) => (j?.id === id ? null : j));
+                    resync();
+                },
+            );
+        },
+        [state, run, optimistically, withCompleted, resync],
+    );
+
+    const deleteTask = useCallback(
+        (id: string) => {
+            setState((prev) => (prev ? { ...prev, tasks: prev.tasks.filter((t) => t.id !== id) } : prev));
+            optimistically(() => api.deleteTask(id), () => setRevision((r) => r + 1), resync);
+        },
+        [optimistically, resync],
+    );
 
     /** Puts a completed task back. Counts and goal steps change too, so reload. */
     const undoComplete = useCallback(
@@ -261,6 +323,10 @@ export function App() {
         });
     }, []);
 
+    const removeHabit = useCallback((id: string) => {
+        setState((prev) => (prev ? { ...prev, habits: prev.habits.filter((h) => h.id !== id) } : prev));
+    }, []);
+
     const checkHabitToday = useCallback(
         (habit: HabitSummary) =>
             run(async () => {
@@ -278,30 +344,53 @@ export function App() {
 
     const createHabit = useCallback(
         async (input: HabitInput) => {
-            const { habit } = await api.createHabit(input);
-            applyHabit(habit);
-            navigate(`/app/habit/${habit.id}`);
+            const draft: HabitSummary = {
+                id: tempId(),
+                ...input,
+                order: Math.max(0, ...(state?.habits.map((h) => h.order) ?? [])) + 1,
+                createdAt: new Date().toISOString(),
+                startDate: todayKey(state?.preferences.timeZone ?? "UTC"),
+                stats: { streak: 0, bestStreak: 0, streakUnit: input.freq === "weekly_count" ? "week" : "day", totalDone: 0, rate: null },
+                today: null,
+            };
+            applyHabit(draft);
+            optimistically(
+                () => api.createHabit(input),
+                ({ habit }) => {
+                    removeHabit(draft.id);
+                    applyHabit(habit);
+                    navigate(`/app/habit/${habit.id}`);
+                },
+                () => removeHabit(draft.id),
+            );
         },
-        [applyHabit, navigate],
+        [state, applyHabit, removeHabit, optimistically, navigate],
     );
 
     const updateHabit = useCallback(
         async (id: string, input: HabitInput) => {
-            const { habit } = await api.updateHabit(id, input);
-            applyHabit(habit);
-            setHabitRevision((r) => r + 1);
+            const before = state?.habits.find((h) => h.id === id);
+            if (!before) return;
+            applyHabit({ ...before, ...input });
+            optimistically(
+                () => api.updateHabit(id, input),
+                ({ habit }) => {
+                    applyHabit(habit);
+                    setHabitRevision((r) => r + 1);
+                },
+                () => applyHabit(before),
+            );
         },
-        [applyHabit],
+        [state, applyHabit, optimistically],
     );
 
     const deleteHabit = useCallback(
-        (id: string) =>
-            run(async () => {
-                await api.deleteHabit(id);
-                setState((prev) => (prev ? { ...prev, habits: prev.habits.filter((h) => h.id !== id) } : prev));
-                navigate("/app");
-            })(),
-        [run, navigate],
+        (id: string) => {
+            removeHabit(id);
+            navigate("/app");
+            optimistically(() => api.deleteHabit(id), () => {}, resync);
+        },
+        [removeHabit, navigate, optimistically, resync],
     );
 
     /** Puts a goal the server just returned into the list, adding it if it's new. */
@@ -315,20 +404,46 @@ export function App() {
         });
     }, []);
 
+    const removeGoal = useCallback((id: string) => {
+        setState((prev) => (prev ? { ...prev, goals: prev.goals.filter((g) => g.id !== id) } : prev));
+    }, []);
+
     const createGoal = useCallback(
         async (input: GoalInput) => {
-            const { goal } = await api.createGoal(input);
-            applyGoal(goal);
+            const now = new Date().toISOString();
+            const draft: Goal = {
+                id: tempId(),
+                ...input,
+                sortOrder: Math.max(0, ...(state?.goals.map((g) => g.sortOrder) ?? [])) + 1,
+                createdAt: now,
+                updatedAt: now,
+                stepsDone: 0,
+            };
+            applyGoal(draft);
+            optimistically(
+                () => api.createGoal(input),
+                ({ goal }) => {
+                    removeGoal(draft.id);
+                    applyGoal(goal);
+                },
+                () => removeGoal(draft.id),
+            );
         },
-        [applyGoal],
+        [state, applyGoal, removeGoal, optimistically],
     );
 
     const updateGoal = useCallback(
         async (id: string, input: GoalInput) => {
-            const { goal } = await api.updateGoal(id, input);
-            applyGoal(goal);
+            const before = state?.goals.find((g) => g.id === id);
+            if (!before) return;
+            applyGoal({ ...before, ...input });
+            optimistically(
+                () => api.updateGoal(id, input),
+                ({ goal }) => applyGoal(goal),
+                () => applyGoal(before),
+            );
         },
-        [applyGoal],
+        [state, applyGoal, optimistically],
     );
 
     const setGoalProgress = useCallback(
@@ -341,32 +456,38 @@ export function App() {
     );
 
     const deleteGoal = useCallback(
-        (id: string) =>
-            run(async () => {
-                await api.deleteGoal(id);
-                // The server keeps the goal's steps as plain tasks; mirror that.
-                setState((prev) =>
-                    prev
-                        ? {
-                                ...prev,
-                                goals: prev.goals.filter((g) => g.id !== id),
-                                tasks: prev.tasks.map((t) => (t.goalId === id ? { ...t, goalId: null } : t)),
-                            }
-                        : prev,
-                );
-            })(),
-        [run],
+        (id: string) => {
+            // The server keeps the goal's steps as plain tasks; mirror that.
+            setState((prev) =>
+                prev
+                    ? {
+                            ...prev,
+                            goals: prev.goals.filter((g) => g.id !== id),
+                            tasks: prev.tasks.map((t) => (t.goalId === id ? { ...t, goalId: null } : t)),
+                        }
+                    : prev,
+            );
+            optimistically(() => api.deleteGoal(id), () => {}, resync);
+        },
+        [optimistically, resync],
     );
 
     const importTasks = useCallback(
         async (text: string) => {
             if (!state) return;
-            await api.importTasks(text, state.preferences.timeZone, view.name === "project" ? view.id : undefined);
-            // Refetch: imported "#name" tokens may have created projects.
-            setState(await api.getState());
-            setRevision((r) => r + 1);
+            const projectId = view.name === "project" ? view.id : undefined;
+            addDrafts(
+                splitImportLines(text),
+                { projectId },
+                () => api.importTasks(text, state.preferences.timeZone, projectId),
+                // Refetch: imported "#name" tokens may have created projects.
+                () => {
+                    api.getState().then(setState).catch((e: Error) => setNotice(e.message));
+                    setRevision((r) => r + 1);
+                },
+            );
         },
-        [state, view],
+        [state, view, addDrafts],
     );
 
     const togglePinProject = useCallback(
@@ -396,35 +517,43 @@ export function App() {
     );
 
     const deleteProject = useCallback(
-        (id: string) =>
-            run(async () => {
-                await api.deleteProject(id);
-                // The server cascades to the project's tasks, so drop them here too.
-                setState((prev) =>
-                    prev
-                        ? {
-                                ...prev,
-                                projects: prev.projects.filter((p) => p.id !== id),
-                                tasks: prev.tasks.filter((t) => t.projectId !== id),
-                            }
-                        : prev,
-                );
-                if (view.name === "project" && view.id === id) navigate("/app");
-                setRevision((r) => r + 1);
-            })(),
-        [run, view, navigate],
+        (id: string) => {
+            // The server cascades to the project's tasks, so drop them here too.
+            setState((prev) =>
+                prev
+                    ? {
+                            ...prev,
+                            projects: prev.projects.filter((p) => p.id !== id),
+                            tasks: prev.tasks.filter((t) => t.projectId !== id),
+                        }
+                    : prev,
+            );
+            if (view.name === "project" && view.id === id) navigate("/app");
+            optimistically(() => api.deleteProject(id), () => setRevision((r) => r + 1), resync);
+        },
+        [view, navigate, optimistically, resync],
     );
 
     const saveTask = useCallback(
         async (patch: Record<string, unknown>) => {
             if (!editing) return;
-            const { task } = await api.updateTask(editing.id, patch);
-            setState((prev) =>
-                prev ? { ...prev, tasks: prev.tasks.map((t) => (t.id === task.id ? task : t)) } : prev,
+            const before = editing;
+            const put = (task: Task) =>
+                setState((prev) =>
+                    prev ? { ...prev, tasks: prev.tasks.map((t) => (t.id === task.id ? task : t)) } : prev,
+                );
+            // The patch is made of Task fields, so it can be laid straight over the task.
+            put({ ...before, ...(patch as Partial<Task>) });
+            optimistically(
+                () => api.updateTask(before.id, patch),
+                ({ task }) => {
+                    put(task);
+                    setRevision((r) => r + 1);
+                },
+                () => put(before),
             );
-            setRevision((r) => r + 1);
         },
-        [editing],
+        [editing, optimistically],
     );
 
     const setPreferences = useCallback((preferences: Preferences) => {
@@ -590,8 +719,32 @@ export function App() {
                             today={today}
                             onOpen={(id) => navigate(`/app/project/${id}`)}
                             onCreate={async (name) => {
-                                await api.createProject(name);
-                                await reload();
+                                const draft: Project = {
+                                    id: tempId(),
+                                    name,
+                                    color: "slate",
+                                    isInbox: false,
+                                    order: state.projects.length,
+                                    createdAt: new Date().toISOString(),
+                                    pinned: false,
+                                };
+                                const swap = (to: Project | null) =>
+                                    setState((prev) =>
+                                        prev
+                                            ? {
+                                                  ...prev,
+                                                  projects: to
+                                                      ? prev.projects.map((p) => (p.id === draft.id ? to : p))
+                                                      : prev.projects.filter((p) => p.id !== draft.id),
+                                              }
+                                            : prev,
+                                    );
+                                setState({ ...state, projects: [...state.projects, draft] });
+                                optimistically(
+                                    () => api.createProject(name),
+                                    ({ project }) => swap(project),
+                                    () => swap(null),
+                                );
                             }}
                             onTogglePin={togglePinProject}
                             onDelete={deleteProject}

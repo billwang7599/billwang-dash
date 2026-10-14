@@ -19,7 +19,7 @@ interface Props {
     /** Any change made here, so the sidebar and its streak stay current. */
     onChanged: (habit: HabitSummary) => void;
     onUpdate: (id: string, input: HabitInput) => Promise<void>;
-    onDelete: (id: string) => Promise<void>;
+    onDelete: (id: string) => void;
     onBack: () => void;
     /** A search result asked to see this day; each new object moves the page there. */
     jump?: { day: string } | null;
@@ -219,7 +219,7 @@ export function HabitView({ habit, color, today, revision, onChanged, onUpdate, 
                     confirmLabel="Delete"
                     onConfirm={() => {
                         setDeleting(false);
-                        void onDelete(habit.id);
+                        onDelete(habit.id);
                     }}
                     onCancel={() => setDeleting(false)}
                 />
