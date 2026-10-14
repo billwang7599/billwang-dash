@@ -13,10 +13,13 @@ import {
 } from "../../shared/civil.ts";
 import type { CalEvent, CalendarItem, EventInput } from "../../shared/types.ts";
 import { api } from "../api.ts";
+import { eventItem, tempId } from "../optimistic.ts";
 import { useCalendarRange } from "../useCalendarRange.ts";
 import {
+    LONG_PRESS_MS,
     SNAP_MINUTES,
     dragRange,
+    edgeScrollSpeed,
     minutesAtOffset,
     movedMinutes,
     rangeToEvent,
@@ -42,6 +45,26 @@ const MODES: { mode: Mode; label: string; days: number; unit: string }[] = [
 ];
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** A press on a day column, from pointer down to up. */
+interface Drag {
+    day: string;
+    /** The column the press began in; the pointer's minutes are measured against it. */
+    column: HTMLElement;
+    anchor: number;
+    moved: boolean;
+    startX: number;
+    startY: number;
+    /** The pointer's latest position, which the edge auto-scroll keeps following. */
+    x: number;
+    y: number;
+    /** Pressed on an event: nothing starts until the pointer moves, so a click still opens it. */
+    onEvent: boolean;
+    reshape?: { item: CalendarItem; edge: Edge };
+    touch: boolean;
+    /** Touch, until the long press completes: the timer that picks the press up. */
+    holding?: number;
+}
 
 /** Where a search result wants the calendar: that day, with the event's editor open. */
 export interface CalendarJump {
@@ -89,18 +112,13 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
 
     // Press and drag on a day column draws a new event. Shift+drag on one of dash's own events
     // reshapes it: from its top edge it moves the start, from its bottom edge the end, and from
-    // anywhere else it moves the whole event. `drag` holds the gesture; `draft` and `reshape` are
-    // what is shown so far.
-    const dragRef = useRef<{
-        day: string;
-        anchor: number;
-        moved: boolean;
-        startY: number;
-        /** Pressed on an event: nothing starts until the pointer moves, so a click still opens it. */
-        onEvent: boolean;
-        reshape?: { item: CalendarItem; edge: Edge };
-    } | null>(null);
+    // anywhere else it moves the whole event. On touch a long press stands in for both the press
+    // and the shift, so a swipe still scrolls. `drag` holds the gesture; `draft` and `reshape`
+    // are what is shown so far.
+    const dragRef = useRef<Drag | null>(null);
     const lastPointer = useRef("");
+    // A long press ends in a click the browser sends anyway; it must not open anything.
+    const swallowClick = useRef(false);
     const [draft, setDraft] = useState<{ day: string; start: number; end: number } | null>(null);
     // `saving` keeps the new times on screen until the refetch brings them back from the server.
     const [reshape, setReshape] = useState<{ id: string; start: string; end: string; saving: boolean } | null>(null);
@@ -108,7 +126,7 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
     const [editor, setEditor] = useState<{ initial: EventInput; id: string | null } | null>(null);
     const [reload, setReload] = useState(0);
     // Cached ranges paint at once and revalidate behind; only a range never seen gets a spinner.
-    const { items, syncing, error, setError, removeItem } = useCalendarRange(
+    const { items, syncing, error, setError, removeItem, putItem } = useCalendarRange(
         rangeStart,
         dayCount,
         timeZone,
@@ -212,48 +230,97 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
         else setSelected(item);
     }
 
-    /** Minutes into the day for the pointer, relative to the column it started in. */
-    const minutesAt = (e: React.MouseEvent<HTMLDivElement>) =>
-        minutesAtOffset(e.clientY - e.currentTarget.getBoundingClientRect().top, HOUR_PX);
+    /** Minutes into the day for a pointer at `clientY`, against the column the press began in. */
+    const minutesAt = (column: HTMLElement, clientY: number) =>
+        minutesAtOffset(clientY - column.getBoundingClientRect().top, HOUR_PX);
 
     function onDayPointerDown(e: React.PointerEvent<HTMLDivElement>, day: string) {
         lastPointer.current = e.pointerType;
-        // Touch scrolls the grid, so it can't also draw; tapping a slot works there instead.
-        if (e.pointerType === "touch" || e.button !== 0) return;
-        const anchor = minutesAt(e);
+        swallowClick.current = false;
+        const touch = e.pointerType === "touch";
+        if (!touch && e.button !== 0) return;
+        const column = e.currentTarget;
         const onEvent = (e.target as HTMLElement).closest<HTMLElement>(".cal-ev");
-        if (onEvent) {
-            const item = e.shiftKey
-                ? items.find((i) => i.event && i.event.id === onEvent.dataset.eventId && !i.allDay)
-                : undefined;
-            if (e.shiftKey && !item) return;
-            // The edge strips only exist where the event really starts or ends, so on a
-            // continuation segment shift+drag moves the whole event.
-            const edge = ((e.target as HTMLElement).closest<HTMLElement>(".cal-ev-edge")?.dataset.edge ?? "move") as Edge;
-            dragRef.current = {
-                day,
-                anchor,
-                moved: false,
-                startY: e.clientY,
-                onEvent: true,
-                reshape: item && { item, edge },
-            };
+        // Shift, or a held finger, takes hold of one of dash's own events; the others only open.
+        const grabs = onEvent !== null && (e.shiftKey || touch);
+        const item = grabs
+            ? items.find((i) => i.event && i.event.id === onEvent.dataset.eventId && !i.allDay)
+            : undefined;
+        if (grabs && !item) return;
+        // The edge strips only exist where the event really starts or ends, so on a
+        // continuation segment shift+drag moves the whole event.
+        const edge = ((e.target as HTMLElement).closest<HTMLElement>(".cal-ev-edge")?.dataset.edge ?? "move") as Edge;
+        const anchor = minutesAt(column, e.clientY);
+        const drag: Drag = {
+            day,
+            column,
+            anchor,
+            moved: false,
+            startX: e.clientX,
+            startY: e.clientY,
+            x: e.clientX,
+            y: e.clientY,
+            onEvent: onEvent !== null,
+            reshape: item && { item, edge },
+            touch,
+        };
+        dragRef.current = drag;
+        followEdges(drag);
+        if (touch) {
+            // Until the finger has rested, the touch is the browser's to scroll or tap with.
+            const pointerId = e.pointerId;
+            drag.holding = window.setTimeout(() => pickUp(drag, pointerId), LONG_PRESS_MS);
             return;
         }
-        dragRef.current = { day, anchor, moved: false, startY: e.clientY, onEvent: false };
-        e.currentTarget.setPointerCapture(e.pointerId);
+        if (onEvent) return;
+        column.setPointerCapture(e.pointerId);
         setDraft({ day, ...dragRange(anchor, anchor, false) });
     }
 
-    /** The day column under the pointer's x, the nearest one when it is outside the grid. */
-    function dayUnder(e: React.PointerEvent<HTMLDivElement>, fallback: string): string {
+    /** The long press completed: lift the event, or start drawing a new one from the pressed slot. */
+    function pickUp(drag: Drag, pointerId: number) {
+        if (dragRef.current !== drag) return;
+        drag.holding = undefined;
+        swallowClick.current = true;
+        navigator.vibrate?.(10);
+        // Keep the moves coming to this column after the finger leaves it, as the mouse does.
+        if (drag.column.isConnected) drag.column.setPointerCapture(pointerId);
+        if (drag.reshape) {
+            const { item } = drag.reshape;
+            setReshape({ id: item.id, start: item.start, end: item.end, saving: false });
+        } else {
+            setDraft({ day: drag.day, ...dragRange(drag.anchor, drag.anchor, false) });
+        }
+    }
+
+    /**
+     * While a drag lasts, holding the pointer near the grid's top or bottom scrolls it, and
+     * the drag follows: a finger can't scroll mid-drag, and a mouse shouldn't have to let go.
+     */
+    function followEdges(drag: Drag) {
+        const step = () => {
+            if (dragRef.current !== drag) return;
+            const grid = gridRef.current;
+            if (grid && drag.moved) {
+                const { top, bottom } = grid.getBoundingClientRect();
+                const before = grid.scrollTop;
+                grid.scrollTop += edgeScrollSpeed(drag.y, top, bottom);
+                if (grid.scrollTop !== before) follow(drag, drag.x, drag.y);
+            }
+            requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+    }
+
+    /** The day column under `clientX`, the nearest one when it is outside the grid. */
+    function dayUnder(clientX: number, fallback: string): string {
         const columns = [...(gridRef.current?.querySelectorAll<HTMLElement>(".cal-day") ?? [])];
         if (columns.length === 0) return fallback;
         const hit = columns.find((c) => {
             const r = c.getBoundingClientRect();
-            return e.clientX >= r.left && e.clientX < r.right;
+            return clientX >= r.left && clientX < r.right;
         });
-        const nearest = e.clientX < columns[0].getBoundingClientRect().left ? columns[0] : columns[columns.length - 1];
+        const nearest = clientX < columns[0].getBoundingClientRect().left ? columns[0] : columns[columns.length - 1];
         return (hit ?? nearest).dataset.day ?? fallback;
     }
 
@@ -303,33 +370,55 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
         }
     }
 
+    /** Shows the drag with the pointer at (`x`, `y`). */
+    function follow(drag: Drag, x: number, y: number) {
+        drag.x = x;
+        drag.y = y;
+        const minutes = minutesAt(drag.column, y);
+        if (drag.reshape) {
+            const { item, edge } = drag.reshape;
+            setReshape({ id: item.id, ...reshaped(item, edge, drag.day, drag.anchor, dayUnder(x, drag.day), minutes), saving: false });
+        } else {
+            setDraft({ day: drag.day, ...dragRange(drag.anchor, minutes, true) });
+        }
+    }
+
     function onDayPointerMove(e: React.PointerEvent<HTMLDivElement>) {
         const drag = dragRef.current;
         if (!drag) return;
-        // A few pixels of wobble is still a click.
-        if (!drag.moved && Math.abs(e.clientY - drag.startY) < 4) return;
-        if (!drag.moved && drag.onEvent) e.currentTarget.setPointerCapture(e.pointerId);
-        drag.moved = true;
-        if (drag.reshape) {
-            const { item, edge } = drag.reshape;
-            setReshape({ id: item.id, ...reshaped(item, edge, drag.day, drag.anchor, dayUnder(e, drag.day), minutesAt(e)), saving: false });
-        } else {
-            setDraft({ day: drag.day, ...dragRange(drag.anchor, minutesAt(e), true) });
+        const travel = Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY);
+        if (drag.holding !== undefined) {
+            // Moving before the long press completes is a scroll, which the browser takes.
+            if (travel > 8) cancelDrag();
+            return;
         }
+        // A few pixels of wobble is still a click.
+        if (!drag.moved && travel < 4) return;
+        if (!drag.moved && drag.onEvent && !drag.touch) e.currentTarget.setPointerCapture(e.pointerId);
+        drag.moved = true;
+        follow(drag, e.clientX, e.clientY);
     }
 
     function onDayPointerUp(e: React.PointerEvent<HTMLDivElement>) {
         const drag = dragRef.current;
         if (!drag) return; // cancelled with Escape
         dragRef.current = null;
-        if (drag.onEvent && !drag.moved) return; // a click: the event opens itself
+        if (drag.holding !== undefined) {
+            clearTimeout(drag.holding); // a tap: the click handles it
+            return;
+        }
+        if (drag.onEvent && !drag.moved) {
+            // A click opens the event itself; one lifted by a long press is put back down.
+            setReshape((r) => (r?.saving ? r : null));
+            return;
+        }
         if (drag.reshape) {
             const { item, edge } = drag.reshape;
-            const { start, end } = reshaped(item, edge, drag.day, drag.anchor, dayUnder(e, drag.day), minutesAt(e));
+            const { start, end } = reshaped(item, edge, drag.day, drag.anchor, dayUnder(e.clientX, drag.day), minutesAt(drag.column, e.clientY));
             void saveReshape(item, start, end);
             return;
         }
-        const { start, end } = dragRange(drag.anchor, minutesAt(e), drag.moved);
+        const { start, end } = dragRange(drag.anchor, minutesAt(drag.column, e.clientY), drag.moved);
         setDraft(null);
         setEditor({ initial: rangeToEvent(drag.day, start, end), id: null });
     }
@@ -341,15 +430,29 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
      */
     function onDayClick(e: React.MouseEvent<HTMLDivElement>, day: string) {
         if (lastPointer.current !== "touch" || (e.target as HTMLElement).closest(".cal-ev")) return;
-        const { start, end } = dragRange(minutesAt(e), 0, false);
+        const { start, end } = dragRange(minutesAt(e.currentTarget, e.clientY), 0, false);
         setEditor({ initial: rangeToEvent(day, start, end), id: null });
     }
 
     function cancelDrag() {
+        clearTimeout(dragRef.current?.holding);
         dragRef.current = null;
         setDraft(null);
         setReshape((r) => (r?.saving ? r : null));
     }
+
+    // Once a long press has picked something up, the finger drags it instead of scrolling the
+    // grid. React's touch listeners are passive, and only a non-passive one can stop the scroll.
+    useEffect(() => {
+        const grid = gridRef.current;
+        if (!grid) return;
+        const hold = (e: TouchEvent) => {
+            const drag = dragRef.current;
+            if (drag?.touch && drag.holding === undefined) e.preventDefault();
+        };
+        grid.addEventListener("touchmove", hold, { passive: false });
+        return () => grid.removeEventListener("touchmove", hold);
+    }, []);
 
     useEffect(() => {
         if (!draft && !reshape) return;
@@ -378,17 +481,31 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
             : `${first.d} ${MONTHS[first.m - 1]} – ${last.d} ${MONTHS[last.m - 1]}`;
     const taskCount = items.filter((i) => i.kind === "task").length;
 
+    /** Shown at once; the refetch after the save brings the server's copy, and a failure puts things back. */
     async function saveEvent(input: EventInput) {
-        if (editor?.id) await api.updateEvent(editor.id, input);
-        else await api.createEvent(input);
-        setReload((n) => n + 1);
+        const id = editor?.id ?? tempId();
+        const before = items.find((i) => i.id === `event:${id}`);
+        putItem(eventItem(input, id, timeZone));
+        (editor?.id ? api.updateEvent(id, input) : api.createEvent(input))
+            .then(() => setReload((n) => n + 1))
+            .catch((err: Error) => {
+                if (before) putItem(before);
+                else removeItem(`event:${id}`);
+                setError(err.message);
+            });
     }
 
     async function deleteEvent() {
         if (!editor?.id) return;
-        removeItem(`event:${editor.id}`);
-        await api.deleteEvent(editor.id);
-        setReload((n) => n + 1);
+        const id = editor.id;
+        const before = items.find((i) => i.id === `event:${id}`);
+        removeItem(`event:${id}`);
+        api.deleteEvent(id)
+            .then(() => setReload((n) => n + 1))
+            .catch((err: Error) => {
+                if (before) putItem(before);
+                setError(err.message);
+            });
     }
 
     return (
@@ -494,7 +611,17 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
                         Syncing…
                     </div>
                 )}
-                <div className="cal-grid" ref={gridRef}>
+                <div
+                    className="cal-grid"
+                    ref={gridRef}
+                    onClickCapture={(e) => {
+                        if (!swallowClick.current) return;
+                        swallowClick.current = false;
+                        e.stopPropagation();
+                    }}
+                    // A long press is a drag here, not the browser's menu.
+                    onContextMenu={(e) => lastPointer.current === "touch" && e.preventDefault()}
+                >
                     <div className="cal-hours">
                         {Array.from({ length: 24 }, (_, h) => (
                             <div className="cal-hour" key={h} style={{ height: HOUR_PX }}>
@@ -542,7 +669,7 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
                                         <button
                                             key={item.id}
                                             type="button"
-                                            className={`cal-ev ${item.kind}`}
+                                            className={`cal-ev ${item.kind}${reshape?.id === item.id && !reshape.saving ? " is-lifted" : ""}`}
                                             data-p={item.priority}
                                             data-event-id={item.event?.id}
                                             style={{

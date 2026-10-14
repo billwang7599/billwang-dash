@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CLICK_MINUTES, dragRange, minutesAtOffset, movedMinutes, rangeToEvent, resizedEndMinutes, resizedStartMinutes } from "../src/eventDrag.ts";
+import { CLICK_MINUTES, dragRange, edgeScrollSpeed, minutesAtOffset, movedMinutes, rangeToEvent, resizedEndMinutes, resizedStartMinutes } from "../src/eventDrag.ts";
 
 const at = (h: number, m = 0) => h * 60 + m;
 
@@ -83,5 +83,26 @@ describe("movedMinutes", () => {
         expect(movedMinutes(at(10), at(10, 8))).toBe(15);
         expect(movedMinutes(at(10), at(11, 20))).toBe(75);
         expect(movedMinutes(at(10), at(9, 20))).toBe(-45);
+    });
+});
+
+describe("edgeScrollSpeed", () => {
+    // A grid from 100px to 600px on screen, with a 36px band along each edge.
+    it("doesn't scroll away from the edges", () => {
+        expect(edgeScrollSpeed(300, 100, 600)).toBe(0);
+        expect(edgeScrollSpeed(136, 100, 600)).toBe(0);
+        expect(edgeScrollSpeed(564, 100, 600)).toBe(0);
+    });
+
+    it("scrolls up near the top and down near the bottom, faster deeper in", () => {
+        expect(edgeScrollSpeed(118, 100, 600)).toBe(-7);
+        expect(edgeScrollSpeed(100, 100, 600)).toBe(-14);
+        expect(edgeScrollSpeed(582, 100, 600)).toBe(7);
+        expect(edgeScrollSpeed(600, 100, 600)).toBe(14);
+    });
+
+    it("holds full speed past the edge", () => {
+        expect(edgeScrollSpeed(20, 100, 600)).toBe(-14);
+        expect(edgeScrollSpeed(900, 100, 600)).toBe(14);
     });
 });

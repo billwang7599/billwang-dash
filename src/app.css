@@ -1253,6 +1253,8 @@ html:has(.mnav.is-open) { overflow: hidden; }
     min-width: 0;
     /* Pressing and dragging draws an event, so dragging must not select text. */
     user-select: none;
+    /* A long press drags on touch, so iOS mustn't open its callout over it. */
+    -webkit-touch-callout: none;
     cursor: cell;
 }
 .cal-day.is-today { background: rgb(17 17 16 / 0.045); border-left-color: transparent; }
@@ -1312,6 +1314,13 @@ html:has(.mnav.is-open) { overflow: hidden; }
 .cal-ev-edge.is-top { top: 0; }
 .cal-ev-edge.is-bottom { bottom: 0; }
 .is-shift .cal-ev-edge { cursor: ns-resize; }
+/* The event in hand, by shift+drag or a long press, lifts off the grid. */
+.cal-ev.is-lifted {
+    box-shadow: var(--shadow-lg);
+    opacity: 0.92;
+    z-index: 5;
+    cursor: grabbing;
+}
 .cal-ev.is-draft {
     opacity: 0.8;
     pointer-events: none;

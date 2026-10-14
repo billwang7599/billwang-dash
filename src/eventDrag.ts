@@ -29,6 +29,20 @@ export function dragRange(anchor: number, current: number, moved: boolean): { st
     return { start: Math.min(a, c), end: Math.max(a, c) + SNAP_MINUTES };
 }
 
+/** How long a finger rests on the calendar before it picks up an event or starts drawing one, in ms. */
+export const LONG_PRESS_MS = 400;
+
+/**
+ * Pixels per frame to scroll the grid while dragging with the pointer at `y`, for a grid
+ * spanning `top` to `bottom` on screen: none in the middle, faster the deeper into the band
+ * along either edge, and full speed past it. Negative scrolls up.
+ */
+export function edgeScrollSpeed(y: number, top: number, bottom: number, band = 36, max = 14): number {
+    if (y < top + band) return -Math.ceil(max * Math.min(1, (top + band - y) / band));
+    if (y > bottom - band) return Math.ceil(max * Math.min(1, (y - bottom + band) / band));
+    return 0;
+}
+
 /** Where a resized event ends: the bottom of the slot under the pointer (minutes into the day). */
 export function resizedEndMinutes(current: number): number {
     return Math.min(DAY_MINUTES, slotStart(current) + SNAP_MINUTES);
