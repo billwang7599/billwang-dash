@@ -174,6 +174,8 @@ export interface GoogleAccountStatus {
     email: string | null;
     connectedAt: string | null;
     lastSyncedAt: string | null;
+    /** Why the last fetch from Google failed, or null. The calendar then shows events saved earlier. */
+    syncError: string | null;
     calendars: GoogleCalendarSummary[];
 }
 

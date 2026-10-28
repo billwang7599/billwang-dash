@@ -27,20 +27,23 @@ export function useCalendarRange(rangeStart: Civil, dayCount: number, timeZone: 
     const [data, setData] = useState<{ range: string | null; items: CalendarItem[] }>({ range: null, items: [] });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    // Why the Google events on screen may be out of date, as the last fetch saw it.
+    const [googleError, setGoogleError] = useState<string | null>(null);
 
     useEffect(() => {
         let cancelled = false;
         const fetchRange = async (start: Civil) => {
             const { startISO, endISO, key } = bounds(start, dayCount, timeZone);
-            const { items } = await api.calendar(startISO, endISO);
+            const { items, googleError } = await api.calendar(startISO, endISO);
             setCachedRange(key, stamp, items);
-            return items;
+            return { items, googleError };
         };
 
         setLoading(true);
         fetchRange(rangeStart)
-            .then((items) => {
+            .then(({ items, googleError }) => {
                 if (cancelled) return;
+                setGoogleError(googleError);
                 // Same content as what is showing: keep the old array so nothing re-renders.
                 setData((prev) =>
                     prev.range === rangeKey && JSON.stringify(prev.items) === JSON.stringify(items)
@@ -89,6 +92,7 @@ export function useCalendarRange(rangeStart: Civil, dayCount: number, timeZone: 
         /** A fetch is in flight, whether or not something is already showing. */
         loading,
         error,
+        googleError,
         setError,
         removeItem,
         putItem,

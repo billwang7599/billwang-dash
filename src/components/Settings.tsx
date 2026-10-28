@@ -212,6 +212,12 @@ export function Settings({ preferences, user, onPreferencesChange, onOpenTrash }
                                         Disconnect
                                     </button>
                                 </div>
+                                {google.syncError && (
+                                    <p className="banner banner-bad" role="alert">
+                                        {google.syncError}{" "}
+                                        <a href="/api/google/connect">Reconnect</a>
+                                    </p>
+                                )}
                                 {/* Events are cached (today for an hour, later days for six, past
                                     days until this), so this is how to see a change made in Google now. */}
                                 <div className="sync-row">

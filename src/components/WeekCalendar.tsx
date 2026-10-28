@@ -126,7 +126,7 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
     const [editor, setEditor] = useState<{ initial: EventInput; id: string | null } | null>(null);
     const [reload, setReload] = useState(0);
     // Cached ranges paint at once and revalidate behind; only a range never seen gets a spinner.
-    const { items, syncing, error, setError, removeItem, putItem } = useCalendarRange(
+    const { items, syncing, error, googleError, setError, removeItem, putItem } = useCalendarRange(
         rangeStart,
         dayCount,
         timeZone,
@@ -576,6 +576,7 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
             </header>
 
             {error && <p className="cal-error">{error}</p>}
+            {googleError && !error && <p className="cal-error" role="status">{googleError}</p>}
 
             <div className="cal-daybar">
                 <span className="cal-gutter" />

@@ -8,6 +8,7 @@ import { WRITE_SCOPE } from "../worker/google.ts";
 function fakeGoogle() {
     const lists: { timeMin: string; timeMax: string }[] = [];
     let events: unknown[] = [];
+    let failList: number | null = null;
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
         const url = new URL(String(input));
         const path = decodeURIComponent(url.pathname.replace("/calendar/v3", ""));
@@ -17,12 +18,13 @@ function fakeGoogle() {
             return reply({ items: [{ id: "me@example.com", summary: "Me", primary: true }] });
         }
         if (/^\/calendars\/[^/]+\/events$/.test(path)) {
+            if (failList) return new Response("{}", { status: failList });
             lists.push({ timeMin: url.searchParams.get("timeMin")!, timeMax: url.searchParams.get("timeMax")! });
             return reply({ items: events });
         }
         return new Response(null, { status: 404 });
     });
-    return { lists, setEvents: (e: unknown[]) => (events = e) };
+    return { lists, setEvents: (e: unknown[]) => (events = e), failListWith: (status: number | null) => (failList = status) };
 }
 
 /** Days relative to today in UTC (the tests set the user's zone to UTC). */
@@ -156,6 +158,27 @@ describe("google event cache", () => {
         expect(titles(await stub.getCalendarItems(at(0), at(3)))).toEqual(["Lunch"]); // still cached
         await age(stub, futureTtlMs(1));
         expect(titles(await stub.getCalendarItems(at(0), at(3)))).toEqual([]);
+    });
+
+    it("keeps showing saved events and says so when Google stops answering, until it answers again", async () => {
+        const g = fakeGoogle();
+        g.setEvents([timedEvent("Lunch", 1)]);
+        const stub = await connected("gc-sync-error");
+        await stub.getCalendarItems(at(0), at(3));
+        expect((await stub.getGoogleStatus()).syncError).toBeNull();
+
+        g.failListWith(401);
+        await age(stub, futureTtlMs(1));
+        expect(titles(await stub.getCalendarItems(at(0), at(3)))).toEqual(["Lunch"]);
+        expect((await stub.getGoogleStatus()).syncError).toMatch(/Reconnect/);
+
+        g.failListWith(500);
+        await stub.getCalendarItems(at(0), at(3));
+        expect((await stub.getGoogleStatus()).syncError).toMatch(/Couldn't reach/);
+
+        g.failListWith(null);
+        await stub.getCalendarItems(at(0), at(3));
+        expect((await stub.getGoogleStatus()).syncError).toBeNull();
     });
 
     it("keeps an all-day event on its own date", async () => {

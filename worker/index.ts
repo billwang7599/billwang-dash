@@ -242,9 +242,7 @@ app.patch("/api/preferences", async (c) =>
 );
 
 app.get("/api/calendar", async (c) =>
-    c.json({
-        items: await service.calendarItems(stub(c), c.req.query("start"), c.req.query("end")),
-    }),
+    c.json(await service.calendarItems(stub(c), c.req.query("start"), c.req.query("end"))),
 );
 
 app.get("/api/search", async (c) => {

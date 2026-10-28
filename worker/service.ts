@@ -323,11 +323,12 @@ export async function calendarItems(
     stub: Stub,
     start: string | undefined,
     end: string | undefined,
-): Promise<CalendarItem[]> {
+): Promise<{ items: CalendarItem[]; googleError: string | null }> {
     if (!start || !end || Number.isNaN(Date.parse(start)) || Number.isNaN(Date.parse(end))) {
         throw new ServiceError(400, "start and end must be ISO timestamps");
     }
-    return stub.getCalendarItems(start, end);
+    const items = await stub.getCalendarItems(start, end);
+    return { items, googleError: (await stub.getGoogleStatus()).syncError };
 }
 
 export const syncGoogleNow = (stub: Stub): Promise<GoogleAccountStatus> => stub.syncGoogleNow();

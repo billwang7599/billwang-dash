@@ -167,7 +167,7 @@ export const tools: Tool[] = [
             const start = civilFromKey(from);
             const end = civilFromKey(to);
             if (!start || !end) throw new service.ServiceError(400, "from and to must be real dates");
-            const items = await service.calendarItems(
+            const { items } = await service.calendarItems(
                 stub,
                 new Date(zonedToUtcMs(start, 0, timeZone)).toISOString(),
                 new Date(zonedToUtcMs(addDays(end, 1), 0, timeZone)).toISOString(),

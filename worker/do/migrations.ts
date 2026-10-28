@@ -554,4 +554,9 @@ export const migrations: Migration[] = [
             ALTER TABLE tasks ADD COLUMN via_link INTEGER NOT NULL DEFAULT 0;
         `,
     },
+    {
+        // Why the last Google fetch failed, so a calendar showing saved events can say so.
+        version: 27,
+        sql: `ALTER TABLE google_account ADD COLUMN sync_error TEXT;`,
+    },
 ];

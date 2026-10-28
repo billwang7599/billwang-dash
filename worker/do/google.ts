@@ -40,6 +40,9 @@ const PUSH_BATCH = 25;
 const hasWriteScope = (scope: string | null | undefined): boolean =>
     (scope ?? "").split(" ").includes(WRITE_SCOPE);
 
+const RECONNECT = "Google Calendar has stopped syncing. Reconnect it in Settings. Events shown were saved earlier.";
+const STALLED = "Couldn't reach Google Calendar. Events shown were saved earlier.";
+
 /**
  * Everything between one user's data and Google: the connected account and its
  * calendars (read live into the calendar view), and pushing tasks and dash events
@@ -131,8 +134,9 @@ export class GoogleSync {
                 scope: string | null;
                 push_enabled: number;
                 push_error: string | null;
+                sync_error: string | null;
             }>(
-                `SELECT email, connected_at, last_synced_at, scope, push_enabled, push_error
+                `SELECT email, connected_at, last_synced_at, scope, push_enabled, push_error, sync_error
                  FROM google_account WHERE id = 1`,
             )
             .toArray();
@@ -145,6 +149,7 @@ export class GoogleSync {
                 email: null,
                 connectedAt: null,
                 lastSyncedAt: null,
+                syncError: null,
                 calendars: [],
             };
         }
@@ -162,6 +167,7 @@ export class GoogleSync {
             email: rows[0].email,
             connectedAt: toIso(rows[0].connected_at),
             lastSyncedAt: toIsoOrNull(rows[0].last_synced_at),
+            syncError: rows[0].sync_error,
             calendars: this.storedCalendars(),
         };
     }
@@ -196,9 +202,11 @@ export class GoogleSync {
         const stale = new Map(enabled.map((cal) => [cal.id, cache.staleDays(this.sql, cal.id, days, civilKey(today), now)]));
         if ([...stale.values()].some((d) => d.length > 0)) {
             const accessToken = await this.getValidAccessToken();
-            if (accessToken) {
+            if (!accessToken) {
+                this.setSyncError(RECONNECT);
+            } else {
                 // One bad calendar shouldn't blank the whole view: it keeps its cache.
-                await Promise.allSettled(
+                const results = await Promise.allSettled(
                     enabled.flatMap((cal) =>
                         cache.runs(stale.get(cal.id)!).map(async ([first, last]) => {
                             const from = dayStart(first);
@@ -208,10 +216,14 @@ export class GoogleSync {
                         }),
                     ),
                 );
-                this.sql.exec(
-                    "UPDATE google_account SET last_synced_at = ? WHERE id = 1",
-                    now,
-                );
+                const failed = results.find((r) => r.status === "rejected");
+                if (failed) {
+                    const reason = failed.reason;
+                    this.setSyncError(reason instanceof GoogleApiError && reason.status === 401 ? RECONNECT : STALLED);
+                } else {
+                    this.setSyncError(null);
+                    this.sql.exec("UPDATE google_account SET last_synced_at = ? WHERE id = 1", now);
+                }
                 cache.prune(this.sql, today, days[0]);
             }
         }
@@ -240,6 +252,10 @@ export class GoogleSync {
         }
 
         return bySoonest(items);
+    }
+
+    private setSyncError(message: string | null): void {
+        this.sql.exec("UPDATE google_account SET sync_error = ? WHERE id = 1", message);
     }
 
     /**
