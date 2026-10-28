@@ -1421,7 +1421,9 @@ html:has(.mnav.is-open) { overflow: hidden; }
 .habit-cell.is-off { background: transparent; color: var(--ink-3); }
 .habit-cell.is-pending { background: var(--paper-3); }
 .habit-cell.is-future { background: transparent; border-color: var(--rule); color: var(--rule-2); cursor: default; }
-.habit-cell.is-today { box-shadow: 0 0 0 2px var(--c-terra); }
+.habit-cell.is-today { box-shadow: 0 0 0 2px var(--paper), 0 0 0 3.5px var(--c-terra); }
+/* On a dark done circle the terracotta ring reads as a red fringe, so use ink. */
+.habit-cell.is-done.is-today { box-shadow: 0 0 0 2px var(--paper), 0 0 0 3.5px var(--ink); }
 .habit-cell.is-selected { outline: 2px solid var(--ink); outline-offset: 1px; }
 
 .habit-legend { display: flex; gap: 1rem; list-style: none; margin: 0.8rem 0 0; padding: 0; font-size: 0.74rem; color: var(--ink-3); }
