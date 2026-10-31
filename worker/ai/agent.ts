@@ -2,7 +2,7 @@ import { z } from "zod";
 import { SHOW_TASKS, type Approval, type ChatMessage, type ChatReply, type PendingAction, type ToolCall } from "../../shared/chat.ts";
 import { civilFromDate, civilKey, minutesOfDay, minutesToTime, weekday } from "../../shared/civil.ts";
 import { ServiceError } from "../service.ts";
-import { type Stub, type Tool, type ToolContext, tools, toolsByName } from "./tools.ts";
+import { argsSchema, type Stub, type Tool, type ToolContext, tools, toolsByName } from "./tools.ts";
 
 /**
  * The assistant's tool loop. Reads run as the model asks for them. The first
@@ -32,10 +32,10 @@ export interface Model {
     run(model: string, input: { messages: unknown[]; tools: unknown[]; max_tokens: number }): Promise<unknown>;
 }
 
-const toolDefs = tools.map((t) => {
-    const { $schema: _, ...parameters } = z.toJSONSchema(t.args, { io: "input", unrepresentable: "any" });
-    return { type: "function", function: { name: t.name, description: t.description, parameters } };
-});
+const toolDefs = tools.map((t) => ({
+    type: "function",
+    function: { name: t.name, description: t.description, parameters: argsSchema(t) },
+}));
 
 export async function runAgent(opts: {
     model: Model;

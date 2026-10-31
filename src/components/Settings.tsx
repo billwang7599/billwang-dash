@@ -20,6 +20,10 @@ export function Settings({ preferences, user, onPreferencesChange, onOpenTrash }
     const [confirmingPushOff, setConfirmingPushOff] = useState(false);
     const [pushBusy, setPushBusy] = useState(false);
     const [syncing, setSyncing] = useState(false);
+    const [cliTokenExists, setCliTokenExists] = useState(false);
+    const [newCliToken, setNewCliToken] = useState<string | null>(null);
+    const [copied, setCopied] = useState(false);
+    const [confirmingCli, setConfirmingCli] = useState<"regenerate" | "revoke" | null>(null);
     const [firstName, setFirstName] = useState(preferences.firstName);
     const [lastName, setLastName] = useState(preferences.lastName);
     const nameChanged =
@@ -28,6 +32,7 @@ export function Settings({ preferences, user, onPreferencesChange, onOpenTrash }
 
     useEffect(() => {
         api.googleStatus().then(setGoogle).catch((e: Error) => setError(e.message));
+        api.cliTokenStatus().then((s) => setCliTokenExists(s.exists)).catch((e: Error) => setError(e.message));
 
         // The OAuth callback bounces back here with the outcome in the query string.
         const result = new URLSearchParams(window.location.search).get("google");
@@ -79,6 +84,38 @@ export function Settings({ preferences, user, onPreferencesChange, onOpenTrash }
         }, 3000);
         return () => clearTimeout(timer);
     }, [google]);
+
+    async function createCliToken() {
+        setError(null);
+        try {
+            setNewCliToken((await api.createCliToken()).token);
+            setCliTokenExists(true);
+        } catch (e) {
+            setError((e as Error).message);
+        }
+    }
+
+    async function revokeCliToken() {
+        setError(null);
+        try {
+            await api.revokeCliToken();
+            setNewCliToken(null);
+            setCliTokenExists(false);
+        } catch (e) {
+            setError((e as Error).message);
+        }
+    }
+
+    async function copyCliToken() {
+        if (!newCliToken) return;
+        try {
+            await navigator.clipboard.writeText(newCliToken);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+        } catch {
+            setError("Couldn't copy. Select the token and copy it by hand.");
+        }
+    }
 
     async function updatePrefs(patch: Partial<Preferences>) {
         setError(null);
@@ -289,10 +326,68 @@ export function Settings({ preferences, user, onPreferencesChange, onOpenTrash }
                             </a>
                         )}
                     </section>
+
+                    <section className="panel">
+                        <h2>Command line</h2>
+                        <p className="panel-note">
+                            A personal token lets the <code>dash</code> CLI, and AI agents that use it, read and change
+                            your tasks, events, habits and goals without signing in. Treat it like a password.
+                        </p>
+                        {newCliToken && (
+                            <>
+                                <div className="share-link">
+                                    <input
+                                        readOnly
+                                        value={newCliToken}
+                                        aria-label="CLI token"
+                                        onFocus={(e) => e.currentTarget.select()}
+                                    />
+                                    <button type="button" className="btn btn-primary" onClick={copyCliToken}>
+                                        {copied ? "Copied" : "Copy"}
+                                    </button>
+                                </div>
+                                <p className="panel-note">
+                                    Shown only this once. On your computer run <code>dash login &lt;token&gt;</code>.
+                                </p>
+                            </>
+                        )}
+                        {cliTokenExists ? (
+                            <div className="share-row">
+                                {!newCliToken && <span className="panel-note">A token is active.</span>}
+                                <button type="button" className="btn btn-quiet" onClick={() => setConfirmingCli("regenerate")}>
+                                    Regenerate
+                                </button>
+                                <button
+                                    type="button"
+                                    className="btn btn-quiet btn-quiet-danger"
+                                    onClick={() => setConfirmingCli("revoke")}
+                                >
+                                    Revoke
+                                </button>
+                            </div>
+                        ) : (
+                            <button type="button" className="btn btn-quiet" onClick={createCliToken}>
+                                Create token
+                            </button>
+                        )}
+                    </section>
                 </div>
             </div>
 
 
+
+            {confirmingCli && (
+                <ConfirmDialog
+                    title={confirmingCli === "revoke" ? "Revoke the CLI token?" : "Make a new CLI token?"}
+                    message="The current token stops working at once."
+                    confirmLabel={confirmingCli === "revoke" ? "Revoke" : "Regenerate"}
+                    onConfirm={() => {
+                        setConfirmingCli(null);
+                        void (confirmingCli === "revoke" ? revokeCliToken() : createCliToken());
+                    }}
+                    onCancel={() => setConfirmingCli(null)}
+                />
+            )}
 
             {confirmingPushOff && (
                 <ConfirmDialog

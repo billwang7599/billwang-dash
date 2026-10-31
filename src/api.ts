@@ -188,6 +188,12 @@ export const api = {
             body: JSON.stringify({ limit }),
         }),
 
+    cliTokenStatus: () => request<{ exists: boolean }>("/api/cli-token"),
+
+    createCliToken: () => request<{ token: string }>("/api/cli-token", { method: "POST" }),
+
+    revokeCliToken: () => request<void>("/api/cli-token", { method: "DELETE" }),
+
     setProjectColor: (id: string, color: ProjectColor) =>
         request<{ project: Project }>(`/api/projects/${id}/color`, {
             method: "PATCH",

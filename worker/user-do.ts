@@ -136,6 +136,34 @@ export class UserDO extends DurableObject<Env> {
         };
     }
 
+    // ---- CLI token ---------------------------------------------------------
+
+    /** `<DO id>.<secret>`, shown once: only the secret's hash is kept, replacing any earlier token. */
+    async createCliToken(): Promise<string> {
+        const bytes = crypto.getRandomValues(new Uint8Array(32));
+        const secret = btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+        this.sql.exec("UPDATE profile SET cli_token_hash = ? WHERE id = 1", await sha256Hex(secret));
+        return `${this.ctx.id.toString()}.${secret}`;
+    }
+
+    async revokeCliToken(): Promise<void> {
+        this.sql.exec("UPDATE profile SET cli_token_hash = NULL WHERE id = 1");
+    }
+
+    async hasCliToken(): Promise<boolean> {
+        return this.cliTokenHash() !== null;
+    }
+
+    async checkCliToken(secret: string): Promise<boolean> {
+        const stored = this.cliTokenHash();
+        // Comparing digests, so a timing difference says nothing about the secret.
+        return stored !== null && secret !== "" && (await sha256Hex(secret)) === stored;
+    }
+
+    private cliTokenHash(): string | null {
+        return this.sql.exec<{ h: string | null }>("SELECT cli_token_hash AS h FROM profile WHERE id = 1").one().h;
+    }
+
     // ---- Projects ----------------------------------------------------------
 
     async listProjects(): Promise<Project[]> {
@@ -478,4 +506,9 @@ function parseIdList(json: string): string[] {
     } catch {
         return [];
     }
+}
+
+async function sha256Hex(text: string): Promise<string> {
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+    return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }

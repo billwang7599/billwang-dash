@@ -87,6 +87,8 @@ Then set the two values from the Worker's **Access tab → Application values**:
 | `/` | not covered | Public landing page |
 | `/app*` | covered | Login screen, then the SPA |
 | `/api*` | covered | JSON API |
+| `/s/*` | not covered | Share links; the token in the URL is the credential |
+| `/cli/*` | not covered | The `dash` CLI; a bearer token is the credential |
 
 ### Share links
 
@@ -98,6 +100,14 @@ identity, and `projects.share_token` is the credential. It reaches one project:
 open tasks, add (up to `share_limit` a day, plain text) and tick off. Rotating
 overwrites the token; turning sharing off clears it. Responses are `no-store` with
 `Referrer-Policy: no-referrer`, since the URL is the secret.
+
+### CLI token
+
+`/cli/*` is the API behind the `dash` CLI (see [CLI for agents](#cli-for-agents)). Like `/s/*` it is **outside**
+Access: the request carries `Authorization: Bearer <DO id>.<secret>`, the DO id routes it the same way as a share
+link, and the secret is checked against `profile.cli_token_hash` (SHA-256; the token itself is never stored). Each
+user has at most one, made, replaced or revoked in Settings through `/api/cli-token`. A missing, wrong or revoked
+token and a malformed DO id all get the same 401.
 
 ### Admin routes
 
@@ -292,12 +302,25 @@ Google, and calendar timezone placement.
 
 ---
 
-## Todo
+## CLI for agents
 
-- [ ] **Expose the task list over MCP** (maybe a Todoist-compatible export), so
-  agents can read and act on a person's todos on their behalf. Open questions:
-  how agents authenticate given Access sits in front of `/api*`, and which
-  operations are safe to hand over (read vs. add vs. complete).
+`cli/dash.mjs` (no dependencies, Node 18+) lets an AI agent use the dashboard as a shell command instead of an MCP
+server, so its tool list only enters the agent's context when it runs `dash help`. Install with `npm link` (or put
+the file on your `PATH`), make a token in Settings, then:
+
+```sh
+dash login <token>                          # saved to ~/.config/dash/config.json, mode 600
+dash help                                   # one line per tool
+dash help quick_add_task                    # full description and JSON Schema args
+dash quick_add_task '{"text":"Call Bob tomorrow 3pm #Work p1"}'
+dash get_overview
+```
+
+It wraps the assistant's tools in `worker/ai/tools.ts` (`GET /cli/tools`, `POST /cli/tools/:name`), so a new tool
+shows up in the CLI without further work. `CLI_EXCLUDED` keeps out `delete_event`, the only permanent delete, and
+`show_tasks`, which only draws chat cards. Writes run at once, with no approval step. `DASH_URL` overrides the
+default `https://dash.billwang.dev` and `DASH_TOKEN` the saved token. `skills/dash/SKILL.md` is a skill that tells
+an agent how to use it.
 
 ---
 

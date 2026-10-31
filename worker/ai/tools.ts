@@ -13,9 +13,7 @@ import type { UserDO } from "../user-do.ts";
  * trash rules, and Google sync all apply. Nothing here touches SQL, which keeps
  * the Google tokens in the DO out of the model's reach.
  *
- * Kept free of anything chat-specific so an MCP server can expose the same list,
- * except show_tasks: it only exists to draw cards in the app's chat, so an MCP
- * server should leave it out.
+ * Kept free of anything chat-specific so the CLI (/cli/*) can expose the same list.
  */
 
 export type Stub = DurableObjectStub<UserDO>;
@@ -28,7 +26,7 @@ export interface ToolContext {
 export interface Tool {
     name: string;
     description: string;
-    /** Writes wait for the user to approve them; reads run straight away. */
+    /** In the app's chat, writes wait for the user to approve them; the CLI runs them straight away. */
     kind: "read" | "write";
     args: z.ZodType;
     run(ctx: ToolContext, args: unknown): Promise<unknown>;
@@ -359,3 +357,11 @@ export const tools: Tool[] = [
 ];
 
 export const toolsByName = new Map(tools.map((t) => [t.name, t]));
+
+/** delete_event is the only permanent delete; show_tasks only draws cards in the app's chat. */
+export const CLI_EXCLUDED = new Set(["delete_event", SHOW_TASKS]);
+
+export function argsSchema(tool: Tool) {
+    const { $schema: _, ...schema } = z.toJSONSchema(tool.args, { io: "input", unrepresentable: "any" });
+    return schema;
+}
