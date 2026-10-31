@@ -559,4 +559,9 @@ export const migrations: Migration[] = [
         version: 27,
         sql: `ALTER TABLE google_account ADD COLUMN sync_error TEXT;`,
     },
+    {
+        // The CLI's bearer token, as a SHA-256 hex digest; null while there is none.
+        version: 28,
+        sql: `ALTER TABLE profile ADD COLUMN cli_token_hash TEXT;`,
+    },
 ];

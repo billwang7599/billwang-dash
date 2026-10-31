@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "dash": "cli/dash.mjs"
+  },
   "scripts": {
     "dev": "vite",
     "build": "npm run typecheck && vite build",

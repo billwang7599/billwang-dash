@@ -1,6 +1,7 @@
 import { Hono, type Context } from "hono";
 import type { z } from "zod";
 import { runAgent, type Model } from "./ai/agent.ts";
+import { argsSchema, CLI_EXCLUDED, type Stub, tools } from "./ai/tools.ts";
 import { getUser, type AuthedUser } from "./auth.ts";
 import type { ShareInfo } from "../shared/share.ts";
 import { UserDO } from "./user-do.ts";
@@ -11,7 +12,7 @@ import { ServiceError } from "./service.ts";
 
 export { UserDO };
 
-type Ctx = { Bindings: Env; Variables: { user: AuthedUser } };
+type Ctx = { Bindings: Env; Variables: { user: AuthedUser; cliStub: Stub } };
 
 const app = new Hono<Ctx>();
 
@@ -232,6 +233,15 @@ app.patch("/api/projects/:id/share", async (c) => {
     return shareResponse(c, await stub(c).setShareLimit(c.req.param("id"), limit));
 });
 
+app.get("/api/cli-token", async (c) => c.json({ exists: await stub(c).hasCliToken() }));
+
+app.post("/api/cli-token", async (c) => c.json({ token: await stub(c).createCliToken() }, 201));
+
+app.delete("/api/cli-token", async (c) => {
+    await stub(c).revokeCliToken();
+    return c.body(null, 204);
+});
+
 app.patch("/api/preferences", async (c) =>
     c.json({
         preferences: await service.setPreferences(
@@ -312,16 +322,18 @@ app.use("/s/*", async (c, next) => {
     c.header("X-Robots-Tag", "noindex");
 });
 
-/** `<DO id>.<token>` to the owner's stub and the token; null when it is malformed. */
-function sharedStub(c: Context<Ctx>) {
-    const match = /^([0-9a-f]{64})\.([0-9a-f-]{36})$/.exec(c.req.param("ref") ?? "");
+/** `<DO id>.<secret>` (a share link or CLI token) to the owner's stub and the secret; null when malformed. */
+function refStub(c: Context<Ctx>, ref: string) {
+    const match = /^([0-9a-f]{64})\.([\w-]{1,64})$/.exec(ref);
     if (!match) return null;
     try {
-        return { stub: c.env.USER_DO.get(c.env.USER_DO.idFromString(match[1])), token: match[2] };
+        return { stub: c.env.USER_DO.get(c.env.USER_DO.idFromString(match[1])), secret: match[2] };
     } catch {
         return null;
     }
 }
+
+const sharedStub = (c: Context<Ctx>) => refStub(c, c.req.param("ref") ?? "");
 
 const gone = new ServiceError(404, "This link is no longer active");
 
@@ -333,7 +345,7 @@ app.get("/s/:ref", (c) => {
 
 app.get("/s/:ref/data", async (c) => {
     const shared = sharedStub(c);
-    const view = shared && (await shared.stub.sharedView(shared.token));
+    const view = shared && (await shared.stub.sharedView(shared.secret));
     if (!view) throw gone;
     return c.json(view);
 });
@@ -342,7 +354,7 @@ app.post("/s/:ref/tasks", async (c) => {
     const shared = sharedStub(c);
     if (!shared) throw gone;
     const { text } = await body(c, schemas.sharedTaskBody);
-    const task = await shared.stub.addShared(shared.token, text);
+    const task = await shared.stub.addShared(shared.secret, text);
     if (!task) throw gone;
     if (task === "limit") throw new ServiceError(429, "Daily limit reached. Try again tomorrow.");
     return c.json({ task: { id: task.id, content: task.content, viaLink: true, completed: false } }, 201);
@@ -351,8 +363,35 @@ app.post("/s/:ref/tasks", async (c) => {
 app.post("/s/:ref/tasks/:id/complete", async (c) => {
     const shared = sharedStub(c);
     if (!shared) throw gone;
-    if (!(await shared.stub.completeShared(shared.token, c.req.param("id")))) throw gone;
+    if (!(await shared.stub.completeShared(shared.secret, c.req.param("id")))) throw gone;
     return c.body(null, 204);
+});
+
+// ---- CLI -------------------------------------------------------------------
+
+// Outside Access like /s/*: the bearer token is the credential. Every failure looks the same.
+app.use("/cli/*", async (c, next) => {
+    const ref = /^Bearer (\S+)$/.exec(c.req.header("authorization") ?? "")?.[1];
+    const target = ref ? refStub(c, ref) : null;
+    if (!target || !(await target.stub.checkCliToken(target.secret))) return c.json({ error: "unauthorized" }, 401);
+    c.set("cliStub", target.stub);
+    await next();
+});
+
+const cliTools = tools.filter((t) => !CLI_EXCLUDED.has(t.name));
+
+app.get("/cli/tools", (c) =>
+    c.json(cliTools.map((t) => ({ name: t.name, description: t.description, kind: t.kind, args: argsSchema(t) }))),
+);
+
+// Writes run straight away: holding the token is the approval the in-app chat asks for.
+app.post("/cli/tools/:name", async (c) => {
+    const tool = cliTools.find((t) => t.name === c.req.param("name"));
+    if (!tool) throw new ServiceError(404, `no tool named ${c.req.param("name")}`);
+    const args = await body(c, tool.args);
+    const owner = c.get("cliStub");
+    const { timeZone } = await owner.getPreferences();
+    return c.json((await tool.run({ stub: owner, timeZone }, args)) ?? "done");
 });
 
 // ---- Documents -----------------------------------------------------------
