@@ -1,10 +1,7 @@
 import { useMemo, useState } from "react";
 import type { AppState } from "../api.ts";
 import type { View } from "../App.tsx";
-import { HORIZONS, isDone, progress } from "../../shared/goals.ts";
-import type { HabitSummary } from "../../shared/habits.ts";
 import type { Project } from "../../shared/types.ts";
-import { goalColors } from "../projectColors.ts";
 import { projectDeleteMessage } from "../projectDelete.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 
@@ -30,8 +27,6 @@ interface Props {
     colors: Map<string, string>;
     onTogglePin: (id: string, pinned: boolean) => void;
     onDeleteProject: (id: string) => void;
-    /** Check today off (or undo it) from the sidebar. */
-    onCheckHabit: (habit: HabitSummary) => void;
     /** Opens the search box (also ⌘K, handled by App). */
     onSearch: () => void;
     /** The assistant is admin-only. */
@@ -39,9 +34,11 @@ interface Props {
 }
 
 /** The fixed views. Order is fixed too -- not user-reorderable. */
-const NAV_VIEWS: { key: "inbox" | "calendar" | "assistant"; label: string; path: string }[] = [
+const NAV_VIEWS: { key: "inbox" | "calendar" | "goals" | "habits" | "assistant"; label: string; path: string }[] = [
     { key: "inbox", label: "Inbox", path: "/app" },
     { key: "calendar", label: "Calendar", path: "/app/calendar" },
+    { key: "goals", label: "Goals", path: "/app/goals" },
+    { key: "habits", label: "Habits", path: "/app/habits" },
     { key: "assistant", label: "Assistant", path: "/app/assistant" },
 ];
 
@@ -54,7 +51,6 @@ export function Sidebar({
     colors,
     onTogglePin,
     onDeleteProject,
-    onCheckHabit,
     onSearch,
     showAssistant,
 }: Props) {
@@ -66,17 +62,6 @@ export function Sidebar({
     const [projectSort, setProjectSort] = useState<ProjectSort>("alphabetical");
 
     const [pendingDelete, setPendingDelete] = useState<Project | null>(null);
-
-    /** Open goals, short term first; within a horizon the server's deadline order holds. */
-    const openGoals = useMemo(
-        () =>
-            state.goals
-                .filter((g) => !isDone(g))
-                .sort((a, b) => HORIZONS.indexOf(a.horizon) - HORIZONS.indexOf(b.horizon)),
-        [state.goals],
-    );
-
-    const goalColor = useMemo(() => goalColors(state.goals), [state.goals]);
 
     const { pinned, unpinned } = useMemo(() => {
         const others = state.projects.filter((p) => !p.isInbox);
@@ -200,96 +185,6 @@ export function Sidebar({
                         </>
                     )}
 
-                    {!collapsed && (
-                        <>
-                            <div className="nav-head-row">
-                                <button
-                                    className={`nav-head nav-head-link${view.name === "goals" ? " is-active" : ""}`}
-                                    onClick={() => go("/app/goals")}
-                                >
-                                    Goals
-                                </button>
-                            </div>
-                            <nav>
-                                {openGoals.map((goal) => (
-                                    <button
-                                        key={goal.id}
-                                        className="nav-item goal-nav"
-                                        onClick={() => go("/app/goals")}
-                                        title={
-                                            goal.target === null
-                                                ? undefined
-                                                : `${goal.current} / ${goal.target}${goal.unit ? ` ${goal.unit}` : ""}`
-                                        }
-                                    >
-                                        <span className="nav-label goal-nav-title">
-                                            <span
-                                                className="nav-swatch"
-                                                style={{ background: goalColor.get(goal.id) }}
-                                                aria-hidden="true"
-                                            />
-                                            {goal.title}
-                                        </span>
-                                        {goal.target !== null && (
-                                            <span className="goal-bar goal-bar-thin" aria-hidden="true">
-                                                <span style={{ width: `${progress(goal) * 100}%` }} />
-                                            </span>
-                                        )}
-                                    </button>
-                                ))}
-                                {openGoals.length === 0 && (
-                                    <p className="habit-empty">Set something specific to aim for.</p>
-                                )}
-                            </nav>
-                        </>
-                    )}
-
-                    {!collapsed && (
-                        <>
-                            <div className="nav-head-row">
-                                <button
-                                    className={`nav-head nav-head-link${view.name === "habits" ? " is-active" : ""}`}
-                                    onClick={() => go("/app/habits")}
-                                >
-                                    Habits
-                                </button>
-                            </div>
-                            <nav>
-                                {state.habits.map((habit) => (
-                                    <div className="habit-row" key={habit.id}>
-                                        <button
-                                            className={`habit-check${habit.today ? ` is-${habit.today}` : ""}`}
-                                            onClick={() => onCheckHabit(habit)}
-                                            aria-label={`${habit.today === "done" ? "Undo" : "Check off"} ${habit.name} today`}
-                                            aria-pressed={habit.today === "done"}
-                                            title={habit.today === "done" ? "Done today. Click to undo" : "Check off today"}
-                                        >
-                                            <svg viewBox="0 0 16 16" width="10" height="10" aria-hidden="true">
-                                                <path
-                                                    d="M2.5 8.5l3.5 3.5 7.5-8"
-                                                    fill="none"
-                                                    stroke="currentColor"
-                                                    strokeWidth="2.4"
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                />
-                                            </svg>
-                                        </button>
-                                        <NavItem
-                                            label={habit.name}
-                                            count={habit.stats.streak}
-                                            active={view.name === "habit" && view.id === habit.id}
-                                            collapsed={false}
-                                            onClick={() => go(`/app/habit/${habit.id}`)}
-                                        />
-                                    </div>
-                                ))}
-                                {state.habits.length === 0 && (
-                                    <p className="habit-empty">Track something you want to do regularly.</p>
-                                )}
-                            </nav>
-                        </>
-                    )}
                 </div>
             </aside>
 

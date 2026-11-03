@@ -14,7 +14,6 @@ import { GlobalSearch } from "./components/GlobalSearch.tsx";
 import { SearchField } from "./components/SearchField.tsx";
 import { GoalsView } from "./components/GoalsView.tsx";
 import { HabitModal } from "./components/HabitModal.tsx";
-import { HabitView } from "./components/HabitView.tsx";
 import { HabitsView } from "./components/HabitsView.tsx";
 import { ImportModal } from "./components/ImportModal.tsx";
 import { InboxFilter, type InboxHidden } from "./components/InboxFilter.tsx";
@@ -26,7 +25,7 @@ import { Trash } from "./components/Trash.tsx";
 import { TaskList } from "./components/TaskList.tsx";
 import { Hero, heroDate } from "./components/Hero.tsx";
 import { matchFields, type SearchMatch } from "../shared/search.ts";
-import { cardColor, projectColors } from "./projectColors.ts";
+import { projectColors } from "./projectColors.ts";
 import { ShareModal } from "./components/ShareModal.tsx";
 import { TaskModal } from "./components/TaskModal.tsx";
 import { WeekCalendar, type CalendarJump } from "./components/WeekCalendar.tsx";
@@ -41,12 +40,11 @@ export type View =
     | { name: "settings" }
     | { name: "trash" }
     | { name: "goals" }
-    | { name: "habits" }
+    | { name: "habits"; id?: string }
     /** With a project id, only that project's completed tasks. */
     | { name: "completed"; projectId?: string }
     | { name: "projects" }
     | { name: "assistant" }
-    | { name: "habit"; id: string }
     | { name: "project"; id: string };
 
 function viewFromPath(pathname: string): View {
@@ -60,10 +58,12 @@ function viewFromPath(pathname: string): View {
     if (rest === "trash") return { name: "trash" };
     if (rest === "goals") return { name: "goals" };
     if (rest === "habits") return { name: "habits" };
+    // /app/habit/:id is the old single-habit page.
+    const habit = rest.match(/^habits?\/([^/]+)$/);
+    if (habit) return { name: "habits", id: habit[1] };
     if (rest === "completed") return { name: "completed" };
     if (rest === "projects") return { name: "projects" };
     if (rest === "assistant") return { name: "assistant" };
-    if (rest.startsWith("habit/")) return { name: "habit", id: rest.slice(6) };
     // Old bookmarks to /app or /app/upcoming land here too; Inbox is the home view.
     return { name: "inbox" };
 }
@@ -87,8 +87,6 @@ export function App() {
     const [newHabit, setNewHabit] = useState(false);
     // The task just ticked off, for the few seconds the Undo pop-up shows.
     const [justCompleted, setJustCompleted] = useState<Task | null>(null);
-    // Bumped when a habit changes outside the habit page, so its month reloads.
-    const [habitRevision, setHabitRevision] = useState(0);
     const [pendingTaskDelete, setPendingTaskDelete] = useState<Task | null>(null);
     // Set when several lines are pasted into the quick-add bar; opens the import modal.
     const [importText, setImportText] = useState<string | null>(null);
@@ -140,6 +138,8 @@ export function App() {
 
     const navigate = useCallback((path: string) => {
         setProjectQuery("");
+        // A view gets a jump only from the search that opened it, which sets one after navigating.
+        setJump(null);
         window.history.pushState({}, "", path);
         withTransition(() => setView(viewFromPath(path)));
     }, []);
@@ -327,21 +327,6 @@ export function App() {
         setState((prev) => (prev ? { ...prev, habits: prev.habits.filter((h) => h.id !== id) } : prev));
     }, []);
 
-    const checkHabitToday = useCallback(
-        (habit: HabitSummary) =>
-            run(async () => {
-                if (!state) return;
-                const { habit: updated } = await api.setCheckin(
-                    habit.id,
-                    todayKey(state.preferences.timeZone),
-                    habit.today === "done" ? null : "done",
-                );
-                applyHabit(updated);
-                setHabitRevision((r) => r + 1);
-            })(),
-        [run, state, applyHabit],
-    );
-
     const createHabit = useCallback(
         async (input: HabitInput) => {
             const draft: HabitSummary = {
@@ -359,7 +344,7 @@ export function App() {
                 ({ habit }) => {
                     removeHabit(draft.id);
                     applyHabit(habit);
-                    navigate(`/app/habit/${habit.id}`);
+                    navigate(`/app/habits/${habit.id}`);
                 },
                 () => removeHabit(draft.id),
             );
@@ -374,10 +359,7 @@ export function App() {
             applyHabit({ ...before, ...input });
             optimistically(
                 () => api.updateHabit(id, input),
-                ({ habit }) => {
-                    applyHabit(habit);
-                    setHabitRevision((r) => r + 1);
-                },
+                ({ habit }) => applyHabit(habit),
                 () => applyHabit(before),
             );
         },
@@ -387,7 +369,7 @@ export function App() {
     const deleteHabit = useCallback(
         (id: string) => {
             removeHabit(id);
-            navigate("/app");
+            navigate("/app/habits");
             optimistically(() => api.deleteHabit(id), () => {}, resync);
         },
         [removeHabit, navigate, optimistically, resync],
@@ -658,7 +640,6 @@ export function App() {
                     colors={colors}
                     onTogglePin={togglePinProject}
                     onDeleteProject={deleteProject}
-                    onCheckHabit={checkHabitToday}
                     onSearch={() => setSearchOpen(true)}
                     showAssistant={isAdmin}
                 />
@@ -682,8 +663,9 @@ export function App() {
                     </p>
                 )}
 
-                {/* Keyed on the view so each navigation mounts it afresh and replays its entrance. */}
-                <Fragment key={JSON.stringify(view)}>
+                {/* Keyed on the view so each navigation mounts it afresh and replays its entrance;
+                    picking a habit only changes the selection, so it keeps its page. */}
+                <Fragment key={view.name === "habits" ? "habits" : JSON.stringify(view)}>
                     {view.name === "settings" ? (
                         <Settings
                             preferences={state.preferences}
@@ -691,25 +673,6 @@ export function App() {
                             onPreferencesChange={setPreferences}
                             onOpenTrash={() => navigate("/app/trash")}
                         />
-                    ) : view.name === "habit" ? (
-                        (() => {
-                            const habit = state.habits.find((h) => h.id === view.id);
-                            return habit ? (
-                                <HabitView
-                                    habit={habit}
-                                    color={cardColor(state.habits.indexOf(habit))}
-                                    onBack={() => navigate("/app/habits")}
-                                    today={todayKey(state.preferences.timeZone)}
-                                    revision={habitRevision}
-                                    onChanged={applyHabit}
-                                    onUpdate={updateHabit}
-                                    onDelete={deleteHabit}
-                                    jump={jump}
-                                />
-                            ) : (
-                                <p className="habit-empty">That habit doesn't exist any more.</p>
-                            );
-                        })()
                     ) : view.name === "projects" ? (
                         <ProjectsView
                             projects={state.projects}
@@ -771,10 +734,16 @@ export function App() {
                         <HabitsView
                             habits={state.habits}
                             today={today}
-                            revision={habitRevision}
+                            selectedId={view.id}
+                            onSelect={(id) => {
+                                window.history.replaceState({}, "", `/app/habits/${id}`);
+                                setView({ name: "habits", id });
+                            }}
                             onChanged={applyHabit}
                             onNew={() => setNewHabit(true)}
-                            onOpen={(id) => navigate(`/app/habit/${id}`)}
+                            onUpdate={updateHabit}
+                            onDelete={deleteHabit}
+                            jump={jump}
                         />
                     ) : view.name === "goals" ? (
                         <GoalsView
@@ -948,12 +917,12 @@ export function App() {
                     onOpenProject={(p) => navigate(`/app/project/${p.id}`)}
                     onOpenTask={setEditing}
                     onOpenEvent={(event) => {
-                        setJump({ day: event.startDate, event });
                         navigate("/app/calendar");
+                        setJump({ day: event.startDate, event });
                     }}
                     onOpenHabit={(id, day) => {
-                        setJump(day ? { day } : null);
-                        navigate(`/app/habit/${id}`);
+                        navigate(`/app/habits/${id}`);
+                        if (day) setJump({ day });
                     }}
                 />
             )}

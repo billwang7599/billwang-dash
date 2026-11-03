@@ -12,7 +12,7 @@ import type {
 import type { Approval, ChatMessage, ChatReply } from "../shared/chat.ts";
 import type { SearchResults } from "../shared/search.ts";
 import type { Goal, GoalInput } from "../shared/goals.ts";
-import type { DayStatus, HabitDay, HabitDetail, HabitInput, HabitSummary } from "../shared/habits.ts";
+import type { DayStatus, HabitDay, HabitInput, HabitSummary } from "../shared/habits.ts";
 
 export type { Preferences };
 
@@ -114,9 +114,6 @@ export const api = {
     /** Every habit's check-ins for one month, keyed by habit id. */
     getHabitsMonth: (month?: string) =>
         request<{ month: string; days: Record<string, HabitDay[]> }>(`/api/habits${month ? `?month=${month}` : ""}`),
-
-    getHabit: (id: string, month?: string) =>
-        request<HabitDetail>(`/api/habits/${id}${month ? `?month=${month}` : ""}`),
 
     createHabit: (input: HabitInput) =>
         request<{ habit: HabitSummary }>("/api/habits", { method: "POST", body: JSON.stringify(input) }),

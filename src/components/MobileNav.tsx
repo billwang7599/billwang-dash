@@ -12,13 +12,13 @@ interface Props {
     showAssistant: boolean;
 }
 
-/** One entry per feature; on a phone the menu doesn't list each project, goal or habit. */
+/** One entry per feature; on a phone the menu doesn't list each project. */
 const ITEMS: { label: string; path: string; active: (v: View) => boolean }[] = [
     { label: "Inbox", path: "/app", active: (v) => v.name === "inbox" || v.name === "completed" },
     { label: "Calendar", path: "/app/calendar", active: (v) => v.name === "calendar" },
     { label: "Projects", path: "/app/projects", active: (v) => v.name === "projects" || v.name === "project" },
     { label: "Goals", path: "/app/goals", active: (v) => v.name === "goals" },
-    { label: "Habits", path: "/app/habits", active: (v) => v.name === "habits" || v.name === "habit" },
+    { label: "Habits", path: "/app/habits", active: (v) => v.name === "habits" },
     { label: "Assistant", path: "/app/assistant", active: (v) => v.name === "assistant" },
     { label: "Settings", path: "/app/settings", active: (v) => v.name === "settings" || v.name === "trash" },
 ];
