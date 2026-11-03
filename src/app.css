@@ -1627,11 +1627,6 @@ html:has(.mnav.is-open) { overflow: hidden; }
 .setup-title .dot { color: var(--accent); }
 .setup-lede { margin: 0 0 1.1rem; font-size: 0.92rem; color: var(--ink-2); }
 
-/* Two names side by side, Save on its own row: the panel is half the page now. */
-.name-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 0.8rem; margin-bottom: 0.4rem; }
-.name-fields .field input { width: 100%; min-width: 0; }
-.name-fields .btn { grid-column: 1 / -1; justify-self: start; margin-bottom: 1.1rem; }
-
 .settings-wordmark {
     display: inline-block;
     margin: 0 0 1.6rem;
@@ -1646,7 +1641,6 @@ html:has(.mnav.is-open) { overflow: hidden; }
 }
 .settings-wordmark .dot { color: var(--c-terra); }
 
-.settings-signout { display: inline-block; margin-top: 1rem; text-decoration: none; }
 /* A back link at the start of the bar; anything after it sits on the right. */
 .view-bar.is-start .back-link { margin-right: auto; }
 .back-link { border: 0; background: none; padding: 0; font: inherit; font-size: 0.88rem; color: var(--ink-2); cursor: pointer; }
@@ -1936,12 +1930,8 @@ html:has(.mnav.is-open) { overflow: hidden; }
 
 /* ---- Settings ----------------------------------------------------------- */
 
-.settings { padding-top: 1.5rem; }
+.settings { padding-top: 1.5rem; max-width: 42.5rem; }
 .settings .hero-kicker { margin-bottom: 0.4rem; }
-.settings-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.1rem; align-items: start; }
-.panel-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-.panel-row h2 { margin-bottom: 0.3rem; }
-.panel-row .panel-note { margin: 0; }
 
 .panel {
     background: var(--card);
@@ -1954,15 +1944,43 @@ html:has(.mnav.is-open) { overflow: hidden; }
     font-weight: 500;
     font-size: 1.45rem;
     letter-spacing: -0.04em;
-    margin: 0 0 0.9rem;
+    margin: 0 0 0.5rem;
 }
 .panel-note {
     font-size: 0.85rem;
     color: var(--ink-2);
     line-height: 1.5;
-    margin: -0.4rem 0 1rem;
+    margin: 0 0 0.4rem;
     text-wrap: pretty;
 }
+.panel > .banner { margin: 0.2rem 0 0.6rem; }
+
+.set-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem 1.2rem;
+    padding: 0.8rem 0;
+}
+.set-row + .set-row { border-top: 1px solid var(--rule); }
+.set-row:last-child { padding-bottom: 0; }
+.set-row.is-check { cursor: pointer; }
+.set-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+.set-row-label {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    overflow-wrap: anywhere;
+}
+.set-row-hint { font-size: 0.78rem; color: var(--ink-3); }
+.set-row-control { display: flex; align-items: center; gap: 0.5rem; flex: none; }
+.set-row-control .tz-select,
+.set-row-control select { width: 16rem; }
+.set-name input { width: 8rem; min-width: 0; }
+.set-value { font-size: 0.88rem; color: var(--ink-2); }
+.set-reveal .set-row-hint { display: block; margin-top: 0.5rem; }
 
 .banner {
     padding: 0.7rem 1rem;
@@ -2027,49 +2045,7 @@ html:has(.mnav.is-open) { overflow: hidden; }
 }
 .tz-none { padding: 0.5rem 0.55rem; font-size: 0.86rem; color: var(--ink-3); }
 
-.kv { display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 1.2rem; margin: 0; font-size: 0.88rem; }
-.kv dt { color: var(--ink-3); }
-.kv dd { margin: 0; }
-
-/* The one colour card in Settings: sage while the account is connected. */
-.connected {
-    display: flex;
-    align-items: center;
-    gap: 0.7rem;
-    padding: 0.8rem 0.9rem;
-    background: var(--c-sage);
-    border-radius: var(--r-md);
-    margin-bottom: 1rem;
-}
-.connected > div { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.connected strong { font-size: 0.9rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.connected-sub { font-size: 0.75rem; color: rgb(0 0 0 / 0.6); }
-.connected .btn-quiet { background: rgb(255 255 255 / 0.4); border-color: transparent; color: var(--ink); }
-.connected .dot-ok { background: var(--ink); }
-.sync-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
-.sync-row .panel-note { margin: 0; }
-.dot-ok { width: 8px; height: 8px; border-radius: 50%; background: var(--sage); flex: none; }
-
-.callist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.1rem; }
-.callist label {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    padding: 0.45rem 0.4rem;
-    border-radius: var(--r-sm);
-    cursor: pointer;
-    font-size: 0.88rem;
-}
-.callist label:hover { background: var(--paper-2); }
 .swatch { width: 10px; height: 10px; border-radius: 3px; flex: none; background: var(--sage); }
-.push { margin: 1rem 0 0.4rem; padding: 0.8rem 0.9rem; border: 1px solid var(--rule); border-radius: var(--r-md); }
-.push-toggle { display: flex; align-items: flex-start; gap: 0.65rem; cursor: pointer; }
-.push-toggle input { margin-top: 0.2rem; }
-.push-toggle strong { display: block; font-size: 0.9rem; font-weight: 500; }
-.push-toggle small { display: block; margin-top: 0.15rem; font-size: 0.78rem; color: var(--ink-3); }
-.push-grant p { margin: 0 0 0.6rem; font-size: 0.84rem; color: var(--ink-2); }
-.push-error { margin: 0.6rem 0 0; font-size: 0.82rem; color: var(--accent); }
-.cal-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tag {
     font-family: var(--mono);
     font-size: 0.6rem;
@@ -2105,7 +2081,9 @@ html:has(.mnav.is-open) { overflow: hidden; }
 .field { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 1.1rem; }
 .field > span { font-size: 0.84rem; font-weight: 500; }
 .field input,
-.field select {
+.field select,
+.set-row-control input:not([type="checkbox"]),
+.set-row-control select {
     font: inherit;
     font-size: 0.88rem;
     padding: 0.45rem 0.6rem;
@@ -2115,7 +2093,9 @@ html:has(.mnav.is-open) { overflow: hidden; }
     color: var(--ink);
 }
 .field input:focus,
-.field select:focus { outline: none; border-color: var(--ink-3); }
+.field select:focus,
+.set-row-control input:focus,
+.set-row-control select:focus { outline: none; border-color: var(--ink-3); }
 .field small { font-size: 0.75rem; color: var(--ink-3); }
 
 /* ---- Task modal --------------------------------------------------------- */
@@ -2473,6 +2453,8 @@ html:has(.mnav.is-open) { overflow: hidden; }
     .qa-highlight,
     .field input,
     .field select,
+    .set-row-control input,
+    .set-row-control select,
     .modal-grid input,
     .modal-grid select,
     .modal-desc,
@@ -2518,11 +2500,15 @@ html:has(.mnav.is-open) { overflow: hidden; }
     /* One column has room for the whole all-day title. */
     .allday { white-space: normal; font-size: 0.72rem; }
 
-    .name-fields { grid-template-columns: minmax(0, 1fr); }
+    /* Label above control; a checkbox row stays on one line. */
+    .set-row:not(.is-check) { flex-direction: column; align-items: stretch; }
+    .set-row:not(.is-check) .set-row-control { flex-wrap: wrap; }
+    .set-row-control .tz-select,
+    .set-row-control select { width: 100%; }
+    .set-name input { flex: 1; width: auto; }
 
     .trash-row { flex-wrap: wrap; }
-    .habit-page-cols,
-    .settings-cols { grid-template-columns: minmax(0, 1fr); }
+    .habit-page-cols { grid-template-columns: minmax(0, 1fr); }
     .view-bar { flex-wrap: wrap; }
     .search-field { width: 100%; }
 
