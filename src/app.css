@@ -1349,8 +1349,6 @@ html:has(.mnav.is-open) { overflow: hidden; }
 
 /* ---- Habits -------------------------------------------------------------- */
 
-.habit-row { display: flex; align-items: center; gap: 0.15rem; }
-.habit-row .nav-item { flex: 1; min-width: 0; }
 .habit-empty { margin: 0.2rem 0.65rem; font-size: 0.8rem; color: var(--ink-3); }
 
 .habit-check {
@@ -1372,22 +1370,8 @@ html:has(.mnav.is-open) { overflow: hidden; }
 .habit-check.is-done { background: var(--ink); border-color: var(--ink); color: var(--card); }
 .habit-check.is-skipped { border-style: dashed; }
 
-.habit-desc { margin: -0.6rem 0 1.4rem; max-width: 40rem; font-size: 0.92rem; color: var(--ink-2); white-space: pre-wrap; }
-.habit-page-cols { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 1.4rem; align-items: start; }
-
-.habit-stats {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
-    gap: 0.6rem;
-    margin: 0 0 1.4rem;
-}
-.habit-stats > div { padding: 0.8rem 1rem; background: var(--card); border-radius: var(--r-lg); }
-.habit-stats dt { font-size: 0.75rem; color: var(--ink-2); }
-.habit-stats dd { margin: 0.2rem 0 0; font-size: 1.9rem; line-height: 1; letter-spacing: -0.05em; }
-
 .habit-month { padding: 1.1rem 1.25rem; background: var(--card); border-radius: var(--r-lg); }
-.habit-month-head { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.7rem; }
-.habit-month-head h2 { margin: 0; font-size: 1.3rem; font-weight: 500; letter-spacing: -0.03em; }
+.habit-month-head { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.3rem; }
 .habit-step {
     border: 1px solid var(--rule-2);
     background: transparent;
@@ -1442,7 +1426,17 @@ html:has(.mnav.is-open) { overflow: hidden; }
 .habit-note-count.is-full { opacity: 1; font-weight: 600; }
 
 /* All habits: colour cards (tick today, last 7 days) beside the selected habit's month. */
-.habits-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 1.8rem; align-items: start; }
+.habits-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    grid-template-areas: "cards month" "day month";
+    gap: 1.8rem;
+    align-items: start;
+}
+.habits-layout > .stack { grid-area: cards; }
+.habits-layout > .habit-month { grid-area: month; }
+.habits-layout > .habit-day { grid-area: day; }
 .hcard { display: flex; align-items: center; gap: 0.9rem; }
 .hcard-name {
     flex: 1;
@@ -1483,23 +1477,12 @@ html:has(.mnav.is-open) { overflow: hidden; }
 .hcard-tick:hover { color: var(--ink); border-color: var(--ink); }
 .hcard-tick.is-done { background: var(--ink); border-color: var(--ink); color: var(--card); }
 
-.habit-month-name {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    border: 0;
-    background: none;
-    padding: 0;
-    font: inherit;
-    font-size: 1.3rem;
-    font-weight: 500;
-    letter-spacing: -0.03em;
-    color: var(--ink);
-    cursor: pointer;
-}
-.habit-month-name:hover { text-decoration: underline; }
-.habit-month-nav { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: var(--ink-2); }
-.habit-month-stats { display: flex; gap: 1.8rem; margin: 0.2rem 0 1rem; font-size: 0.75rem; color: var(--ink-2); }
+.habit-month-name { display: flex; align-items: center; gap: 0.5rem; min-width: 0; margin: 0; font-size: 1.3rem; font-weight: 500; letter-spacing: -0.03em; }
+.habit-month-actions { display: flex; gap: 0.4rem; }
+.habit-desc { display: grid; gap: 0.3rem; margin: 0 0 1rem; font-size: 0.8rem; color: var(--ink-3); }
+.habit-desc span { font-size: 0.92rem; color: var(--ink-2); white-space: pre-wrap; }
+.habit-month-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.7rem; font-size: 0.95rem; font-weight: 500; }
+.habit-month-stats { display: flex; flex-wrap: wrap; gap: 0.6rem 1.6rem; margin: 0.2rem 0 1rem; font-size: 0.75rem; color: var(--ink-2); }
 .habit-month-stats b { display: block; font-size: 1.9rem; font-weight: 400; line-height: 1; letter-spacing: -0.05em; color: var(--ink); }
 
 .habit-modal { width: min(30rem, 100%); }
@@ -1774,12 +1757,8 @@ html:has(.mnav.is-open) { overflow: hidden; }
 .nav-head-link.is-active { background: var(--ink); color: var(--card); }
 .nav-head-link.is-active::after { color: var(--card); }
 
-.goal-nav { flex-direction: column; align-items: stretch; gap: 0.3rem; }
-.goal-nav-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
 .goal-bar { display: block; height: 6px; border-radius: 100px; background: var(--paper-3); overflow: hidden; }
 .goal-bar > span { display: block; height: 100%; background: var(--ink); border-radius: inherit; transition: width 0.25s var(--ease); }
-.goal-bar-thin { height: 3px; }
 
 /* Short / medium / long stack vertically, and only go side by side once the page
    is wide enough to give each column real room. A container query, so the sidebar
@@ -2492,7 +2471,7 @@ html:has(.mnav.is-open) { overflow: hidden; }
     /* Too narrow for three columns: wrap, with New event pushed right. */
     .cal-bar { display: flex; flex-wrap: wrap; }
     .cal-actions { margin-left: auto; }
-    .habits-layout { grid-template-columns: minmax(0, 1fr); }
+    .habits-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "cards" "month" "day"; }
     /* Too narrow for the name, seven dots and the tick on one line: the name wraps. */
     .hcard-name span { white-space: normal; font-size: 1.2rem; }
     .habit-month-head { flex-wrap: wrap; }
@@ -2508,7 +2487,6 @@ html:has(.mnav.is-open) { overflow: hidden; }
     .set-name input { flex: 1; width: auto; }
 
     .trash-row { flex-wrap: wrap; }
-    .habit-page-cols { grid-template-columns: minmax(0, 1fr); }
     .view-bar { flex-wrap: wrap; }
     .search-field { width: 100%; }
 

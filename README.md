@@ -242,10 +242,11 @@ on a touch screen, where dragging scrolls the grid).
 
 ## Habits
 
-A separate feature from tasks, modelled on TickTick's. Habits live in a sidebar
-section below Projects, each with a one-click check-off for today and its current
-streak. A habit's page has the streak, best streak, total days, a four-week rate,
-and a monthly grid where you can log, skip or clear any past day and add a note.
+A separate feature from tasks, modelled on TickTick's. The Habits page lists every
+habit as a card with its last seven days and a one-click check-off for today. Beside
+them, the selected habit (`/app/habits/<id>`) shows its streak, best streak, total
+days, a four-week rate, and a monthly grid where you pick any past day to log, skip
+or clear it and add a note.
 
 A habit asks for one of three things: **every day**, **N times a week**, or
 **specific weekdays**. The rules are in `shared/habits.ts` and are pure, so
@@ -284,7 +285,7 @@ Google, and calendar timezone placement.
   edited in the editor. Deleting one is permanent.
 - **Habits are yes/no only.** No numeric goals ("8 glasses"), no "every N days"
   interval, no archive, and no reminders. They don't appear on the calendar or sync
-  to Google. The sidebar's Habits section is hidden while the sidebar is collapsed.
+  to Google.
 - **Google events are fetched live on every calendar load**, not cached. Fine
   at personal scale. `syncToken`-based incremental sync is the next step if it
   gets chatty.
