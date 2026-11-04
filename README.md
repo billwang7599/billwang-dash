@@ -293,8 +293,10 @@ Google, and calendar timezone placement.
   one-way; two-way editing would need `syncToken` polling and conflict rules.
 - **Pushed tasks carry no priority, deadline or repeat rule.** A recurring task
   is a single moving event rather than an RRULE series.
-- **No realtime sync.** Two open tabs won't see each other's edits until
-  reload. The DO already supports WebSocket hibernation if that's wanted.
+- **No realtime sync, only polling.** An open tab refetches when it is shown or focused and every 30 seconds
+  while visible (`src/liveRefresh.ts`), so edits from the CLI or another tab can take that long to appear. A
+  refetch that overlaps a write from this tab is dropped so it can't undo an edit on screen. The DO already
+  supports WebSocket hibernation if push is ever wanted.
 - **`until` clauses are unsupported** — `every day until jan 1` parses the
   recurrence and ignores the bound.
 - **Recurrence with an interval and specific weekdays is approximate.**

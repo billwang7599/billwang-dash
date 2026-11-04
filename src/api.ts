@@ -13,6 +13,7 @@ import type { Approval, ChatMessage, ChatReply } from "../shared/chat.ts";
 import type { SearchResults } from "../shared/search.ts";
 import type { Goal, GoalInput } from "../shared/goals.ts";
 import type { DayStatus, HabitDay, HabitInput, HabitSummary } from "../shared/habits.ts";
+import { quietRead, startWrite } from "./liveRefresh.ts";
 
 export type { Preferences };
 
@@ -38,34 +39,46 @@ export interface AppState {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-    const res = await fetch(path, {
-        ...init,
-        headers: { "content-type": "application/json", ...init?.headers },
-    });
+    const writeDone = init?.method && init.method !== "GET" ? startWrite() : null;
+    try {
+        const res = await fetch(path, {
+            ...init,
+            headers: { "content-type": "application/json", ...init?.headers },
+        });
 
-    if (res.status === 204) return undefined as T;
+        if (res.status === 204) return undefined as T;
 
-    // The Access session expired mid-visit. A fresh top-level request is what
-    // re-triggers the login flow; the SPA cannot do it from a fetch.
-    if (res.status === 401) {
-        window.location.reload();
-        throw new Error("Session expired — signing you back in.");
+        // The Access session expired mid-visit. A fresh top-level request is what
+        // re-triggers the login flow; the SPA cannot do it from a fetch.
+        if (res.status === 401) {
+            window.location.reload();
+            throw new Error("Session expired — signing you back in.");
+        }
+
+        if (!res.ok) {
+            // Error bodies are best-effort: a failure from the edge rather than the
+            // Worker may not be JSON at all.
+            const detail = await res
+                .json()
+                .then((b) => (b as { error?: string }).error)
+                .catch(() => null);
+            throw new Error(detail ?? `Request failed (${res.status})`);
+        }
+        return (await res.json()) as T;
+    } finally {
+        writeDone?.();
     }
-
-    if (!res.ok) {
-        // Error bodies are best-effort: a failure from the edge rather than the
-        // Worker may not be JSON at all.
-        const detail = await res
-            .json()
-            .then((b) => (b as { error?: string }).error)
-            .catch(() => null);
-        throw new Error(detail ?? `Request failed (${res.status})`);
-    }
-    return (await res.json()) as T;
 }
 
 export const api = {
     getState: () => request<AppState>("/api/state"),
+
+    // Unlike request(), a 401 here doesn't reload: that could wipe what the user is typing.
+    refreshState: () =>
+        quietRead(async () => {
+            const res = await fetch("/api/state");
+            return res.ok ? ((await res.json()) as AppState) : null;
+        }),
 
     /** `goalId` adds the task as a step toward that goal; `projectId` files it there unless the text names a #project. */
     createTask: (text: string, timeZone: string, goalId?: string, projectId?: string) =>
