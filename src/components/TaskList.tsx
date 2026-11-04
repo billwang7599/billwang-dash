@@ -3,7 +3,7 @@ import { civilFromKey, diffDays } from "../../shared/civil.ts";
 import type { Goal } from "../../shared/goals.ts";
 import type { SearchMatch } from "../../shared/search.ts";
 import type { Project, Task } from "../../shared/types.ts";
-import { formatDateLabel, formatRecurrence, formatTime, priorityName } from "../format.ts";
+import { formatDateLabel, formatDayHeading, formatRecurrence, formatTime, priorityName } from "../format.ts";
 import { playDone } from "../sounds.ts";
 import { Highlight, hasMatchTag, MatchSnippet, MatchTag } from "./MatchTag.tsx";
 
@@ -419,7 +419,7 @@ function cardStrength(key: string, today: string): number {
 function groupLabel(key: string, timeZone: string): string {
     if (key === "none") return "No date";
     if (key === "overdue") return "Overdue";
-    return formatDateLabel(key, timeZone);
+    return formatDayHeading(key, timeZone);
 }
 
 /**
