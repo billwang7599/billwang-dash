@@ -82,11 +82,24 @@ export function formatDateLabel(dateKey: string, timeZone: string): string {
     if (delta < 0) return `${Math.abs(delta)}d overdue`;
     // Within the coming week a weekday name places faster than a date.
     if (delta < 7) return DAYS[utcDate(civil).getUTCDay()];
+    return shortDate(civil, today);
+}
 
-    return utcDate(civil).toLocaleDateString("en-GB", {
+/** "Today — 3 Nov", "Wednesday — 11 Nov". */
+export function formatDayHeading(dateKey: string, timeZone: string): string {
+    const civil = civilFromKey(dateKey);
+    if (!civil) return dateKey;
+
+    const today = civilFromDate(new Date(), timeZone);
+    const delta = diffDays(today, civil);
+    const day = delta === 0 ? "Today" : delta === 1 ? "Tomorrow" : DAYS[utcDate(civil).getUTCDay()];
+    return `${day} — ${shortDate(civil, today)}`;
+}
+
+const shortDate = (civil: { y: number; m: number; d: number }, today: { y: number }) =>
+    utcDate(civil).toLocaleDateString("en-GB", {
         day: "numeric",
         month: "short",
         year: civil.y === today.y ? undefined : "numeric",
         timeZone: "UTC",
     });
-}

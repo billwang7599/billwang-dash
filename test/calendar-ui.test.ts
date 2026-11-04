@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CalendarItem } from "../shared/types.ts";
 import { layoutEvents } from "../src/eventLayout.ts";
-import { allDayDates, formatEventWhen } from "../src/format.ts";
+import { allDayDates, formatDayHeading, formatEventWhen } from "../src/format.ts";
 
 const ev = (id: string, from: string, to: string): CalendarItem => ({
     id,
@@ -97,5 +97,19 @@ describe("allDayDates", () => {
             first: "2026-08-04",
             last: "2026-08-06",
         });
+    });
+});
+
+describe("formatDayHeading", () => {
+    afterEach(() => vi.useRealTimers());
+
+    it("always names the weekday next to the date", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-11-03T15:00:00Z"));
+        expect(formatDayHeading("2026-11-03", "America/Toronto")).toBe("Today — 3 Nov");
+        expect(formatDayHeading("2026-11-04", "America/Toronto")).toBe("Tomorrow — 4 Nov");
+        expect(formatDayHeading("2026-11-08", "America/Toronto")).toBe("Sunday — 8 Nov");
+        expect(formatDayHeading("2026-11-11", "America/Toronto")).toBe("Wednesday — 11 Nov");
+        expect(formatDayHeading("2027-01-04", "America/Toronto")).toBe("Monday — 4 Jan 2027");
     });
 });
