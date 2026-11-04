@@ -30,6 +30,7 @@ import { ShareModal } from "./components/ShareModal.tsx";
 import { TaskModal } from "./components/TaskModal.tsx";
 import { WeekCalendar, type CalendarJump } from "./components/WeekCalendar.tsx";
 import { deviceTimeZone, todayKey } from "./format.ts";
+import { watchForChanges } from "./liveRefresh.ts";
 import { tempId, withDraftTasks, withoutDrafts } from "./optimistic.ts";
 import { splitImportLines } from "../shared/import.ts";
 import { NARROW, useMediaQuery } from "./useMediaQuery.ts";
@@ -104,6 +105,23 @@ export function App() {
     useEffect(() => {
         api.getState().then(setState).catch((e: Error) => setError(e.message));
     }, []);
+
+    const timeZone = state?.preferences.timeZone;
+    // Set on a new day only to re-render: every date on screen reads the clock as it renders.
+    const [, setDay] = useState("");
+    useEffect(() => {
+        if (!timeZone) return;
+        const refresh = () => {
+            api.refreshState()
+                .then((fresh) => {
+                    if (!fresh) return;
+                    setState((prev) => (JSON.stringify(prev) === JSON.stringify(fresh) ? prev : fresh));
+                    setRevision((r) => r + 1);
+                })
+                .catch(() => {}); // the next poll tries again
+        };
+        return watchForChanges({ doc: document, win: window, refresh, today: () => todayKey(timeZone), onNewDay: setDay });
+    }, [timeZone]);
 
     useEffect(() => {
         const onPop = () => withTransition(() => setView(viewFromPath(window.location.pathname)));
@@ -734,6 +752,7 @@ export function App() {
                         <HabitsView
                             habits={state.habits}
                             today={today}
+                            revision={revision}
                             selectedId={view.id}
                             onSelect={(id) => {
                                 window.history.replaceState({}, "", `/app/habits/${id}`);

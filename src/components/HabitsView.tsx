@@ -13,6 +13,7 @@ interface Props {
     habits: HabitSummary[];
     /** Today in the user's zone, YYYY-MM-DD. */
     today: string;
+    revision: number;
     selectedId?: string;
     onSelect: (id: string) => void;
     onChanged: (habit: HabitSummary) => void;
@@ -35,7 +36,7 @@ const shiftMonthKey = (month: string, by: number) => {
     return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}`;
 };
 
-export function HabitsView({ habits, today, selectedId, onSelect, onChanged, onNew, onUpdate, onDelete, jump }: Props) {
+export function HabitsView({ habits, today, revision, selectedId, onSelect, onChanged, onNew, onUpdate, onDelete, jump }: Props) {
     const [month, setMonth] = useState(today.slice(0, 7));
     const [day, setDay] = useState(today);
     const [cache, setCache] = useState<MonthCache>({});
@@ -66,7 +67,7 @@ export function HabitsView({ habits, today, selectedId, onSelect, onChanged, onN
         return () => {
             stale = true;
         };
-    }, [needed]);
+    }, [needed, revision]);
 
     const checkinOf = (habitId: string, key: string) => cache[key.slice(0, 7)]?.[habitId]?.find((d) => d.day === key);
 
