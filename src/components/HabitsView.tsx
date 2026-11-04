@@ -39,6 +39,14 @@ const shiftMonthKey = (month: string, by: number) => {
 export function HabitsView({ habits, today, revision, selectedId, onSelect, onChanged, onNew, onUpdate, onDelete, jump }: Props) {
     const [month, setMonth] = useState(today.slice(0, 7));
     const [day, setDay] = useState(today);
+    const [shownToday, setShownToday] = useState(today);
+    if (shownToday !== today) {
+        setShownToday(today);
+        if (day === shownToday) {
+            setDay(today);
+            if (month === shownToday.slice(0, 7)) setMonth(today.slice(0, 7));
+        }
+    }
     const [cache, setCache] = useState<MonthCache>({});
     const [error, setError] = useState<string | null>(null);
     const [editing, setEditing] = useState(false);

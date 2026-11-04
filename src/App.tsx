@@ -742,6 +742,7 @@ export function App() {
                                     ? (state.completedThisWeekByProject[view.projectId] ?? 0)
                                     : state.completedThisWeek
                             }
+                            revision={revision}
                             onUndo={async (task) => {
                                 await api.uncompleteTask(task.id);
                                 await reload();
@@ -788,7 +789,12 @@ export function App() {
                             onOpenTask={openTask}
                         />
                     ) : view.name === "trash" ? (
-                        <Trash projects={state.projects} onChanged={reload} onBack={() => navigate("/app/settings")} />
+                        <Trash
+                            projects={state.projects}
+                            revision={revision}
+                            onChanged={reload}
+                            onBack={() => navigate("/app/settings")}
+                        />
                     ) : view.name === "calendar" ? (
                         <WeekCalendar
                             timeZone={state.preferences.timeZone}
