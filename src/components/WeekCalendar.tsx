@@ -34,6 +34,7 @@ import { allDayDates, formatInstant } from "../format.ts";
 import { NARROW, useMediaQuery } from "../useMediaQuery.ts";
 
 const HOUR_PX = 46;
+const NOW_LINE_MS = 60_000;
 
 /** Which part of an event a shift+drag takes hold of. */
 type Edge = "start" | "end" | "move";
@@ -220,8 +221,18 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
         return map;
     }, [shown, days, timeZone]);
 
+    const [, tick] = useState(0);
+    useEffect(() => {
+        const timer = setInterval(() => tick((n) => n + 1), NOW_LINE_MS);
+        return () => clearInterval(timer);
+    }, []);
     const todayK = civilKey(civilFromDate(new Date(), timeZone));
     const nowMinutes = minutesOfDay(new Date(), timeZone);
+    const [shownToday, setShownToday] = useState(todayK);
+    if (shownToday !== todayK) {
+        setShownToday(todayK);
+        if (civilKey(focus) === shownToday) setFocus(civilFromKey(todayK)!);
+    }
 
     /** Tasks and dash events have editors; Google events get a read-only details view. */
     function open(item: CalendarItem) {

@@ -1,3 +1,5 @@
+import type { Task } from "../shared/types.ts";
+
 export const LIVE_REFRESH_MS = 30_000;
 export const DAY_CHECK_MS = 60_000;
 
@@ -69,4 +71,14 @@ export function watchForChanges({
         doc.removeEventListener("visibilitychange", wake);
         win.removeEventListener("focus", wake);
     };
+}
+
+export type CompletedPage = { tasks: Task[]; more: boolean };
+
+export function withFreshFirstPage(shown: CompletedPage, page: CompletedPage): CompletedPage {
+    const oldest = page.tasks.at(-1)?.completedAt;
+    if (!page.more || !oldest) return page;
+    const ids = new Set(page.tasks.map((t) => t.id));
+    const older = shown.tasks.filter((t) => t.completedAt && t.completedAt < oldest && !ids.has(t.id));
+    return older.length ? { tasks: [...page.tasks, ...older], more: shown.more } : page;
 }

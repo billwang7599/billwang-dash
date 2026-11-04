@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DAY_CHECK_MS, LIVE_REFRESH_MS, quietRead, startWrite, watchForChanges } from "../src/liveRefresh.ts";
+import type { Task } from "../shared/types.ts";
+import { DAY_CHECK_MS, LIVE_REFRESH_MS, quietRead, startWrite, watchForChanges, withFreshFirstPage } from "../src/liveRefresh.ts";
 
 function deferred<T>() {
     let resolve!: (value: T) => void;
@@ -115,5 +116,27 @@ describe("watchForChanges", () => {
         win.dispatchEvent(new Event("focus"));
         vi.advanceTimersByTime(LIVE_REFRESH_MS * 2);
         expect(refresh).not.toHaveBeenCalled();
+    });
+});
+
+describe("withFreshFirstPage", () => {
+    const done = (id: string, minute: number) =>
+        ({ id, completedAt: new Date(Date.UTC(2026, 10, 3, 12, minute)).toISOString() }) as Task;
+
+    it("keeps the older pages already loaded below a fresh first page", () => {
+        const shown = { tasks: [done("c", 30), done("b", 20), done("a", 10)], more: true };
+        const page = { tasks: [done("d", 40), done("c", 30)], more: true };
+        expect(withFreshFirstPage(shown, page)).toEqual({ tasks: [done("d", 40), done("c", 30), done("b", 20), done("a", 10)], more: true });
+    });
+
+    it("drops a task the fresh page no longer has", () => {
+        const shown = { tasks: [done("c", 30), done("b", 20)], more: false };
+        const page = { tasks: [done("b", 20)], more: false };
+        expect(withFreshFirstPage(shown, page)).toEqual(page);
+    });
+
+    it("is just the page on first load", () => {
+        const page = { tasks: [done("a", 10)], more: true };
+        expect(withFreshFirstPage({ tasks: [], more: false }, page)).toEqual(page);
     });
 });

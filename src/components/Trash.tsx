@@ -7,6 +7,7 @@ import { Hero } from "./Hero.tsx";
 
 interface Props {
     projects: Project[];
+    revision: number;
     /** Restoring brings projects and tasks back, so the app state must reload. */
     onChanged: () => void;
     /** Back to Settings, where this page is linked from. */
@@ -18,14 +19,20 @@ type Pending =
     | { kind: "task"; id: string; name: string }
     | { kind: "all" };
 
-export function Trash({ projects, onChanged, onBack }: Props) {
+export function Trash({ projects, revision, onChanged, onBack }: Props) {
     const [trash, setTrash] = useState<TrashContents | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [pending, setPending] = useState<Pending | null>(null);
 
     useEffect(() => {
-        api.getTrash().then(setTrash).catch((e: Error) => setError(e.message));
-    }, []);
+        let stale = false;
+        api.getTrash()
+            .then((t) => !stale && setTrash(t))
+            .catch((e: Error) => !stale && setError(e.message));
+        return () => {
+            stale = true;
+        };
+    }, [revision]);
 
     /** Runs a mutation, then reloads the trash list and tells the app to reload. */
     const act = useCallback(

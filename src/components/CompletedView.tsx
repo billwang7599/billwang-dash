@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { addDays, civilFromDate, civilFromKey, civilKey, weekday } from "../../shared/civil.ts";
 import type { Goal } from "../../shared/goals.ts";
 import type { Project, Task } from "../../shared/types.ts";
 import { api } from "../api.ts";
 import { formatInstant, formatPlainDate } from "../format.ts";
+import { type CompletedPage, withFreshFirstPage } from "../liveRefresh.ts";
 import { Hero } from "./Hero.tsx";
 
 interface Props {
@@ -16,39 +17,46 @@ interface Props {
     project?: Project;
     /** Done since Monday, from the app state (this project's, when there is one). */
     doneThisWeek: number;
+    revision: number;
     /** Puts the task back on the list; the app reloads its own state. */
     onUndo: (task: Task) => Promise<void>;
     onBack: () => void;
 }
 
 /** Completed tasks, newest first, grouped by the day they were finished, a page at a time. */
-export function CompletedView({ projects, goals, timeZone, colors, project, doneThisWeek, onUndo, onBack }: Props) {
-    const [tasks, setTasks] = useState<Task[]>([]);
-    const [more, setMore] = useState(false);
+export function CompletedView({ projects, goals, timeZone, colors, project, doneThisWeek, revision, onUndo, onBack }: Props) {
+    const [list, setList] = useState<CompletedPage>({ tasks: [], more: false });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const { tasks, more } = list;
 
     const projectId = project?.id;
-    const load = useCallback(async (before?: string) => {
+    useEffect(() => {
+        let stale = false;
+        api.listCompleted(undefined, projectId)
+            .then((page) => !stale && setList((shown) => withFreshFirstPage(shown, page)))
+            .catch((e: Error) => !stale && setError(e.message))
+            .finally(() => !stale && setLoading(false));
+        return () => {
+            stale = true;
+        };
+    }, [projectId, revision]);
+
+    async function loadMore(before: string) {
         setLoading(true);
         setError(null);
         try {
             const page = await api.listCompleted(before, projectId);
-            setTasks((prev) => (before ? [...prev, ...page.tasks] : page.tasks));
-            setMore(page.more);
+            setList((shown) => ({ tasks: [...shown.tasks, ...page.tasks], more: page.more }));
         } catch (e) {
             setError((e as Error).message);
         } finally {
             setLoading(false);
         }
-    }, [projectId]);
-
-    useEffect(() => {
-        void load();
-    }, [load]);
+    }
 
     async function undo(task: Task) {
-        setTasks((prev) => prev.filter((t) => t.id !== task.id));
+        setList((shown) => ({ ...shown, tasks: shown.tasks.filter((t) => t.id !== task.id) }));
         await onUndo(task);
     }
 
@@ -157,7 +165,7 @@ export function CompletedView({ projects, goals, timeZone, colors, project, done
                 <button
                     className="btn btn-quiet completed-more"
                     disabled={loading}
-                    onClick={() => load(tasks[tasks.length - 1]?.completedAt ?? undefined)}
+                    onClick={() => loadMore(tasks[tasks.length - 1]?.completedAt ?? "")}
                 >
                     {loading ? "Loading…" : "Load more"}
                 </button>
