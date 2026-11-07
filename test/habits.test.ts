@@ -3,9 +3,12 @@ import {
     computeStats,
     describeFrequency,
     isDueDay,
+    weekProgress,
     type DayStatus,
     type HabitRule,
+    type HabitSummary,
 } from "../shared/habits.ts";
+import { todayTally } from "../src/habitCells.ts";
 
 const daily: HabitRule = { freq: "daily", perWeek: null, weekdays: [] };
 const weekly = (n: number): HabitRule => ({ freq: "weekly_count", perWeek: n, weekdays: [] });
@@ -175,5 +178,47 @@ describe("describeFrequency", () => {
         expect(describeFrequency(onDays(6, 0))).toBe("Weekends");
         expect(describeFrequency(onDays(5, 1, 3))).toBe("Mon, Wed, Fri");
         expect(describeFrequency(onDays(0, 2))).toBe("Tue, Sun"); // Monday first
+    });
+});
+
+describe("weekProgress", () => {
+    it("counts this week's done days against the target", () => {
+        const checkins = log({ "2026-08-02": "done", "2026-08-03": "done", "2026-08-05": "done" });
+        expect(weekProgress(3, "2026-07-01", checkins, "2026-08-06")).toEqual({ done: 2, required: 3 });
+    });
+
+    it("lowers the target by skipped days and days before the habit began", () => {
+        expect(weekProgress(3, "2026-08-08", log({ "2026-08-08": "done" }), "2026-08-08")).toEqual({ done: 1, required: 2 });
+        expect(weekProgress(3, "2026-07-01", log({ "2026-08-03": "skipped", "2026-08-04": "skipped", "2026-08-05": "skipped", "2026-08-06": "skipped", "2026-08-07": "skipped" }), "2026-08-07")).toEqual({ done: 0, required: 2 });
+    });
+});
+
+describe("todayTally", () => {
+    const habit = (rule: HabitRule, today: DayStatus | null, startDate = "2026-07-01"): HabitSummary => ({
+        ...rule,
+        id: "h",
+        name: "h",
+        description: "",
+        order: 0,
+        createdAt: "",
+        startDate,
+        today,
+        stats: { streak: 0, bestStreak: 0, streakUnit: "day", totalDone: 0, rate: null },
+    });
+
+    it("counts only habits due today, leaving out skips and rest days", () => {
+        // 2026-08-08 is a Saturday.
+        const habits = [
+            habit(daily, "done"),
+            habit(daily, null),
+            habit(daily, "skipped"),
+            habit(onDays(1, 2, 3, 4, 5), null),
+            habit(weekly(3), null),
+        ];
+        expect(todayTally(habits, "2026-08-08")).toEqual({ done: 1, due: 3 });
+    });
+
+    it("counts a habit done on a rest day as done and due", () => {
+        expect(todayTally([habit(onDays(1), "done")], "2026-08-08")).toEqual({ done: 1, due: 1 });
     });
 });

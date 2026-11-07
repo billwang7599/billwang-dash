@@ -243,8 +243,9 @@ on a touch screen, where dragging scrolls the grid).
 ## Habits
 
 A separate feature from tasks, modelled on TickTick's. The Habits page lists every
-habit as a card with its last seven days and a one-click check-off for today. Beside
-them, the selected habit (`/app/habits/<id>`) shows its streak, best streak, total
+habit as a card with its last seven days, a one-click check-off for today, and
+this week's progress for "N times a week" habits. "Done today" counts only the
+habits due today. Beside them, the selected habit (`/app/habits/<id>`) shows its streak, best streak, total
 days, a four-week rate, and a monthly grid where you pick any past day to log, skip
 or clear it and add a note.
 

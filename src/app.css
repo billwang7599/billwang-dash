@@ -1429,9 +1429,10 @@ html:has(.mnav.is-open) { overflow: hidden; }
 .habit-cell.is-done.is-today { box-shadow: 0 0 0 2px var(--paper), 0 0 0 3.5px var(--ink); }
 .habit-cell.is-selected { outline: 2px solid var(--ink); outline-offset: 1px; }
 
-.habit-legend { display: flex; gap: 1rem; list-style: none; margin: 0.8rem 0 0; padding: 0; font-size: 0.74rem; color: var(--ink-3); }
+.habit-legend { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; list-style: none; margin: 0.8rem 0 0; padding: 0; font-size: 0.74rem; color: var(--ink-3); }
 .habit-legend li { display: flex; align-items: center; gap: 0.35rem; }
 .habit-legend .habit-cell { width: 0.8rem; aspect-ratio: auto; height: 0.8rem; cursor: default; }
+.habit-legend .habit-cell.is-off { background: radial-gradient(circle, var(--ink-3) 0 2px, transparent 2.5px); }
 
 /* The selected day, as a card in the habit's colour. */
 .habit-day { padding: 1.1rem 1.25rem; border-radius: var(--r-lg); background: var(--card-c, var(--card)); }
@@ -1474,12 +1475,15 @@ html:has(.mnav.is-open) { overflow: hidden; }
 .hcard-name small { font-size: 0.75rem; color: rgb(0 0 0 / 0.6); }
 .hcard.is-selected .hcard-name span { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; }
 .hcard-week { display: flex; gap: 4px; }
+.hcard-day { display: flex; flex-direction: column; align-items: center; gap: 3px; width: 13px; font-size: 0.6rem; line-height: 1; color: rgb(0 0 0 / 0.45); }
+.hcard-day.is-today { color: var(--ink); font-weight: 700; }
 .hcard-dot { width: 11px; height: 11px; border-radius: 50%; background: rgb(0 0 0 / 0.14); }
 .hcard-dot.is-done { background: var(--ink); }
 .hcard-dot.is-skipped { background: transparent; box-shadow: inset 0 0 0 1.5px rgb(0 0 0 / 0.5); }
-.hcard-dot.is-missed { background: rgb(0 0 0 / 0.28); }
-.hcard-dot.is-pending,
-.hcard-dot.is-off { background: rgb(0 0 0 / 0.1); }
+.hcard-dot.is-missed { background: var(--accent); }
+.hcard-dot.is-pending { background: rgb(0 0 0 / 0.14); box-shadow: inset 0 0 0 1.5px var(--ink); }
+.hcard-dot.is-off,
+.hcard-dot.is-future { background: rgb(0 0 0 / 0.1); transform: scale(0.5); }
 .hcard-tick {
     flex: none;
     display: grid;
@@ -1489,17 +1493,24 @@ html:has(.mnav.is-open) { overflow: hidden; }
     border: 1.5px solid rgb(0 0 0 / 0.5);
     border-radius: 50%;
     background: transparent;
-    color: transparent;
+    color: rgb(0 0 0 / 0.3);
     cursor: pointer;
     transition: all 0.15s var(--ease);
 }
 .hcard-tick:hover { color: var(--ink); border-color: var(--ink); }
 .hcard-tick.is-done { background: var(--ink); border-color: var(--ink); color: var(--card); }
+.hcard-tick.is-skipped { border-style: dashed; }
+.hcard-tick.is-off { border-color: rgb(0 0 0 / 0.22); color: rgb(0 0 0 / 0.18); }
 
 .habit-month-name { display: flex; align-items: center; gap: 0.5rem; min-width: 0; margin: 0; font-size: 1.3rem; font-weight: 500; letter-spacing: -0.03em; }
 .habit-month-actions { display: flex; gap: 0.4rem; }
 .habit-desc { display: grid; gap: 0.3rem; margin: 0 0 1rem; font-size: 0.8rem; color: var(--ink-3); }
 .habit-desc span { font-size: 0.92rem; color: var(--ink-2); white-space: pre-wrap; }
+.habit-month-label { display: flex; align-items: center; gap: 0.5rem; }
+.habit-today { padding: 0.2rem 0.6rem; font-size: 0.75rem; }
+.habit-start { max-width: 30rem; margin-top: 1rem; padding: 1.6rem 1.5rem; background: var(--card); border-radius: var(--r-lg); }
+.habit-start h2 { margin: 0 0 0.4rem; font-size: 1.6rem; font-weight: 500; letter-spacing: -0.04em; }
+.habit-start p { margin: 0 0 1.2rem; font-size: 0.92rem; color: var(--ink-2); line-height: 1.5; }
 .habit-month-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.7rem; font-size: 0.95rem; font-weight: 500; }
 .habit-month-stats { display: flex; flex-wrap: wrap; gap: 0.6rem 1.6rem; margin: 0.2rem 0 1rem; font-size: 0.75rem; color: var(--ink-2); }
 .habit-month-stats b { display: block; font-size: 1.9rem; font-weight: 400; line-height: 1; letter-spacing: -0.05em; color: var(--ink); }
