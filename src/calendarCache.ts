@@ -6,9 +6,11 @@ import type { CalendarItem } from "../shared/types.ts";
  *
  * Every entry is stamped with the data version it was fetched under. When the version
  * moves on (a task or event changed, Google was synced) the old entries are wrong, so
- * `get` ignores them and `set` evicts them. Nothing here outlives the page.
+ * `get` ignores them and `set` evicts them.
  */
 const MAX_ENTRIES = 24;
+// The range saved by the last visit: good under any stamp until the first fetch evicts it.
+const RESTORED = "restored";
 
 const entries = new Map<string, { stamp: string; items: CalendarItem[] }>();
 
@@ -17,7 +19,11 @@ export const rangeCacheKey = (timeZone: string, startISO: string, endISO: string
 
 export function getCachedRange(key: string, stamp: string): CalendarItem[] | undefined {
     const hit = entries.get(key);
-    return hit?.stamp === stamp ? hit.items : undefined;
+    return hit && (hit.stamp === stamp || hit.stamp === RESTORED) ? hit.items : undefined;
+}
+
+export function restoreRange(key: string, items: CalendarItem[]) {
+    entries.set(key, { stamp: RESTORED, items });
 }
 
 export function setCachedRange(key: string, stamp: string, items: CalendarItem[]) {

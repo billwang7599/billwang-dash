@@ -15,9 +15,27 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@300..600&display=swap" rel="stylesheet" />
+<link rel="preload" href="/api/state" as="fetch" crossorigin />
 </head>
 <body>
-    <div id="root"></div>
+    <div id="root">
+        <div class="shell skeleton" aria-busy="true" aria-label="Loading">
+            <div class="sidebar">
+                <div class="skel"></div>
+                <div class="skel"></div>
+                <div class="skel"></div>
+                <div class="skel"></div>
+            </div>
+            <div class="main">
+                <div class="skel skel-title"></div>
+                <div class="skel skel-row"></div>
+                <div class="skel skel-row"></div>
+                <div class="skel skel-row"></div>
+                <div class="skel skel-row"></div>
+                <div class="skel skel-row"></div>
+            </div>
+        </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>

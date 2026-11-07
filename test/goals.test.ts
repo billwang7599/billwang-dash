@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { daysLeft, goalInputSchema, horizonFor, horizonMismatch, isDone, progress } from "../shared/goals.ts";
+import { goalInputSchema } from "../shared/goalInput.ts";
+import { daysLeft, horizonFor, horizonMismatch, isDone, progress } from "../shared/goals.ts";
 
 const base = { title: "Read 12 books", horizon: "short", target: 12, deadline: "2026-12-31" };
 
