@@ -3,6 +3,7 @@ import { addDays, civilKey, zonedToUtcMs, type Civil } from "../shared/civil.ts"
 import type { CalendarItem } from "../shared/types.ts";
 import { api } from "./api.ts";
 import { getCachedRange, rangeCacheKey, setCachedRange } from "./calendarCache.ts";
+import { saveCalendar } from "./localCache.ts";
 
 const bounds = (start: Civil, days: number, timeZone: string) => {
     const startISO = new Date(zonedToUtcMs(start, 0, timeZone)).toISOString();
@@ -36,13 +37,14 @@ export function useCalendarRange(rangeStart: Civil, dayCount: number, timeZone: 
             const { startISO, endISO, key } = bounds(start, dayCount, timeZone);
             const { items, googleError } = await api.calendar(startISO, endISO);
             setCachedRange(key, stamp, items);
-            return { items, googleError };
+            return { items, googleError, key };
         };
 
         setLoading(true);
         fetchRange(rangeStart)
-            .then(({ items, googleError }) => {
+            .then(({ items, googleError, key }) => {
                 if (cancelled) return;
+                saveCalendar(key, items);
                 setGoogleError(googleError);
                 // Same content as what is showing: keep the old array so nothing re-renders.
                 setData((prev) =>

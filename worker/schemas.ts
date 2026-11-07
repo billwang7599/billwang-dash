@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { eventProblem } from "../shared/events.ts";
-import { goalInputSchema } from "../shared/goals.ts";
+import { goalInputSchema } from "../shared/goalInput.ts";
 import { habitInputSchema, MAX_NOTE_LENGTH } from "../shared/habits.ts";
 import { SHARE_MAX_CONTENT, SHARE_MAX_LIMIT } from "../shared/share.ts";
 import { PROJECT_COLORS } from "../shared/types.ts";

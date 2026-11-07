@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { goalInputSchema } from "../../shared/goalInput.ts";
 import {
-    goalInputSchema,
     horizonMismatch,
     isDone,
     HORIZON_HINTS,

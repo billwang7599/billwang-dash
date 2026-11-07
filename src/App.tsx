@@ -1,39 +1,70 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { flushSync } from "react-dom";
 import { isDone, type Goal, type GoalInput } from "../shared/goals.ts";
 import type { HabitInput, HabitSummary } from "../shared/habits.ts";
 import type { Project, ProjectColor, Task } from "../shared/types.ts";
 import { api, type AppState, type Preferences } from "./api.ts";
-import { AccountSetup } from "./components/AccountSetup.tsx";
-import { AssistantView } from "./components/AssistantView.tsx";
-import { CompletedView } from "./components/CompletedView.tsx";
 import { MobileNav } from "./components/MobileNav.tsx";
-import { ProjectsView } from "./components/ProjectsView.tsx";
 import { ConfirmDialog } from "./components/ConfirmDialog.tsx";
-import { GlobalSearch } from "./components/GlobalSearch.tsx";
 import { SearchField } from "./components/SearchField.tsx";
-import { GoalsView } from "./components/GoalsView.tsx";
-import { HabitModal } from "./components/HabitModal.tsx";
-import { HabitsView } from "./components/HabitsView.tsx";
-import { ImportModal } from "./components/ImportModal.tsx";
 import { InboxFilter, type InboxHidden } from "./components/InboxFilter.tsx";
 import { QuickAdd } from "./components/QuickAdd.tsx";
-import { Settings } from "./components/Settings.tsx";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { TimeZoneNotice } from "./components/TimeZoneNotice.tsx";
-import { Trash } from "./components/Trash.tsx";
 import { TaskList } from "./components/TaskList.tsx";
 import { Hero, heroDate } from "./components/Hero.tsx";
+import type { CalendarJump } from "./components/WeekCalendar.tsx";
 import { matchFields, type SearchMatch } from "../shared/search.ts";
 import { projectColors } from "./projectColors.ts";
-import { ShareModal } from "./components/ShareModal.tsx";
-import { TaskModal } from "./components/TaskModal.tsx";
-import { WeekCalendar, type CalendarJump } from "./components/WeekCalendar.tsx";
 import { deviceTimeZone, todayKey } from "./format.ts";
 import { watchForChanges } from "./liveRefresh.ts";
+import { saveState } from "./localCache.ts";
 import { tempId, withDraftTasks, withoutDrafts } from "./optimistic.ts";
 import { splitImportLines } from "../shared/import.ts";
 import { NARROW, useMediaQuery } from "./useMediaQuery.ts";
+
+const chunks: (() => Promise<unknown>)[] = [];
+
+// Once fetched it renders directly, not through lazy(), so it never suspends into a blank view transition.
+function later<P extends object>(load: () => Promise<ComponentType<P>>) {
+    let loaded: ComponentType<P> | null = null;
+    const preload = () => load().then((c) => (loaded = c));
+    const Lazy = lazy(() => preload().then((c) => ({ default: c })));
+    chunks.push(preload);
+    function Later(props: P) {
+        const [Component] = useState(() => loaded ?? Lazy);
+        return <Component {...props} />;
+    }
+    return Object.assign(Later, { preload });
+}
+
+const AccountSetup = later(() => import("./components/AccountSetup.tsx").then((m) => m.AccountSetup));
+const AssistantView = later(() => import("./components/AssistantView.tsx").then((m) => m.AssistantView));
+const CompletedView = later(() => import("./components/CompletedView.tsx").then((m) => m.CompletedView));
+const GlobalSearch = later(() => import("./components/GlobalSearch.tsx").then((m) => m.GlobalSearch));
+const GoalsView = later(() => import("./components/GoalsView.tsx").then((m) => m.GoalsView));
+const HabitModal = later(() => import("./components/HabitModal.tsx").then((m) => m.HabitModal));
+const HabitsView = later(() => import("./components/HabitsView.tsx").then((m) => m.HabitsView));
+const ImportModal = later(() => import("./components/ImportModal.tsx").then((m) => m.ImportModal));
+const ProjectsView = later(() => import("./components/ProjectsView.tsx").then((m) => m.ProjectsView));
+const Settings = later(() => import("./components/Settings.tsx").then((m) => m.Settings));
+const ShareModal = later(() => import("./components/ShareModal.tsx").then((m) => m.ShareModal));
+const TaskModal = later(() => import("./components/TaskModal.tsx").then((m) => m.TaskModal));
+const Trash = later(() => import("./components/Trash.tsx").then((m) => m.Trash));
+const WeekCalendar = later(() => import("./components/WeekCalendar.tsx").then((m) => m.WeekCalendar));
+
+const viewChunks: Partial<Record<View["name"], () => Promise<unknown>>> = {
+    assistant: AssistantView.preload,
+    calendar: WeekCalendar.preload,
+    completed: CompletedView.preload,
+    goals: GoalsView.preload,
+    habits: HabitsView.preload,
+    projects: ProjectsView.preload,
+    settings: Settings.preload,
+    trash: Trash.preload,
+};
+
+export const preloadView = (pathname: string) => viewChunks[viewFromPath(pathname).name]?.();
 
 export type View =
     | { name: "inbox" }
@@ -79,9 +110,8 @@ function withTransition(update: () => void) {
     document.startViewTransition(() => flushSync(update));
 }
 
-export function App() {
-    const [state, setState] = useState<AppState | null>(null);
-    const [error, setError] = useState<string | null>(null);
+export function App({ initial, latest }: { initial: AppState; latest: Promise<AppState | null> }) {
+    const [state, setState] = useState(initial);
     const [sharing, setSharing] = useState<Project | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
     const [editing, setEditing] = useState<Task | null>(null);
@@ -103,14 +133,22 @@ export function App() {
     const [revision, setRevision] = useState(0);
 
     useEffect(() => {
-        api.getState().then(setState).catch((e: Error) => setError(e.message));
+        latest
+            .then((s) => s && setState(s))
+            .catch((e: Error) => setNotice(navigator.onLine ? e.message : "You’re offline. This is what was here last time."));
+    }, [latest]);
+
+    useEffect(() => saveState(state), [state]);
+
+    useEffect(() => {
+        const whenIdle = window.requestIdleCallback ?? ((run: () => void) => setTimeout(run, 1000));
+        whenIdle(() => chunks.forEach((load) => load().catch(() => {})));
     }, []);
 
-    const timeZone = state?.preferences.timeZone;
+    const timeZone = state.preferences.timeZone;
     // Set on a new day only to re-render: every date on screen reads the clock as it renders.
     const [, setDay] = useState("");
     useEffect(() => {
-        if (!timeZone) return;
         const refresh = () => {
             api.refreshState()
                 .then((fresh) => {
@@ -132,11 +170,11 @@ export function App() {
     // A brand-new account defaults to UTC; adopt the browser's zone once, quietly.
     const triedAutoZone = useRef(false);
     useEffect(() => {
-        if (!state || state.preferences.timeZoneSet || triedAutoZone.current) return;
+        if (state.preferences.timeZoneSet || triedAutoZone.current) return;
         triedAutoZone.current = true;
         api.setPreferences({ timeZone: deviceTimeZone() })
             .then(({ preferences }) => {
-                setState((prev) => (prev ? { ...prev, preferences } : prev));
+                setState((prev) => ({ ...prev, preferences }));
                 setRevision((r) => r + 1);
             })
             .catch(() => {}); // best effort: Settings still lets the user pick
@@ -163,13 +201,13 @@ export function App() {
     }, []);
 
     // The assistant is admin-only; anyone else landing on its URL goes to the inbox.
-    const isAdmin = state?.user.isAdmin ?? false;
+    const isAdmin = state.user.isAdmin;
     useEffect(() => {
-        if (state && !isAdmin && view.name === "assistant") {
+        if (!isAdmin && view.name === "assistant") {
             window.history.replaceState({}, "", "/app");
             setView({ name: "inbox" });
         }
-    }, [state, isAdmin, view]);
+    }, [isAdmin, view]);
 
     /**
      * Wraps a mutation so a failure surfaces instead of becoming an unhandled
@@ -212,13 +250,10 @@ export function App() {
             save: () => Promise<unknown>,
             onSaved: () => void,
         ) => {
-            if (!state) return;
             const draft = withDraftTasks(state, lines, opts);
             setState(draft.state);
-            optimistically(
-                save,
-                onSaved,
-                () => setState((prev) => (prev ? withoutDrafts(prev, draft.taskIds, draft.projectIds) : prev)),
+            optimistically(save, onSaved, () =>
+                setState((prev) => withoutDrafts(prev, draft.taskIds, draft.projectIds)),
             );
         },
         [state, optimistically],
@@ -227,7 +262,6 @@ export function App() {
     const addTask = useCallback(
         /** `goalId` adds it as a step toward that goal; `projectId` files it in that project. */
         async (text: string, goalId?: string, projectId?: string) => {
-            if (!state) return;
             // Refetch rather than splice: a "#name" token may have created a project
             // server-side, so the sidebar can be stale too.
             addDrafts(
@@ -273,20 +307,18 @@ export function App() {
 
     const completeTask = useCallback(
         (id: string) => {
-            const task = state?.tasks.find((t) => t.id === id);
+            const task = state.tasks.find((t) => t.id === id);
             if (!task) return;
             // A recurring task comes back rescheduled, and only the server knows to when.
             if (task.due?.recurrence) {
                 return run(async () => {
                     const { task: next } = await api.completeTask(id);
-                    setState((prev) =>
-                        prev ? { ...prev, tasks: prev.tasks.map((t) => (t.id === id ? next : t)) } : prev,
-                    );
+                    setState((prev) => ({ ...prev, tasks: prev.tasks.map((t) => (t.id === id ? next : t)) }));
                     setRevision((r) => r + 1);
                 })();
             }
             const done = { ...task, completed: true };
-            setState((prev) => (prev ? withCompleted(prev, done) : prev));
+            setState((prev) => withCompleted(prev, done));
             setJustCompleted(done);
             optimistically(
                 () => api.completeTask(id),
@@ -305,7 +337,7 @@ export function App() {
 
     const deleteTask = useCallback(
         (id: string) => {
-            setState((prev) => (prev ? { ...prev, tasks: prev.tasks.filter((t) => t.id !== id) } : prev));
+            setState((prev) => ({ ...prev, tasks: prev.tasks.filter((t) => t.id !== id) }));
             optimistically(() => api.deleteTask(id), () => setRevision((r) => r + 1), resync);
         },
         [optimistically, resync],
@@ -332,7 +364,6 @@ export function App() {
     /** Puts a habit the server just returned into the list, adding it if it's new. */
     const applyHabit = useCallback((habit: HabitSummary) => {
         setState((prev) => {
-            if (!prev) return prev;
             const exists = prev.habits.some((h) => h.id === habit.id);
             return {
                 ...prev,
@@ -342,7 +373,7 @@ export function App() {
     }, []);
 
     const removeHabit = useCallback((id: string) => {
-        setState((prev) => (prev ? { ...prev, habits: prev.habits.filter((h) => h.id !== id) } : prev));
+        setState((prev) => ({ ...prev, habits: prev.habits.filter((h) => h.id !== id) }));
     }, []);
 
     const createHabit = useCallback(
@@ -350,9 +381,9 @@ export function App() {
             const draft: HabitSummary = {
                 id: tempId(),
                 ...input,
-                order: Math.max(0, ...(state?.habits.map((h) => h.order) ?? [])) + 1,
+                order: Math.max(0, ...state.habits.map((h) => h.order)) + 1,
                 createdAt: new Date().toISOString(),
-                startDate: todayKey(state?.preferences.timeZone ?? "UTC"),
+                startDate: todayKey(state.preferences.timeZone),
                 stats: { streak: 0, bestStreak: 0, streakUnit: input.freq === "weekly_count" ? "week" : "day", totalDone: 0, rate: null },
                 today: null,
             };
@@ -372,7 +403,7 @@ export function App() {
 
     const updateHabit = useCallback(
         async (id: string, input: HabitInput) => {
-            const before = state?.habits.find((h) => h.id === id);
+            const before = state.habits.find((h) => h.id === id);
             if (!before) return;
             applyHabit({ ...before, ...input });
             optimistically(
@@ -396,7 +427,6 @@ export function App() {
     /** Puts a goal the server just returned into the list, adding it if it's new. */
     const applyGoal = useCallback((goal: Goal) => {
         setState((prev) => {
-            if (!prev) return prev;
             const exists = prev.goals.some((g) => g.id === goal.id);
             const goals = exists ? prev.goals.map((g) => (g.id === goal.id ? goal : g)) : [...prev.goals, goal];
             // Same order as the server: soonest deadline first.
@@ -405,7 +435,7 @@ export function App() {
     }, []);
 
     const removeGoal = useCallback((id: string) => {
-        setState((prev) => (prev ? { ...prev, goals: prev.goals.filter((g) => g.id !== id) } : prev));
+        setState((prev) => ({ ...prev, goals: prev.goals.filter((g) => g.id !== id) }));
     }, []);
 
     const createGoal = useCallback(
@@ -414,7 +444,7 @@ export function App() {
             const draft: Goal = {
                 id: tempId(),
                 ...input,
-                sortOrder: Math.max(0, ...(state?.goals.map((g) => g.sortOrder) ?? [])) + 1,
+                sortOrder: Math.max(0, ...state.goals.map((g) => g.sortOrder)) + 1,
                 createdAt: now,
                 updatedAt: now,
                 stepsDone: 0,
@@ -434,7 +464,7 @@ export function App() {
 
     const updateGoal = useCallback(
         async (id: string, input: GoalInput) => {
-            const before = state?.goals.find((g) => g.id === id);
+            const before = state.goals.find((g) => g.id === id);
             if (!before) return;
             applyGoal({ ...before, ...input });
             optimistically(
@@ -458,15 +488,11 @@ export function App() {
     const deleteGoal = useCallback(
         (id: string) => {
             // The server keeps the goal's steps as plain tasks; mirror that.
-            setState((prev) =>
-                prev
-                    ? {
-                            ...prev,
-                            goals: prev.goals.filter((g) => g.id !== id),
-                            tasks: prev.tasks.map((t) => (t.goalId === id ? { ...t, goalId: null } : t)),
-                        }
-                    : prev,
-            );
+            setState((prev) => ({
+                ...prev,
+                goals: prev.goals.filter((g) => g.id !== id),
+                tasks: prev.tasks.map((t) => (t.goalId === id ? { ...t, goalId: null } : t)),
+            }));
             optimistically(() => api.deleteGoal(id), () => {}, resync);
         },
         [optimistically, resync],
@@ -474,7 +500,6 @@ export function App() {
 
     const importTasks = useCallback(
         async (text: string) => {
-            if (!state) return;
             const projectId = view.name === "project" ? view.id : undefined;
             addDrafts(
                 splitImportLines(text),
@@ -494,11 +519,7 @@ export function App() {
         (id: string, pinned: boolean) =>
             run(async () => {
                 const { project } = await api.setProjectPinned(id, pinned);
-                setState((prev) =>
-                    prev
-                        ? { ...prev, projects: prev.projects.map((p) => (p.id === id ? project : p)) }
-                        : prev,
-                );
+                setState((prev) => ({ ...prev, projects: prev.projects.map((p) => (p.id === id ? project : p)) }));
             })(),
         [run],
     );
@@ -507,11 +528,7 @@ export function App() {
         (id: string, color: ProjectColor) =>
             run(async () => {
                 const { project } = await api.setProjectColor(id, color);
-                setState((prev) =>
-                    prev
-                        ? { ...prev, projects: prev.projects.map((p) => (p.id === id ? project : p)) }
-                        : prev,
-                );
+                setState((prev) => ({ ...prev, projects: prev.projects.map((p) => (p.id === id ? project : p)) }));
             })(),
         [run],
     );
@@ -519,15 +536,11 @@ export function App() {
     const deleteProject = useCallback(
         (id: string) => {
             // The server cascades to the project's tasks, so drop them here too.
-            setState((prev) =>
-                prev
-                    ? {
-                            ...prev,
-                            projects: prev.projects.filter((p) => p.id !== id),
-                            tasks: prev.tasks.filter((t) => t.projectId !== id),
-                        }
-                    : prev,
-            );
+            setState((prev) => ({
+                ...prev,
+                projects: prev.projects.filter((p) => p.id !== id),
+                tasks: prev.tasks.filter((t) => t.projectId !== id),
+            }));
             if (view.name === "project" && view.id === id) navigate("/app");
             optimistically(() => api.deleteProject(id), () => setRevision((r) => r + 1), resync);
         },
@@ -539,9 +552,7 @@ export function App() {
             if (!editing) return;
             const before = editing;
             const put = (task: Task) =>
-                setState((prev) =>
-                    prev ? { ...prev, tasks: prev.tasks.map((t) => (t.id === task.id ? task : t)) } : prev,
-                );
+                setState((prev) => ({ ...prev, tasks: prev.tasks.map((t) => (t.id === task.id ? task : t)) }));
             // The patch is made of Task fields, so it can be laid straight over the task.
             put({ ...before, ...(patch as Partial<Task>) });
             optimistically(
@@ -557,7 +568,7 @@ export function App() {
     );
 
     const setPreferences = useCallback((preferences: Preferences) => {
-        setState((prev) => (prev ? { ...prev, preferences } : prev));
+        setState((prev) => ({ ...prev, preferences }));
     }, []);
 
     /**
@@ -566,11 +577,10 @@ export function App() {
      */
     const setInboxHidden = useCallback(
         ({ projects: inboxHiddenProjects, goals: inboxHiddenGoals }: InboxHidden) => {
-            setState((prev) =>
-                prev
-                    ? { ...prev, preferences: { ...prev.preferences, inboxHiddenProjects, inboxHiddenGoals } }
-                    : prev,
-            );
+            setState((prev) => ({
+                ...prev,
+                preferences: { ...prev.preferences, inboxHiddenProjects, inboxHiddenGoals },
+            }));
             api.setPreferences({ inboxHiddenProjects, inboxHiddenGoals })
                 .then(({ preferences }) => {
                     setPreferences(preferences);
@@ -585,7 +595,6 @@ export function App() {
     );
 
     const filtered = useMemo(() => {
-        if (!state) return [];
         if (view.name === "project") return state.tasks.filter((t) => t.projectId === view.id);
         const hiddenProjects = new Set(state.preferences.inboxHiddenProjects);
         const hiddenGoals = new Set(state.preferences.inboxHiddenGoals);
@@ -608,21 +617,7 @@ export function App() {
         return matches;
     }, [view, projectQuery, filtered]);
 
-    const colors = useMemo(() => projectColors(state?.projects ?? []), [state?.projects]);
-
-    if (error) {
-        return (
-            <div className="fatal">
-                {/* The service worker can serve this shell with no network, so say why it's empty. */}
-                <h1>{navigator.onLine ? "Couldn’t load" : "You’re offline"}</h1>
-                <p>{error}</p>
-            </div>
-        );
-    }
-
-    if (!state) {
-        return <div className="loading">Loading…</div>;
-    }
+    const colors = useMemo(() => projectColors(state.projects), [state.projects]);
 
     const today = todayKey(state.preferences.timeZone);
     const hasQuickAdd = view.name === "inbox" || view.name === "project";
@@ -669,7 +664,7 @@ export function App() {
                     onSwitch={(timeZone) =>
                         run(async () => {
                             const { preferences } = await api.setPreferences({ timeZone });
-                            setState((prev) => (prev ? { ...prev, preferences } : prev));
+                            setState((prev) => ({ ...prev, preferences }));
                             setRevision((r) => r + 1);
                         })()
                     }
@@ -683,7 +678,7 @@ export function App() {
 
                 {/* Keyed on the view so each navigation mounts it afresh and replays its entrance;
                     picking a habit only changes the selection, so it keeps its page. */}
-                <Fragment key={view.name === "habits" ? "habits" : JSON.stringify(view)}>
+                <Suspense key={view.name === "habits" ? "habits" : JSON.stringify(view)} fallback={null}>
                     {view.name === "settings" ? (
                         <Settings
                             preferences={state.preferences}
@@ -710,16 +705,12 @@ export function App() {
                                     pinned: false,
                                 };
                                 const swap = (to: Project | null) =>
-                                    setState((prev) =>
-                                        prev
-                                            ? {
-                                                  ...prev,
-                                                  projects: to
-                                                      ? prev.projects.map((p) => (p.id === draft.id ? to : p))
-                                                      : prev.projects.filter((p) => p.id !== draft.id),
-                                              }
-                                            : prev,
-                                    );
+                                    setState((prev) => ({
+                                        ...prev,
+                                        projects: to
+                                            ? prev.projects.map((p) => (p.id === draft.id ? to : p))
+                                            : prev.projects.filter((p) => p.id !== draft.id),
+                                    }));
                                 setState({ ...state, projects: [...state.projects, draft] });
                                 optimistically(
                                     () => api.createProject(name),
@@ -907,7 +898,7 @@ export function App() {
                             />
                         </>
                     )}
-                </Fragment>
+                </Suspense>
 
                 {/* Pinned to the bottom of the screen while the list scrolls above it. */}
                 {hasQuickAdd && (
@@ -932,67 +923,68 @@ export function App() {
                 </div>
             )}
 
-            {/* First run: the name the sidebar greets you by. */}
-            {!state.preferences.firstName && <AccountSetup onDone={setPreferences} />}
+            <Suspense fallback={null}>
+                {!state.preferences.firstName && <AccountSetup onDone={setPreferences} />}
 
-            {searchOpen && (
-                <GlobalSearch
-                    projects={state.projects}
-                    onClose={() => setSearchOpen(false)}
-                    onOpenProject={(p) => navigate(`/app/project/${p.id}`)}
-                    onOpenTask={setEditing}
-                    onOpenEvent={(event) => {
-                        navigate("/app/calendar");
-                        setJump({ day: event.startDate, event });
-                    }}
-                    onOpenHabit={(id, day) => {
-                        navigate(`/app/habits/${id}`);
-                        if (day) setJump({ day });
-                    }}
-                />
-            )}
+                {searchOpen && (
+                    <GlobalSearch
+                        projects={state.projects}
+                        onClose={() => setSearchOpen(false)}
+                        onOpenProject={(p) => navigate(`/app/project/${p.id}`)}
+                        onOpenTask={setEditing}
+                        onOpenEvent={(event) => {
+                            navigate("/app/calendar");
+                            setJump({ day: event.startDate, event });
+                        }}
+                        onOpenHabit={(id, day) => {
+                            navigate(`/app/habits/${id}`);
+                            if (day) setJump({ day });
+                        }}
+                    />
+                )}
 
-            {newHabit && <HabitModal onSave={createHabit} onClose={() => setNewHabit(false)} />}
+                {newHabit && <HabitModal onSave={createHabit} onClose={() => setNewHabit(false)} />}
 
-            {pendingTaskDelete && (
-                <ConfirmDialog
-                    title="Delete task?"
-                    message={`"${pendingTaskDelete.content}" will move to Recently deleted. You can restore it from there.`}
-                    confirmLabel="Delete"
-                    onConfirm={() => {
-                        deleteTask(pendingTaskDelete.id);
-                        setPendingTaskDelete(null);
-                    }}
-                    onCancel={() => setPendingTaskDelete(null)}
-                />
-            )}
+                {pendingTaskDelete && (
+                    <ConfirmDialog
+                        title="Delete task?"
+                        message={`"${pendingTaskDelete.content}" will move to Recently deleted. You can restore it from there.`}
+                        confirmLabel="Delete"
+                        onConfirm={() => {
+                            deleteTask(pendingTaskDelete.id);
+                            setPendingTaskDelete(null);
+                        }}
+                        onCancel={() => setPendingTaskDelete(null)}
+                    />
+                )}
 
-            {importText !== null && state && (
-                <ImportModal
-                    initialText={importText}
-                    preferences={state.preferences}
-                    projects={state.projects}
-                    onImport={importTasks}
-                    onClose={() => setImportText(null)}
-                />
-            )}
+                {importText !== null && (
+                    <ImportModal
+                        initialText={importText}
+                        preferences={state.preferences}
+                        projects={state.projects}
+                        onImport={importTasks}
+                        onClose={() => setImportText(null)}
+                    />
+                )}
 
-            {sharing && <ShareModal project={sharing} onClose={() => setSharing(null)} />}
+                {sharing && <ShareModal project={sharing} onClose={() => setSharing(null)} />}
 
-            {editing && state && (
-                <TaskModal
-                    task={editing}
-                    projects={state.projects}
-                    goals={state.goals}
-                    colors={colors}
-                    onSave={saveTask}
-                    onDelete={() => {
-                        setPendingTaskDelete(editing);
-                        setEditing(null);
-                    }}
-                    onClose={() => setEditing(null)}
-                />
-            )}
+                {editing && (
+                    <TaskModal
+                        task={editing}
+                        projects={state.projects}
+                        goals={state.goals}
+                        colors={colors}
+                        onSave={saveTask}
+                        onDelete={() => {
+                            setPendingTaskDelete(editing);
+                            setEditing(null);
+                        }}
+                        onClose={() => setEditing(null)}
+                    />
+                )}
+            </Suspense>
         </div>
     );
 }

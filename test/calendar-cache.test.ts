@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { CalendarItem } from "../shared/types.ts";
-import { clearCalendarCache, getCachedRange, rangeCacheKey, setCachedRange } from "../src/calendarCache.ts";
+import { clearCalendarCache, getCachedRange, rangeCacheKey, restoreRange, setCachedRange } from "../src/calendarCache.ts";
 
 const item = (id: string): CalendarItem => ({
     id,
@@ -30,6 +30,14 @@ describe("calendar range cache", () => {
     it("keys by timezone as well as range", () => {
         const range = ["2026-08-03T00:00:00.000Z", "2026-08-10T00:00:00.000Z"] as const;
         expect(rangeCacheKey("UTC", ...range)).not.toBe(rangeCacheKey("Asia/Tokyo", ...range));
+    });
+
+    it("shows a range restored from the last visit until the first fetch lands", () => {
+        restoreRange("a", [item("saved")]);
+        expect(getCachedRange("a", "0:0")?.[0].id).toBe("saved");
+        expect(getCachedRange("a", "1:0")?.[0].id).toBe("saved");
+        setCachedRange("b", "1:0", [item("y")]);
+        expect(getCachedRange("a", "1:0")).toBeUndefined();
     });
 
     it("drops the oldest entries past its cap", () => {

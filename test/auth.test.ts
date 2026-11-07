@@ -1,4 +1,4 @@
-import { SELF } from "cloudflare:test";
+import { SELF, env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { getUser } from "../worker/auth.ts";
 
@@ -125,6 +125,20 @@ describe("public / protected split", () => {
         });
         expect(res.status).toBe(302);
         expect(res.headers.get("location")).toBe("/app");
+    });
+});
+
+describe("app shell", () => {
+    it("names the signed-in user and is never answered from a cache", async () => {
+        const asset = await env.ASSETS.fetch("https://example.com/app/index.html");
+        const etag = asset.headers.get("etag");
+        const res = await SELF.fetch("https://example.com/app/calendar", {
+            headers: etag ? { "if-none-match": etag } : {},
+        });
+        expect(res.status).toBe(200);
+        expect(await res.text()).toContain('data-user="dev:test-user@example.com"');
+        expect(res.headers.get("etag")).toBeNull();
+        expect(res.headers.get("cache-control")).toBe("no-store");
     });
 });
 

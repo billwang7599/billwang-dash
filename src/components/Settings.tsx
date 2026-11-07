@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { GoogleAccountStatus } from "../../shared/types.ts";
 import { api, type Preferences } from "../api.ts";
 import { deviceTimeZone } from "../format.ts";
+import { clearCache } from "../localCache.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { TimeZoneSelect } from "./TimeZoneSelect.tsx";
 
@@ -178,8 +179,8 @@ export function Settings({ preferences, user, onPreferencesChange, onOpenTrash }
                 </Row>
                 <Row label="Sign out" hint="Ends your session on this device.">
                     {/* A plain link, not fetch(): signing out is a full navigation to Cloudflare
-                        Access, and the in-memory app state must not survive it. */}
-                    <a className="btn btn-quiet" href="/logout">
+                        Access, and neither the in-memory nor the saved app state may survive it. */}
+                    <a className="btn btn-quiet" href="/logout" onClick={clearCache}>
                         Sign out
                     </a>
                 </Row>

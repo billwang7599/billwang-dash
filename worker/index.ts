@@ -397,12 +397,20 @@ app.post("/cli/tools/:name", async (c) => {
 // ---- Documents -----------------------------------------------------------
 
 async function serveApp(c: Context<Ctx>) {
-    if (!(await getUser(c.req.raw, c.env))) {
+    const user = await getUser(c.req.raw, c.env);
+    if (!user) {
         return c.text("Sign-in required: Access is not covering this path.", 401);
     }
     const url = new URL(c.req.url);
     url.pathname = "/app/index.html";
-    return c.env.ASSETS.fetch(new Request(url, { headers: c.req.raw.headers }));
+    // The page opens this user's saved data before any API call, so no cache may hand it someone else's copy.
+    const shell = new HTMLRewriter()
+        .on("html", { element: (html) => void html.setAttribute("data-user", user.id) })
+        .transform(await c.env.ASSETS.fetch(new Request(url)));
+    const res = new Response(shell.body, shell);
+    res.headers.delete("etag");
+    res.headers.set("cache-control", "no-store");
+    return res;
 }
 
 // Bare "/app" would otherwise hit the assets binding's directory redirect.
