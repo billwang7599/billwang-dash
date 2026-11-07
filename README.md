@@ -247,7 +247,8 @@ habit as a card with its last seven days, a one-click check-off for today, and
 this week's progress for "N times a week" habits. "Done today" counts only the
 habits due today. Beside them, the selected habit (`/app/habits/<id>`) shows its streak, best streak, total
 days, a four-week rate, and a monthly grid where you pick any past day to log, skip
-or clear it and add a note.
+or clear it and add a note. Picking a day turns the cards, their ticks and the "Done" count to that day until
+"Back to today"; a double click or double tap on a day marks it done or undoes it.
 
 A habit asks for one of three things: **every day**, **N times a week**, or
 **specific weekdays**. The rules are in `shared/habits.ts` and are pure, so
