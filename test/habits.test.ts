@@ -8,7 +8,7 @@ import {
     type HabitRule,
     type HabitSummary,
 } from "../shared/habits.ts";
-import { todayTally } from "../src/habitCells.ts";
+import { dayTally } from "../src/habitCells.ts";
 
 const daily: HabitRule = { freq: "daily", perWeek: null, weekdays: [] };
 const weekly = (n: number): HabitRule => ({ freq: "weekly_count", perWeek: n, weekdays: [] });
@@ -193,7 +193,8 @@ describe("weekProgress", () => {
     });
 });
 
-describe("todayTally", () => {
+describe("dayTally", () => {
+    const todays = (h: HabitSummary) => h.today ?? undefined;
     const habit = (rule: HabitRule, today: DayStatus | null, startDate = "2026-07-01"): HabitSummary => ({
         ...rule,
         id: "h",
@@ -215,10 +216,16 @@ describe("todayTally", () => {
             habit(onDays(1, 2, 3, 4, 5), null),
             habit(weekly(3), null),
         ];
-        expect(todayTally(habits, "2026-08-08")).toEqual({ done: 1, due: 3 });
+        expect(dayTally(habits, "2026-08-08", todays)).toEqual({ done: 1, due: 3 });
     });
 
     it("counts a habit done on a rest day as done and due", () => {
-        expect(todayTally([habit(onDays(1), "done")], "2026-08-08")).toEqual({ done: 1, due: 1 });
+        expect(dayTally([habit(onDays(1), "done")], "2026-08-08", todays)).toEqual({ done: 1, due: 1 });
+    });
+
+    it("judges a past day by its own check-ins, as if it were today", () => {
+        const habits = [habit(daily, "done"), habit(daily, null), habit(weekly(3), null), habit(daily, null, "2026-08-05")];
+        const onTuesday = new Map<HabitSummary, DayStatus>([[habits[1], "done"]]);
+        expect(dayTally(habits, "2026-08-04", (h) => onTuesday.get(h))).toEqual({ done: 1, due: 3 });
     });
 });

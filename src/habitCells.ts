@@ -23,12 +23,17 @@ export function cellState(
     return habit.freq === "weekly_count" ? "is-off" : "is-missed";
 }
 
-// A skip excuses the day; a check-off on a rest day still counts.
-export function todayTally(habits: HabitSummary[], today: string): { done: number; due: number } {
+// A skip excuses the day; a check-off on a rest day still counts. A past day is
+// judged as it stood that day, so its unchecked habits read as due, not missed.
+export function dayTally(
+    habits: HabitSummary[],
+    day: string,
+    statusOf: (habit: HabitSummary) => DayStatus | undefined,
+): { done: number; due: number } {
     let done = 0;
     let due = 0;
     for (const h of habits) {
-        const state = cellState(h, today, h.today ?? undefined, today);
+        const state = cellState(h, day, statusOf(h), day);
         if (state === "is-done") done++;
         if (state === "is-done" || state === "is-pending") due++;
     }
