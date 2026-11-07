@@ -1,9 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { addDays, civilFromKey, civilKey, daysInMonth, weekday } from "../../shared/civil.ts";
-import { describeFrequency, MAX_NOTE_LENGTH, type DayStatus, type HabitDay, type HabitInput, type HabitSummary } from "../../shared/habits.ts";
+import {
+    describeFrequency,
+    MAX_NOTE_LENGTH,
+    weekProgress,
+    type DayStatus,
+    type HabitDay,
+    type HabitInput,
+    type HabitSummary,
+} from "../../shared/habits.ts";
 import { api } from "../api.ts";
 import { formatPlainDate } from "../format.ts";
-import { cellState } from "../habitCells.ts";
+import { cellState, todayTally } from "../habitCells.ts";
 import { optimistically } from "../optimistic.ts";
 import { cardColor } from "../projectColors.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
@@ -26,6 +34,14 @@ interface Props {
 }
 
 const WEEKDAY_HEADS = ["M", "T", "W", "T", "F", "S", "S"];
+const STATE_WORDS: Record<string, string> = {
+    "is-done": "Done",
+    "is-skipped": "Skipped",
+    "is-missed": "Missed",
+    "is-pending": "Not checked in yet",
+    "is-off": "Not due",
+    "is-future": "Upcoming",
+};
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 /** Check-ins by month ("YYYY-MM"), then by habit id. */
@@ -52,6 +68,7 @@ export function HabitsView({ habits, today, revision, selectedId, onSelect, onCh
     const [error, setError] = useState<string | null>(null);
     const [editing, setEditing] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    const dayPanel = useRef<HTMLElement>(null);
 
     useEffect(() => {
         if (!jump) return;
@@ -61,11 +78,14 @@ export function HabitsView({ habits, today, revision, selectedId, onSelect, onCh
 
     const week = useMemo(() => {
         const t = civilFromKey(today)!;
-        return Array.from({ length: 7 }, (_, i) => civilKey(addDays(t, i - 6)));
+        return Array.from({ length: 7 }, (_, i) => {
+            const c = addDays(t, i - 6);
+            return { key: civilKey(c), letter: WEEKDAY_HEADS[(weekday(c) + 6) % 7] };
+        });
     }, [today]);
 
     // The shown month, plus last month while the past week still reaches into it.
-    const needed = useMemo(() => [...new Set([month, week[0].slice(0, 7), today.slice(0, 7)])], [month, week, today]);
+    const needed = useMemo(() => [...new Set([month, week[0].key.slice(0, 7), today.slice(0, 7)])], [month, week, today]);
     useEffect(() => {
         let stale = false;
         for (const m of needed) {
@@ -111,7 +131,23 @@ export function HabitsView({ habits, today, revision, selectedId, onSelect, onCh
         return out;
     }, [month]);
 
-    const doneToday = habits.filter((h) => h.today === "done").length;
+    const tally = todayTally(habits, today);
+    const weekLoaded = week.every(({ key }) => cache[key.slice(0, 7)]);
+    const cardLine = (h: HabitSummary) => {
+        const parts: string[] = [];
+        if (h.freq === "weekly_count" && weekLoaded) {
+            const statuses = week.flatMap(({ key }) => {
+                const status = checkinOf(h.id, key)?.status;
+                return status ? [[key, status] as const] : [];
+            });
+            const { done, required } = weekProgress(h.perWeek ?? 1, h.startDate, new Map(statuses), today);
+            if (required > 0) parts.push(`${Math.min(done, required)} of ${required} this week`);
+        }
+        if (cellState(h, today, h.today ?? undefined, today) === "is-off") parts.push("Not due today");
+        parts.push(h.stats.streak > 0 ? `${h.stats.streak} ${h.stats.streakUnit} streak` : "No streak yet");
+        return parts.join(" · ");
+    };
+    const selState = selected ? cellState(selected, day, sel?.status, today) : "";
     const bestStreak = Math.max(0, ...habits.map((h) => h.stats.bestStreak));
     const rates = habits.map((h) => h.stats.rate).filter((r): r is number => r !== null);
     const [yy, mm] = month.split("-").map(Number);
@@ -123,22 +159,33 @@ export function HabitsView({ habits, today, revision, selectedId, onSelect, onCh
                     + New habit
                 </button>
             </div>
-            <Hero
-                kicker="Done today"
-                title={`${doneToday}/${habits.length}`}
-                stats={[
-                    { value: bestStreak, label: "best streak" },
-                    {
-                        value: rates.length ? `${Math.round((rates.reduce((a, b) => a + b, 0) / rates.length) * 100)}%` : "–",
-                        label: "last 4 weeks",
-                    },
-                ]}
-            />
+            {habits.length > 0 && (
+                <Hero
+                    kicker="Done today"
+                    title={tally.due ? `${tally.done}/${tally.due}` : "Rest day"}
+                    stats={[
+                        { value: bestStreak, label: "best streak" },
+                        {
+                            value: rates.length ? `${Math.round((rates.reduce((a, b) => a + b, 0) / rates.length) * 100)}%` : "–",
+                            label: "last 4 weeks",
+                        },
+                    ]}
+                />
+            )}
 
             {error && <p className="banner banner-bad">{error}</p>}
 
             {habits.length === 0 ? (
-                <p className="habit-empty">No habits yet. Add one to start tracking.</p>
+                <section className="habit-start">
+                    <h2>Start a habit</h2>
+                    <p>
+                        Something you want to do regularly: every day, a few times a week or on set days. Tick it off here each day
+                        and watch the streak grow.
+                    </p>
+                    <button className="btn btn-primary" onClick={onNew}>
+                        Add your first habit
+                    </button>
+                </section>
             ) : (
                 <div className="habits-layout">
                     <div className="stack">
@@ -150,24 +197,29 @@ export function HabitsView({ habits, today, revision, selectedId, onSelect, onCh
                             >
                                 <button className="hcard-name" onClick={() => onSelect(h.id)} aria-pressed={h === selected}>
                                     <span>{h.name}</span>
-                                    <small>
-                                        {h.stats.streak > 0 ? `${h.stats.streak} ${h.stats.streakUnit} streak` : "No streak yet"}
-                                    </small>
+                                    <small>{cardLine(h)}</small>
                                 </button>
                                 <span className="hcard-week" aria-label="Last 7 days">
-                                    {week.map((key) => (
-                                        <span
-                                            key={key}
-                                            className={`hcard-dot ${cellState(h, key, checkinOf(h.id, key)?.status, today)}`}
-                                            title={formatPlainDate(key)}
-                                        />
-                                    ))}
+                                    {week.map(({ key, letter }) => {
+                                        const state = cellState(h, key, checkinOf(h.id, key)?.status, today);
+                                        return (
+                                            <span
+                                                key={key}
+                                                className={`hcard-day${key === today ? " is-today" : ""}`}
+                                                title={`${formatPlainDate(key)}: ${STATE_WORDS[state]}`}
+                                            >
+                                                <span className={`hcard-dot ${state}`} />
+                                                {letter}
+                                            </span>
+                                        );
+                                    })}
                                 </span>
                                 <button
-                                    className={`hcard-tick${h.today === "done" ? " is-done" : ""}`}
+                                    className={`hcard-tick ${cellState(h, today, h.today ?? undefined, today)}`}
                                     onClick={() => setCheckin(h, today, h.today === "done" ? null : "done")}
                                     aria-pressed={h.today === "done"}
                                     aria-label={`${h.today === "done" ? "Undo" : "Check off"} ${h.name} today`}
+                                    title={h.today === "done" ? "Done today. Click to undo" : "Check off today"}
                                 >
                                     <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
                                         <path
@@ -226,8 +278,19 @@ export function HabitsView({ habits, today, revision, selectedId, onSelect, onCh
                                     <button className="habit-step" onClick={() => setMonth(shiftMonthKey(month, -1))} aria-label="Previous month">
                                         ←
                                     </button>
-                                    <span>
+                                    <span className="habit-month-label">
                                         {MONTH_NAMES[mm - 1]} {yy}
+                                        {(month !== today.slice(0, 7) || day !== today) && (
+                                            <button
+                                                className="btn btn-quiet habit-today"
+                                                onClick={() => {
+                                                    setMonth(today.slice(0, 7));
+                                                    setDay(today);
+                                                }}
+                                            >
+                                                Today
+                                            </button>
+                                        )}
                                     </span>
                                     <button
                                         className="habit-step"
@@ -245,44 +308,57 @@ export function HabitsView({ habits, today, revision, selectedId, onSelect, onCh
                                             {h}
                                         </span>
                                     ))}
-                                    {cells.map((cell, i) =>
-                                        cell === null ? (
-                                            <span key={`lead-${i}`} />
-                                        ) : (
+                                    {cells.map((cell, i) => {
+                                        if (cell === null) return <span key={`lead-${i}`} />;
+                                        const state = cellState(selected, cell.key, checkinOf(selected.id, cell.key)?.status, today);
+                                        return (
                                             <button
                                                 key={cell.key}
                                                 type="button"
-                                                className={`habit-cell ${cellState(selected, cell.key, checkinOf(selected.id, cell.key)?.status, today)}${cell.key === today ? " is-today" : ""}${cell.key === day ? " is-selected" : ""}`}
+                                                className={`habit-cell ${state}${cell.key === today ? " is-today" : ""}${cell.key === day ? " is-selected" : ""}`}
                                                 disabled={cell.key > today}
-                                                onClick={() => setDay(cell.key)}
+                                                onClick={() => {
+                                                    setDay(cell.key);
+                                                    dayPanel.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+                                                }}
                                                 aria-pressed={cell.key === day}
-                                                aria-label={`${selected.name}, ${formatPlainDate(cell.key)}: ${checkinOf(selected.id, cell.key)?.status ?? "no check-in"}`}
+                                                aria-label={`${selected.name}, ${formatPlainDate(cell.key)}: ${STATE_WORDS[state]}`}
                                             >
                                                 {cell.n}
                                             </button>
-                                        ),
-                                    )}
+                                        );
+                                    })}
                                 </div>
 
                                 <ul className="habit-legend" aria-hidden="true">
                                     <li><span className="habit-cell is-done" /> Done</li>
                                     <li><span className="habit-cell is-skipped" /> Skipped</li>
                                     <li><span className="habit-cell is-missed" /> Missed</li>
+                                    <li><span className="habit-cell is-off" /> Not due</li>
                                 </ul>
                             </section>
 
-                            <section className="habit-day" aria-label="Selected day" style={{ ["--card-c" as string]: selectedColor }}>
-                                <p className="habit-day-kicker">Selected day</p>
+                            <section
+                                ref={dayPanel}
+                                className="habit-day"
+                                aria-label="Selected day"
+                                style={{ ["--card-c" as string]: selectedColor }}
+                            >
+                                <p className="habit-day-kicker">
+                                    {day === today ? "Today" : "Selected day"} · {STATE_WORDS[selState]}
+                                </p>
                                 <h3>{formatPlainDate(day)}</h3>
                                 <div className="habit-day-actions" role="group" aria-label="Check-in for this day">
                                     <button
                                         className={`btn ${sel?.status === "done" ? "btn-primary" : "btn-quiet"}`}
+                                        aria-pressed={sel?.status === "done"}
                                         onClick={() => setCheckin(selected, day, sel?.status === "done" ? null : "done")}
                                     >
                                         Done
                                     </button>
                                     <button
                                         className={`btn ${sel?.status === "skipped" ? "btn-primary" : "btn-quiet"}`}
+                                        aria-pressed={sel?.status === "skipped"}
                                         onClick={() => setCheckin(selected, day, sel?.status === "skipped" ? null : "skipped")}
                                     >
                                         Skip

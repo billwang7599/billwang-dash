@@ -202,20 +202,7 @@ function weeklyRun(
     let target = 0;
 
     for (let w = 0; w <= lastWeek; w++) {
-        const weekStart = addDays(firstMonday, 7 * w);
-        let available = 0;
-        let skipped = 0;
-        let done = 0;
-        for (let d = 0; d < 7; d++) {
-            const day = addDays(weekStart, d);
-            if (diffDays(start, day) < 0) continue;
-            available++;
-            const status = checkins.get(civilKey(day));
-            if (status === "skipped") skipped++;
-            else if (status === "done") done++;
-        }
-
-        const required = Math.min(perWeek, available - skipped);
+        const { done, required } = tallyWeek(perWeek, start, addDays(firstMonday, 7 * w), checkins);
         if (required <= 0) continue;
 
         const isCurrent = w === lastWeek;
@@ -234,6 +221,33 @@ function weeklyRun(
     }
 
     return { streak: run, bestStreak: best, rate: target > 0 ? met / target : null };
+}
+
+function tallyWeek(perWeek: number, start: Civil, weekStart: Civil, checkins: ReadonlyMap<string, DayStatus>) {
+    let available = 0;
+    let skipped = 0;
+    let done = 0;
+    for (let d = 0; d < 7; d++) {
+        const day = addDays(weekStart, d);
+        if (diffDays(start, day) < 0) continue;
+        available++;
+        const status = checkins.get(civilKey(day));
+        if (status === "skipped") skipped++;
+        else if (status === "done") done++;
+    }
+    return { done, required: Math.min(perWeek, available - skipped) };
+}
+
+export function weekProgress(
+    perWeek: number,
+    startDate: string,
+    checkins: ReadonlyMap<string, DayStatus>,
+    today: string,
+): { done: number; required: number } {
+    const start = civilFromKey(startDate);
+    const now = civilFromKey(today);
+    if (!start || !now) return { done: 0, required: perWeek };
+    return tallyWeek(perWeek, start, monday(now), checkins);
 }
 
 /** Longest check-in note, enforced by the textarea and the Worker. */
