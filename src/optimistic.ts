@@ -1,7 +1,23 @@
-import { addDays, civilFromKey, zonedToUtcMs } from "../shared/civil.ts";
-import { parseQuickAdd } from "../shared/parser.ts";
-import type { CalEvent, CalendarItem, EventInput, Project, Task } from "../shared/types.ts";
-import type { AppState } from "./api.ts";
+import { addDays, civilFromDate, civilFromKey, civilKey, weekday, zonedToUtcMs } from "../shared/civil.ts";
+import { nextOccurrence, parseQuickAdd } from "../shared/parser.ts";
+import type { AppState, CalEvent, CalendarItem, EventInput, Project, Task } from "../shared/types.ts";
+
+export function optimistically<T>(
+    save: () => Promise<T>,
+    onSaved: (result: T) => void,
+    rollback: () => void,
+    notify: (message: string | null) => void,
+): Promise<void> {
+    return save()
+        .then((result) => {
+            onSaved(result);
+            notify(null);
+        })
+        .catch((e: Error) => {
+            rollback();
+            notify(e.message);
+        });
+}
 
 /**
  * Stand-ins shown while a create or edit is still on its way to the server. They carry
@@ -107,4 +123,50 @@ export function eventItem(input: EventInput, id: string, timeZone: string): Cale
         allDay,
         event,
     };
+}
+
+export function withCompleted(state: AppState, task: Task): AppState {
+    return {
+        ...state,
+        tasks: state.tasks.filter((t) => t.id !== task.id),
+        completedThisWeek: state.completedThisWeek + 1,
+        completedThisWeekByProject: {
+            ...state.completedThisWeekByProject,
+            [task.projectId]: (state.completedThisWeekByProject[task.projectId] ?? 0) + 1,
+        },
+        goals: task.goalId
+            ? state.goals.map((g) => (g.id === task.goalId ? { ...g, stepsDone: g.stepsDone + 1 } : g))
+            : state.goals,
+    };
+}
+
+export function withUncompleted(state: AppState, task: Task, today: string): AppState {
+    const day = civilFromKey(today)!;
+    const monday = civilKey(addDays(day, -((weekday(day) + 6) % 7)));
+    const doneOn = task.completedAt
+        ? civilKey(civilFromDate(new Date(task.completedAt), state.preferences.timeZone))
+        : today;
+    const counts = doneOn >= monday && {
+        completedThisWeek: state.completedThisWeek - 1,
+        completedThisWeekByProject: {
+            ...state.completedThisWeekByProject,
+            [task.projectId]: (state.completedThisWeekByProject[task.projectId] ?? 1) - 1,
+        },
+    };
+    return {
+        ...state,
+        ...counts,
+        tasks: [...state.tasks.filter((t) => t.id !== task.id), { ...task, completed: false, completedAt: null }],
+        goals: task.goalId
+            ? state.goals.map((g) => (g.id === task.goalId ? { ...g, stepsDone: g.stepsDone - 1 } : g))
+            : state.goals,
+    };
+}
+
+export function rescheduled(task: Task, today: string): Task {
+    const recurrence = task.due?.recurrence;
+    if (!task.due || !recurrence) return task;
+    const scheduled = civilFromKey(task.due.date)!;
+    const from = recurrence.fromCompletion ? civilFromKey(today)! : scheduled;
+    return { ...task, due: { ...task.due, date: civilKey(nextOccurrence(recurrence, from, scheduled)) } };
 }

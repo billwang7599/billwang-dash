@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Project } from "../../shared/types.ts";
 import { api, type Share } from "../api.ts";
+import { optimistically } from "../optimistic.ts";
 import { useDismiss } from "../useDismiss.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { Modal } from "./Modal.tsx";
@@ -17,7 +18,7 @@ export function ShareModal({ project, onClose }: Props) {
     const [limit, setLimit] = useState("");
     const [copied, setCopied] = useState(false);
     const [rotating, setRotating] = useState(false);
-    const [error, setError] = useState("");
+    const [error, setError] = useState<string | null>(null);
 
     const apply = (next: Share) => {
         setShare(next);
@@ -28,14 +29,10 @@ export function ShareModal({ project, onClose }: Props) {
         api.getShare(project.id).then((r) => apply(r.share), (e: Error) => setError(e.message));
     }, [project.id]);
 
-    /** Runs a change, shows what the server says came back, and surfaces a failure. */
-    async function change(run: () => Promise<{ share: Share }>) {
-        setError("");
-        try {
-            apply((await run()).share);
-        } catch (e) {
-            setError((e as Error).message);
-        }
+    function change(next: Share, save: () => Promise<{ share: Share }>) {
+        const before = share;
+        apply(next);
+        optimistically(save, (r) => apply(r.share), () => before && apply(before), setError);
     }
 
     async function copy() {
@@ -57,7 +54,7 @@ export function ShareModal({ project, onClose }: Props) {
             setError("The limit is a whole number from 1 to 500.");
             return;
         }
-        void change(() => api.setShareLimit(project.id, n));
+        change({ ...share, limit: n }, () => api.setShareLimit(project.id, n));
     };
 
     return (
@@ -78,7 +75,12 @@ export function ShareModal({ project, onClose }: Props) {
                             aria-label="Link sharing"
                             className="switch"
                             disabled={!share}
-                            onClick={() => share && change(() => (share.enabled ? api.disableShare(project.id) : api.enableShare(project.id)))}
+                            onClick={() =>
+                                share &&
+                                change({ ...share, enabled: !share.enabled, url: null }, () =>
+                                    share.enabled ? api.disableShare(project.id) : api.enableShare(project.id),
+                                )
+                            }
                         />
                     </div>
                     {share?.url && (
@@ -138,7 +140,7 @@ export function ShareModal({ project, onClose }: Props) {
                     onCancel={() => setRotating(false)}
                     onConfirm={() => {
                         setRotating(false);
-                        void change(() => api.rotateShare(project.id));
+                        if (share) change({ ...share, url: null }, () => api.rotateShare(project.id));
                     }}
                 />
             )}

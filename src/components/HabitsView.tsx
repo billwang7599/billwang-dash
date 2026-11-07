@@ -4,6 +4,7 @@ import { describeFrequency, MAX_NOTE_LENGTH, type DayStatus, type HabitDay, type
 import { api } from "../api.ts";
 import { formatPlainDate } from "../format.ts";
 import { cellState } from "../habitCells.ts";
+import { optimistically } from "../optimistic.ts";
 import { cardColor } from "../projectColors.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { HabitModal } from "./HabitModal.tsx";
@@ -79,21 +80,23 @@ export function HabitsView({ habits, today, revision, selectedId, onSelect, onCh
 
     const checkinOf = (habitId: string, key: string) => cache[key.slice(0, 7)]?.[habitId]?.find((d) => d.day === key);
 
-    async function setCheckin(habit: HabitSummary, key: string, status: DayStatus | null, note?: string) {
-        setError(null);
-        try {
-            const { habit: updated } = await api.setCheckin(habit.id, key, status, note);
-            onChanged(updated);
-            const m = key.slice(0, 7);
-            setCache((prev) => {
-                const days = prev[m]?.[habit.id] ?? [];
-                const rest = days.filter((d) => d.day !== key);
-                const kept = days.find((d) => d.day === key)?.note ?? "";
-                return { ...prev, [m]: { ...prev[m], [habit.id]: status ? [...rest, { day: key, status, note: note ?? kept }] : rest } };
-            });
-        } catch (e) {
-            setError((e as Error).message);
-        }
+    function setCheckin(habit: HabitSummary, key: string, status: DayStatus | null, note?: string) {
+        const m = key.slice(0, 7);
+        const before = cache[m]?.[habit.id] ?? [];
+        const putDays = (days: HabitDay[]) => setCache((prev) => ({ ...prev, [m]: { ...prev[m], [habit.id]: days } }));
+        const rest = before.filter((d) => d.day !== key);
+        const kept = before.find((d) => d.day === key)?.note ?? "";
+        putDays(status ? [...rest, { day: key, status, note: note ?? kept }] : rest);
+        if (key === today) onChanged({ ...habit, today: status });
+        optimistically(
+            () => api.setCheckin(habit.id, key, status, note),
+            ({ habit: saved }) => onChanged(saved),
+            () => {
+                putDays(before);
+                onChanged(habit);
+            },
+            setError,
+        );
     }
 
     const selected = habits.find((h) => h.id === selectedId) ?? habits[0];
@@ -296,7 +299,7 @@ export function HabitsView({ habits, today, revision, selectedId, onSelect, onCh
                                     initial={sel?.note ?? ""}
                                     enabled={!!sel}
                                     onCommit={(note) => {
-                                        if (sel && note !== sel.note) void setCheckin(selected, day, sel.status, note);
+                                        if (sel && note !== sel.note) setCheckin(selected, day, sel.status, note);
                                     }}
                                 />
                             </section>

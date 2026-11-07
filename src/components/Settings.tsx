@@ -3,23 +3,23 @@ import type { GoogleAccountStatus } from "../../shared/types.ts";
 import { api, type Preferences } from "../api.ts";
 import { deviceTimeZone } from "../format.ts";
 import { clearCache } from "../localCache.ts";
+import { optimistically } from "../optimistic.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { TimeZoneSelect } from "./TimeZoneSelect.tsx";
 
 interface Props {
     preferences: Preferences;
     user: { email: string; name: string | null; isAdmin: boolean };
-    onPreferencesChange: (prefs: Preferences) => void;
+    onUpdatePreferences: (patch: Partial<Preferences>) => void;
     onOpenTrash: () => void;
 }
 
-export function Settings({ preferences, user, onPreferencesChange, onOpenTrash }: Props) {
+export function Settings({ preferences, user, onUpdatePreferences, onOpenTrash }: Props) {
     const [google, setGoogle] = useState<GoogleAccountStatus | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
     const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
     const [confirmingPushOff, setConfirmingPushOff] = useState(false);
-    const [pushBusy, setPushBusy] = useState(false);
     const [syncing, setSyncing] = useState(false);
     const [cliTokenExists, setCliTokenExists] = useState(false);
     const [newCliToken, setNewCliToken] = useState<string | null>(null);
@@ -44,8 +44,16 @@ export function Settings({ preferences, user, onPreferencesChange, onOpenTrash }
         }
     }, []);
 
-    async function toggleCalendar(id: string, enabled: boolean) {
-        setGoogle(await api.setCalendarEnabled(id, enabled));
+    function changeGoogle(next: GoogleAccountStatus, save: () => Promise<GoogleAccountStatus>) {
+        const before = google;
+        setGoogle(next);
+        optimistically(save, setGoogle, () => setGoogle(before), setError);
+    }
+
+    function toggleCalendar(id: string, enabled: boolean) {
+        if (!google) return;
+        const calendars = google.calendars.map((c) => (c.id === id ? { ...c, enabled } : c));
+        changeGoogle({ ...google, calendars }, () => api.setCalendarEnabled(id, enabled));
     }
 
     async function syncNow() {
@@ -60,21 +68,25 @@ export function Settings({ preferences, user, onPreferencesChange, onOpenTrash }
         }
     }
 
-    async function disconnect() {
-        setGoogle(await api.disconnectGoogle());
+    function disconnect() {
+        if (!google) return;
+        const before = google;
+        setGoogle({ ...google, connected: false });
         setNotice("Google Calendar disconnected.");
+        optimistically(
+            () => api.disconnectGoogle(),
+            setGoogle,
+            () => {
+                setGoogle(before);
+                setNotice(null);
+            },
+            setError,
+        );
     }
 
-    async function setPush(enabled: boolean) {
-        setError(null);
-        setPushBusy(true);
-        try {
-            setGoogle(await api.setGooglePush(enabled));
-        } catch (e) {
-            setError((e as Error).message);
-        } finally {
-            setPushBusy(false);
-        }
+    function setPush(enabled: boolean) {
+        if (!google) return;
+        changeGoogle({ ...google, push: { ...google.push, enabled } }, () => api.setGooglePush(enabled));
     }
 
     // While tasks are still being pushed, check back until the queue drains.
@@ -96,15 +108,19 @@ export function Settings({ preferences, user, onPreferencesChange, onOpenTrash }
         }
     }
 
-    async function revokeCliToken() {
-        setError(null);
-        try {
-            await api.revokeCliToken();
-            setNewCliToken(null);
-            setCliTokenExists(false);
-        } catch (e) {
-            setError((e as Error).message);
-        }
+    function revokeCliToken() {
+        const shown = newCliToken;
+        setNewCliToken(null);
+        setCliTokenExists(false);
+        optimistically(
+            () => api.revokeCliToken(),
+            () => {},
+            () => {
+                setNewCliToken(shown);
+                setCliTokenExists(true);
+            },
+            setError,
+        );
     }
 
     async function copyCliToken() {
@@ -115,16 +131,6 @@ export function Settings({ preferences, user, onPreferencesChange, onOpenTrash }
             setTimeout(() => setCopied(false), 1500);
         } catch {
             setError("Couldn't copy. Select the token and copy it by hand.");
-        }
-    }
-
-    async function updatePrefs(patch: Partial<Preferences>) {
-        setError(null);
-        try {
-            const { preferences: next } = await api.setPreferences(patch);
-            onPreferencesChange(next);
-        } catch (e) {
-            setError((e as Error).message);
         }
     }
 
@@ -145,7 +151,7 @@ export function Settings({ preferences, user, onPreferencesChange, onOpenTrash }
                     onSubmit={(e) => {
                         e.preventDefault();
                         if (nameChanged && nameValid) {
-                            void updatePrefs({ firstName: firstName.trim(), lastName: lastName.trim() });
+                            onUpdatePreferences({ firstName: firstName.trim(), lastName: lastName.trim() });
                         }
                     }}
                 >
@@ -193,14 +199,14 @@ export function Settings({ preferences, user, onPreferencesChange, onOpenTrash }
                         value={preferences.timeZone}
                         deviceZone={deviceTimeZone()}
                         labelledBy="tz-label"
-                        onChange={(timeZone) => updatePrefs({ timeZone })}
+                        onChange={(timeZone) => onUpdatePreferences({ timeZone })}
                     />
                 </Row>
                 <Row label="Date order" labelId="date-order-label" hint="Only for slash dates like “3/5”.">
                     <select
                         aria-labelledby="date-order-label"
                         value={preferences.dateFormat}
-                        onChange={(e) => updatePrefs({ dateFormat: e.target.value as "MDY" | "DMY" })}
+                        onChange={(e) => onUpdatePreferences({ dateFormat: e.target.value as "MDY" | "DMY" })}
                     >
                         <option value="MDY">Month first — 3/5 is 5 March</option>
                         <option value="DMY">Day first — 3/5 is 3 May</option>
@@ -257,7 +263,6 @@ export function Settings({ preferences, user, onPreferencesChange, onOpenTrash }
                                 <input
                                     type="checkbox"
                                     checked={google.push.enabled}
-                                    disabled={pushBusy}
                                     onChange={(e) => (e.target.checked ? setPush(true) : setConfirmingPushOff(true))}
                                 />
                             </Row>
@@ -363,7 +368,8 @@ export function Settings({ preferences, user, onPreferencesChange, onOpenTrash }
                     confirmLabel={confirmingCli === "revoke" ? "Revoke" : "Regenerate"}
                     onConfirm={() => {
                         setConfirmingCli(null);
-                        void (confirmingCli === "revoke" ? revokeCliToken() : createCliToken());
+                        if (confirmingCli === "revoke") revokeCliToken();
+                        else void createCliToken();
                     }}
                     onCancel={() => setConfirmingCli(null)}
                 />
@@ -376,7 +382,7 @@ export function Settings({ preferences, user, onPreferencesChange, onOpenTrash }
                     confirmLabel="Turn off"
                     onConfirm={() => {
                         setConfirmingPushOff(false);
-                        void setPush(false);
+                        setPush(false);
                     }}
                     onCancel={() => setConfirmingPushOff(false)}
                 />
@@ -393,7 +399,7 @@ export function Settings({ preferences, user, onPreferencesChange, onOpenTrash }
                     confirmLabel="Disconnect"
                     onConfirm={() => {
                         setConfirmingDisconnect(false);
-                        void disconnect();
+                        disconnect();
                     }}
                     onCancel={() => setConfirmingDisconnect(false)}
                 />

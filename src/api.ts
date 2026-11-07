@@ -1,4 +1,5 @@
 import type {
+    AppState,
     CalEvent,
     CalendarItem,
     EventInput,
@@ -15,7 +16,7 @@ import type { Goal, GoalInput } from "../shared/goals.ts";
 import type { DayStatus, HabitDay, HabitInput, HabitSummary } from "../shared/habits.ts";
 import { quietRead, startWrite } from "./liveRefresh.ts";
 
-export type { Preferences };
+export type { AppState, Preferences };
 
 /** A project's share link as the owner's API returns it; `url` is null while sharing is off. */
 export interface Share {
@@ -23,19 +24,6 @@ export interface Share {
     url: string | null;
     limit: number;
     usedToday: number;
-}
-
-export interface AppState {
-    projects: Project[];
-    tasks: Task[];
-    preferences: Preferences;
-    habits: HabitSummary[];
-    goals: Goal[];
-    /** Tasks completed since Monday in the user's zone. */
-    completedThisWeek: number;
-    /** The same, per project id; projects with none are left out. */
-    completedThisWeekByProject: Record<string, number>;
-    user: { id: string; email: string; name: string | null; isAdmin: boolean };
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
