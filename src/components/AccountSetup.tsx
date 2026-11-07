@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { api, type Preferences } from "../api.ts";
 import { Modal } from "./Modal.tsx";
 
 interface Props {
-    onDone: (preferences: Preferences) => void;
+    onSave: (name: { firstName: string; lastName: string }) => void;
 }
 
 /**
@@ -11,32 +10,18 @@ interface Props {
  * none, so it's stored on the account. Can't be dismissed; it only shows while
  * no first name is saved.
  */
-export function AccountSetup({ onDone }: Props) {
+export function AccountSetup({ onSave }: Props) {
     const [firstName, setFirstName] = useState("");
     const [lastName, setLastName] = useState("");
-    const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
     const firstRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => firstRef.current?.focus(), []);
 
     const canSave = firstName.trim() !== "" && lastName.trim() !== "";
 
-    async function save(e: React.FormEvent) {
+    function save(e: React.FormEvent) {
         e.preventDefault();
-        if (!canSave || busy) return;
-        setBusy(true);
-        setError(null);
-        try {
-            const { preferences } = await api.setPreferences({
-                firstName: firstName.trim(),
-                lastName: lastName.trim(),
-            });
-            onDone(preferences);
-        } catch (err) {
-            setError((err as Error).message);
-            setBusy(false);
-        }
+        if (canSave) onSave({ firstName: firstName.trim(), lastName: lastName.trim() });
     }
 
     return (
@@ -70,11 +55,10 @@ export function AccountSetup({ onDone }: Props) {
                 </div>
 
                 <p className="modal-note">You can change this later in Settings.</p>
-                {error && <p className="modal-error">{error}</p>}
 
                 <div className="modal-actions">
-                    <button type="submit" className="btn btn-primary" disabled={!canSave || busy}>
-                        {busy ? "Saving…" : "Continue"}
+                    <button type="submit" className="btn btn-primary" disabled={!canSave}>
+                        Continue
                     </button>
                 </div>
             </form>

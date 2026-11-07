@@ -7,6 +7,7 @@ import { exchangeCode } from "./google.ts";
 import type { UserDO } from "./user-do.ts";
 import type { AuthedUser } from "./auth.ts";
 import type {
+    AppState,
     CalEvent,
     CalendarItem,
     EventInput,
@@ -30,19 +31,6 @@ export class ServiceError extends Error {
     ) {
         super(message);
     }
-}
-
-export interface AppState {
-    projects: Project[];
-    tasks: Task[];
-    preferences: Preferences;
-    habits: HabitSummary[];
-    goals: Goal[];
-    /** Tasks completed since Monday in the user's zone. */
-    completedThisWeek: number;
-    /** The same, per project id; projects with none are left out. */
-    completedThisWeekByProject: Record<string, number>;
-    user: AuthedUser;
 }
 
 /** One round trip for the initial app load. */

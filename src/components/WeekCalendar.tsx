@@ -13,7 +13,7 @@ import {
 } from "../../shared/civil.ts";
 import type { CalEvent, CalendarItem, EventInput } from "../../shared/types.ts";
 import { api } from "../api.ts";
-import { eventItem, tempId } from "../optimistic.ts";
+import { eventItem, optimistically, tempId } from "../optimistic.ts";
 import { useCalendarRange } from "../useCalendarRange.ts";
 import {
     LONG_PRESS_MS,
@@ -361,24 +361,24 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
         return { start: new Date(next.start).toISOString(), end: new Date(next.end).toISOString() };
     }
 
-    async function saveReshape(item: CalendarItem, start: string, end: string) {
+    function saveReshape(item: CalendarItem, start: string, end: string) {
         const event = item.event!;
         const startAt = new Date(start);
         const endAt = new Date(end);
         setReshape({ id: item.id, start, end, saving: true });
-        try {
-            await api.updateEvent(event.id, {
-                ...toInput(event),
-                startDate: civilKey(civilFromDate(startAt, timeZone)),
-                startTime: minutesToTime(minutesOfDay(startAt, timeZone)),
-                endDate: civilKey(civilFromDate(endAt, timeZone)),
-                endTime: minutesToTime(minutesOfDay(endAt, timeZone)),
-            });
-            setReload((n) => n + 1);
-        } catch (err) {
-            setReshape(null);
-            setError((err as Error).message);
-        }
+        optimistically(
+            () =>
+                api.updateEvent(event.id, {
+                    ...toInput(event),
+                    startDate: civilKey(civilFromDate(startAt, timeZone)),
+                    startTime: minutesToTime(minutesOfDay(startAt, timeZone)),
+                    endDate: civilKey(civilFromDate(endAt, timeZone)),
+                    endTime: minutesToTime(minutesOfDay(endAt, timeZone)),
+                }),
+            () => setReload((n) => n + 1),
+            () => setReshape(null),
+            setError,
+        );
     }
 
     /** Shows the drag with the pointer at (`x`, `y`). */
@@ -426,7 +426,7 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
         if (drag.reshape) {
             const { item, edge } = drag.reshape;
             const { start, end } = reshaped(item, edge, drag.day, drag.anchor, dayUnder(e.clientX, drag.day), minutesAt(drag.column, e.clientY));
-            void saveReshape(item, start, end);
+            saveReshape(item, start, end);
             return;
         }
         const { start, end } = dragRange(drag.anchor, minutesAt(drag.column, e.clientY), drag.moved);
@@ -497,13 +497,12 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
         const id = editor?.id ?? tempId();
         const before = items.find((i) => i.id === `event:${id}`);
         putItem(eventItem(input, id, timeZone));
-        (editor?.id ? api.updateEvent(id, input) : api.createEvent(input))
-            .then(() => setReload((n) => n + 1))
-            .catch((err: Error) => {
-                if (before) putItem(before);
-                else removeItem(`event:${id}`);
-                setError(err.message);
-            });
+        optimistically(
+            () => (editor?.id ? api.updateEvent(id, input) : api.createEvent(input)),
+            () => setReload((n) => n + 1),
+            () => (before ? putItem(before) : removeItem(`event:${id}`)),
+            setError,
+        );
     }
 
     async function deleteEvent() {
@@ -511,12 +510,12 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
         const id = editor.id;
         const before = items.find((i) => i.id === `event:${id}`);
         removeItem(`event:${id}`);
-        api.deleteEvent(id)
-            .then(() => setReload((n) => n + 1))
-            .catch((err: Error) => {
-                if (before) putItem(before);
-                setError(err.message);
-            });
+        optimistically(
+            () => api.deleteEvent(id),
+            () => setReload((n) => n + 1),
+            () => before && putItem(before),
+            setError,
+        );
     }
 
     return (

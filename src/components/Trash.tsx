@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import type { Project, Trash as TrashContents } from "../../shared/types.ts";
 import { api } from "../api.ts";
+import { optimistically } from "../optimistic.ts";
 import { cardColor } from "../projectColors.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { Hero } from "./Hero.tsx";
@@ -19,6 +20,15 @@ type Pending =
     | { kind: "task"; id: string; name: string }
     | { kind: "all" };
 
+type Rows = { kind: "project" | "task"; id: string } | { kind: "all" };
+
+const without = (trash: TrashContents, rows: Rows): TrashContents =>
+    rows.kind === "all"
+        ? { projects: [], tasks: [] }
+        : rows.kind === "project"
+          ? { ...trash, projects: trash.projects.filter((p) => p.id !== rows.id) }
+          : { ...trash, tasks: trash.tasks.filter((t) => t.id !== rows.id) };
+
 export function Trash({ projects, revision, onChanged, onBack }: Props) {
     const [trash, setTrash] = useState<TrashContents | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -34,28 +44,19 @@ export function Trash({ projects, revision, onChanged, onBack }: Props) {
         };
     }, [revision]);
 
-    /** Runs a mutation, then reloads the trash list and tells the app to reload. */
-    const act = useCallback(
-        async (fn: () => Promise<unknown>) => {
-            setError(null);
-            try {
-                await fn();
-                setTrash(await api.getTrash());
-                onChanged();
-            } catch (e) {
-                setError((e as Error).message);
-            }
-        },
-        [onChanged],
-    );
+    function act(rows: Rows, save: () => Promise<unknown>) {
+        const before = trash;
+        setTrash((t) => t && without(t, rows));
+        optimistically(save, onChanged, () => setTrash(before), setError);
+    }
 
     function confirmPending() {
         const p = pending;
         setPending(null);
         if (!p) return;
-        if (p.kind === "project") void act(() => api.purgeTrashedProject(p.id));
-        else if (p.kind === "task") void act(() => api.purgeTrashedTask(p.id));
-        else void act(() => api.emptyTrash());
+        if (p.kind === "project") act(p, () => api.purgeTrashedProject(p.id));
+        else if (p.kind === "task") act(p, () => api.purgeTrashedTask(p.id));
+        else act(p, () => api.emptyTrash());
     }
 
     const empty = trash !== null && trash.projects.length === 0 && trash.tasks.length === 0;
@@ -114,7 +115,7 @@ export function Trash({ projects, revision, onChanged, onBack }: Props) {
                                                 ? "A project with this name already exists"
                                                 : undefined
                                         }
-                                        onClick={() => act(() => api.restoreTrashedProject(p.id))}
+                                        onClick={() => act({ kind: "project", id: p.id }, () => api.restoreTrashedProject(p.id))}
                                     >
                                         Restore
                                     </button>
@@ -148,7 +149,7 @@ export function Trash({ projects, revision, onChanged, onBack }: Props) {
                                 <div className="trash-actions">
                                     <button
                                         className="btn btn-quiet"
-                                        onClick={() => act(() => api.restoreTrashedTask(t.id))}
+                                        onClick={() => act({ kind: "task", id: t.id }, () => api.restoreTrashedTask(t.id))}
                                     >
                                         Restore
                                     </button>

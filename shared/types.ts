@@ -1,5 +1,8 @@
 /** Types shared between the Worker, the Durable Object, and the React client. */
 
+import type { Goal } from "./goals.ts";
+import type { HabitSummary } from "./habits.ts";
+
 /** 1 = urgent (Todoist p1) ... 4 = none (default). */
 export type Priority = 1 | 2 | 3 | 4;
 
@@ -199,4 +202,15 @@ export interface Preferences {
     /** "" until the setup step asks for it. */
     firstName: string;
     lastName: string;
+}
+
+export interface AppState {
+    projects: Project[];
+    tasks: Task[];
+    preferences: Preferences;
+    habits: HabitSummary[];
+    goals: Goal[];
+    completedThisWeek: number;
+    completedThisWeekByProject: Record<string, number>;
+    user: { id: string; email: string; name: string | null; isAdmin: boolean };
 }

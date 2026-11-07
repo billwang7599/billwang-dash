@@ -18,8 +18,7 @@ interface Props {
     /** Done since Monday, from the app state (this project's, when there is one). */
     doneThisWeek: number;
     revision: number;
-    /** Puts the task back on the list; the app reloads its own state. */
-    onUndo: (task: Task) => Promise<void>;
+    onUndo: (task: Task) => void;
     onBack: () => void;
 }
 
@@ -55,9 +54,9 @@ export function CompletedView({ projects, goals, timeZone, colors, project, done
         }
     }
 
-    async function undo(task: Task) {
+    function undo(task: Task) {
         setList((shown) => ({ ...shown, tasks: shown.tasks.filter((t) => t.id !== task.id) }));
-        await onUndo(task);
+        onUndo(task);
     }
 
     const today = civilFromDate(new Date(), timeZone);
