@@ -1,4 +1,4 @@
-import { civilFromKey, diffDays } from "../shared/civil.ts";
+import { addDays, civilFromKey, civilKey, diffDays, weekday } from "../shared/civil.ts";
 import { isDueDay, type DayStatus, type HabitSummary } from "../shared/habits.ts";
 
 /**
@@ -38,4 +38,24 @@ export function dayTally(
         if (state === "is-done" || state === "is-pending") due++;
     }
     return { done, due };
+}
+
+/** The Monday-to-Sunday week holding `day`, as YYYY-MM-DD keys. */
+export function weekOf(day: string): string[] {
+    const d = civilFromKey(day)!;
+    const mondayOffset = (weekday(d) + 6) % 7;
+    return Array.from({ length: 7 }, (_, i) => civilKey(addDays(d, i - mondayOffset)));
+}
+
+/** "YYYY-MM" moved by `by` months. */
+export function shiftMonth(month: string, by: number): string {
+    const [y, m] = month.split("-").map(Number);
+    const next = new Date(Date.UTC(y, m - 1 + by, 1));
+    return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+/** The day a week step lands on: a week away, but never past today. */
+export function stepWeek(day: string, by: number, today: string): string {
+    const next = civilKey(addDays(civilFromKey(day)!, by * 7));
+    return next > today ? today : next;
 }

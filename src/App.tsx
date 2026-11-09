@@ -718,7 +718,7 @@ export function App({ initial, latest }: { initial: AppState; latest: Promise<Ap
                             revision={revision}
                             selectedId={view.id}
                             onSelect={(id) => {
-                                window.history.replaceState({}, "", `/app/habits/${id}`);
+                                window.history.replaceState({}, "", id ? `/app/habits/${id}` : "/app/habits");
                                 setView({ name: "habits", id });
                             }}
                             onChanged={applyHabit}

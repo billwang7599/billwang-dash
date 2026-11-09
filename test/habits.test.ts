@@ -8,7 +8,7 @@ import {
     type HabitRule,
     type HabitSummary,
 } from "../shared/habits.ts";
-import { dayTally } from "../src/habitCells.ts";
+import { dayTally, shiftMonth, stepWeek, weekOf } from "../src/habitCells.ts";
 
 const daily: HabitRule = { freq: "daily", perWeek: null, weekdays: [] };
 const weekly = (n: number): HabitRule => ({ freq: "weekly_count", perWeek: n, weekdays: [] });
@@ -227,5 +227,26 @@ describe("dayTally", () => {
         const habits = [habit(daily, "done"), habit(daily, null), habit(weekly(3), null), habit(daily, null, "2026-08-05")];
         const onTuesday = new Map<HabitSummary, DayStatus>([[habits[1], "done"]]);
         expect(dayTally(habits, "2026-08-04", (h) => onTuesday.get(h))).toEqual({ done: 1, due: 3 });
+    });
+});
+
+describe("the habit page's day picker", () => {
+    it("shows the Monday-to-Sunday week holding the day, across a month end", () => {
+        // 2026-08-08 is a Saturday; 2026-11-01 is a Sunday.
+        expect(weekOf("2026-08-08")).toEqual(["2026-08-03", "2026-08-04", "2026-08-05", "2026-08-06", "2026-08-07", "2026-08-08", "2026-08-09"]);
+        expect(weekOf("2026-11-01")).toEqual(["2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01"]);
+        expect(weekOf("2026-08-03")[0]).toBe("2026-08-03");
+    });
+
+    it("steps a week at a time but never past today", () => {
+        expect(stepWeek("2026-08-08", -1, "2026-08-08")).toBe("2026-08-01");
+        expect(stepWeek("2026-08-01", 1, "2026-08-10")).toBe("2026-08-08");
+        expect(stepWeek("2026-08-05", 1, "2026-08-10")).toBe("2026-08-10");
+    });
+
+    it("moves months across a year end", () => {
+        expect(shiftMonth("2026-01", -1)).toBe("2025-12");
+        expect(shiftMonth("2026-12", 1)).toBe("2027-01");
+        expect(shiftMonth("2026-08", 0)).toBe("2026-08");
     });
 });
