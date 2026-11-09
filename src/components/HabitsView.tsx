@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { addDays, civilFromKey, civilKey, daysInMonth, weekday } from "../../shared/civil.ts";
+import { civilKey, daysInMonth, weekday } from "../../shared/civil.ts";
 import {
     describeFrequency,
     MAX_NOTE_LENGTH,
@@ -11,7 +11,7 @@ import {
 } from "../../shared/habits.ts";
 import { api } from "../api.ts";
 import { formatPlainDate } from "../format.ts";
-import { cellState, dayTally } from "../habitCells.ts";
+import { cellState, dayTally, shiftMonth, stepWeek, weekOf } from "../habitCells.ts";
 import { optimistically } from "../optimistic.ts";
 import { cardColor } from "../projectColors.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
@@ -23,8 +23,10 @@ interface Props {
     /** Today in the user's zone, YYYY-MM-DD. */
     today: string;
     revision: number;
+    /** The habit whose card is open, if any. */
     selectedId?: string;
-    onSelect: (id: string) => void;
+    /** Opens a habit's card, or closes it with undefined. */
+    onSelect: (id: string | undefined) => void;
     onChanged: (habit: HabitSummary) => void;
     onNew: () => void;
     onUpdate: (id: string, input: HabitInput) => Promise<void>;
@@ -42,26 +44,24 @@ const STATE_WORDS: Record<string, string> = {
     "is-off": "Not due",
     "is-future": "Upcoming",
 };
-const DOUBLE_TAP_MS = 400;
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 /** Check-ins by month ("YYYY-MM"), then by habit id. */
 type MonthCache = Record<string, Record<string, HabitDay[]>>;
 
-const shiftMonthKey = (month: string, by: number) => {
-    const [y, m] = month.split("-").map(Number);
-    const next = new Date(Date.UTC(y, m - 1 + by, 1));
-    return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}`;
-};
-
+/**
+ * One list of habit cards under one day picker. The picked day (today unless you
+ * pick another) is what every card's tick checks off; opening a card shows its
+ * month, stats, skip and note for that same day.
+ */
 export function HabitsView({ habits, today, revision, selectedId, onSelect, onChanged, onNew, onUpdate, onDelete, jump }: Props) {
+    const [day, setDayState] = useState(today);
     const [month, setMonth] = useState(today.slice(0, 7));
-    const [day, setDay] = useState(today);
     const [shownToday, setShownToday] = useState(today);
     if (shownToday !== today) {
         setShownToday(today);
         if (day === shownToday) {
-            setDay(today);
+            setDayState(today);
             if (month === shownToday.slice(0, 7)) setMonth(today.slice(0, 7));
         }
     }
@@ -69,39 +69,30 @@ export function HabitsView({ habits, today, revision, selectedId, onSelect, onCh
     const [error, setError] = useState<string | null>(null);
     const [editing, setEditing] = useState(false);
     const [deleting, setDeleting] = useState(false);
-    const dayPanel = useRef<HTMLElement>(null);
-    const lastTap = useRef<{ key: string; atMs: number } | null>(null);
-    const scrollTimer = useRef<number | undefined>(undefined);
     const tapAnchor = useRef<{ el: HTMLElement; top: number } | null>(null);
+    const openCard = useRef<HTMLDivElement>(null);
     const fetchedAt = useRef<Record<string, number>>({});
-    useEffect(() => () => clearTimeout(scrollTimer.current), []);
+
+    /** Picks a day for the whole page; the open card's month follows it. */
+    function pickDay(key: string, from?: HTMLElement) {
+        if (from && key !== day) tapAnchor.current = { el: from, top: from.getBoundingClientRect().top };
+        setDayState(key);
+        setMonth(key.slice(0, 7));
+    }
 
     useEffect(() => {
         if (!jump) return;
+        setDayState(jump.day);
         setMonth(jump.day.slice(0, 7));
-        setDay(jump.day);
     }, [jump]);
 
     const isToday = day === today;
     const dayWords = isToday ? "today" : `on ${formatPlainDate(day)}`;
-    const { week, calendarWeek } = useMemo(() => {
-        const d = civilFromKey(day)!;
-        const mondayOffset = (weekday(d) + 6) % 7;
-        return {
-            week: Array.from({ length: 7 }, (_, i) => {
-                const c = addDays(d, i - 6);
-                return { key: civilKey(c), letter: WEEKDAY_HEADS[(weekday(c) + 6) % 7] };
-            }),
-            calendarWeek: Array.from({ length: 7 }, (_, i) => civilKey(addDays(d, i - mondayOffset))),
-        };
-    }, [day]);
+    const week = useMemo(() => weekOf(day), [day]);
 
     const needed = useMemo(
-        () =>
-            [...new Set([month, today.slice(0, 7), ...[...week.map((w) => w.key), ...calendarWeek].map((k) => k.slice(0, 7))])].filter(
-                (m) => m <= today.slice(0, 7),
-            ),
-        [month, week, calendarWeek, today],
+        () => [...new Set([month, today.slice(0, 7), ...week.map((k) => k.slice(0, 7))])].filter((m) => m <= today.slice(0, 7)),
+        [month, week, today],
     );
     // Refetching a loaded month on every day change would race a check-in and undo it on screen.
     useEffect(() => {
@@ -117,12 +108,17 @@ export function HabitsView({ habits, today, revision, selectedId, onSelect, onCh
         }
     }, [needed, revision]);
 
-    // The cards above the grid change height with the day; keep the tapped cell under the finger for a second tap.
+    // Cards change height with the day; keep whatever was tapped under the finger.
     useLayoutEffect(() => {
         const anchor = tapAnchor.current;
         tapAnchor.current = null;
         if (anchor) window.scrollBy(0, anchor.el.getBoundingClientRect().top - anchor.top);
     }, [day]);
+
+    // An opened card brings its details into view.
+    useEffect(() => {
+        if (selectedId) openCard.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+    }, [selectedId]);
 
     const checkinOf = (habitId: string, key: string) => cache[key.slice(0, 7)]?.[habitId]?.find((d) => d.day === key);
     const statusOn = (habit: HabitSummary, key: string) =>
@@ -147,24 +143,13 @@ export function HabitsView({ habits, today, revision, selectedId, onSelect, onCh
         );
     }
 
-    const selected = habits.find((h) => h.id === selectedId) ?? habits[0];
-    const selectedColor = cardColor(selected ? habits.indexOf(selected) : 0);
-    const sel = selected && checkinOf(selected.id, day);
-
-    const cells = useMemo(() => {
-        const [y, m] = month.split("-").map(Number);
-        const lead = (weekday({ y, m, d: 1 }) + 6) % 7; // Monday-first
-        const out: ({ key: string; n: number } | null)[] = Array.from({ length: lead }, () => null);
-        for (let d = 1; d <= daysInMonth(y, m); d++) out.push({ key: civilKey({ y, m, d }), n: d });
-        return out;
-    }, [month]);
-
+    const selected = habits.find((h) => h.id === selectedId);
     const tally = dayTally(habits, day, (h) => statusOn(h, day));
     const weekLoaded = needed.every((m) => cache[m]);
     const cardLine = (h: HabitSummary) => {
         const parts: string[] = [];
         if (h.freq === "weekly_count" && weekLoaded) {
-            const statuses = calendarWeek.flatMap((key) => {
+            const statuses = week.flatMap((key) => {
                 const status = checkinOf(h.id, key)?.status;
                 return status ? [[key, status] as const] : [];
             });
@@ -175,39 +160,18 @@ export function HabitsView({ habits, today, revision, selectedId, onSelect, onCh
         parts.push(h.stats.streak > 0 ? `${h.stats.streak} ${h.stats.streakUnit} streak` : "No streak yet");
         return parts.join(" · ");
     };
-    const selState = selected ? cellState(selected, day, sel?.status, today) : "";
     const bestStreak = Math.max(0, ...habits.map((h) => h.stats.bestStreak));
     const rates = habits.map((h) => h.stats.rate).filter((r): r is number => r !== null);
-    const [yy, mm] = month.split("-").map(Number);
-
-    const goToday = () => {
-        setMonth(today.slice(0, 7));
-        setDay(today);
-    };
-
-    // The scroll to the day panel waits out a double tap, or it would move the second tap off the cell.
-    function tapCell(key: string, el: HTMLElement) {
-        if (!selected) return;
-        const nowMs = performance.now();
-        const prev = lastTap.current;
-        clearTimeout(scrollTimer.current);
-        if (prev?.key === key && nowMs - prev.atMs < DOUBLE_TAP_MS) {
-            lastTap.current = null;
-            setCheckin(selected, key, statusOn(selected, key) === "done" ? null : "done");
-            return;
-        }
-        lastTap.current = { key, atMs: nowMs };
-        if (key !== day) tapAnchor.current = { el, top: el.getBoundingClientRect().top };
-        setDay(key);
-        scrollTimer.current = window.setTimeout(
-            () => dayPanel.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }),
-            DOUBLE_TAP_MS,
-        );
-    }
+    const weekHasToday = week[6] >= today;
 
     return (
         <div className="habits-view">
             <div className="view-bar">
+                {habits.length > 0 && !isToday && (
+                    <button className="btn btn-quiet habit-today" onClick={() => pickDay(today)}>
+                        ← Back to today
+                    </button>
+                )}
                 <button className="btn btn-primary" onClick={onNew}>
                     + New habit
                 </button>
@@ -240,204 +204,126 @@ export function HabitsView({ habits, today, revision, selectedId, onSelect, onCh
                     </button>
                 </section>
             ) : (
-                <div className="habits-layout">
-                    <div className="habit-list">
-                        <p className={`habit-viewing${isToday ? "" : " is-past"}`}>
-                            <span>
-                                Checking in for <b>{isToday ? "today" : formatPlainDate(day)}</b>
-                            </span>
-                            <button className="btn btn-quiet habit-today" onClick={goToday} hidden={isToday}>
-                                Back to today
-                            </button>
-                        </p>
-                        <div className="stack">
-                            {habits.map((h, i) => (
+                <>
+                    <nav className="habit-week" aria-label="Pick a day">
+                        <button className="habit-step" onClick={() => pickDay(stepWeek(day, -1, today))} aria-label="Previous week">
+                            ←
+                        </button>
+                        <div className="habit-week-days">
+                            {week.map((key, i) => {
+                                const t = key > today ? null : dayTally(habits, key, (h) => statusOn(h, key));
+                                const n = Number(key.slice(8));
+                                return (
+                                    <button
+                                        key={key}
+                                        className={`habit-wday${key === day ? " is-selected" : ""}${key === today ? " is-today" : ""}${
+                                            t && t.due > 0 && t.done >= t.due ? " is-complete" : ""
+                                        }`}
+                                        disabled={key > today}
+                                        aria-pressed={key === day}
+                                        aria-label={`${formatPlainDate(key)}${key === today ? " (today)" : ""}${
+                                            t ? (t.due ? `: ${t.done} of ${t.due} done` : ": nothing due") : ""
+                                        }`}
+                                        onClick={(e) => pickDay(key, e.currentTarget)}
+                                    >
+                                        <span>{WEEKDAY_HEADS[i]}</span>
+                                        <b>{n}</b>
+                                        <i
+                                            className="habit-wday-bar"
+                                            style={{ ["--p" as string]: t && t.due ? t.done / t.due : 0 }}
+                                            aria-hidden="true"
+                                        />
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        <button
+                            className="habit-step"
+                            onClick={() => pickDay(stepWeek(day, 1, today))}
+                            disabled={weekHasToday}
+                            aria-label="Next week"
+                        >
+                            →
+                        </button>
+                    </nav>
+
+                    <div className="stack habit-list">
+                        {habits.map((h, i) => {
+                            const open = h === selected;
+                            const status = statusOn(h, day);
+                            const done = status === "done";
+                            return (
                                 <div
                                     key={h.id}
-                                    className={`hcard${h === selected ? " is-selected" : ""}`}
+                                    ref={open ? openCard : undefined}
+                                    className={`hcard${open ? " is-open" : ""}`}
                                     style={{ ["--card-c" as string]: cardColor(i) }}
                                 >
-                                    <button className="hcard-name" onClick={() => onSelect(h.id)} aria-pressed={h === selected}>
-                                        <span>{h.name}</span>
-                                        <small>{cardLine(h)}</small>
-                                    </button>
-                                    <span className="hcard-week" aria-label={isToday ? "Last 7 days" : `7 days to ${formatPlainDate(day)}`}>
-                                        {week.map(({ key, letter }) => {
-                                            const state = cellState(h, key, checkinOf(h.id, key)?.status, today);
-                                            return (
-                                                <span
-                                                    key={key}
-                                                    className={`hcard-day${key === day ? " is-shown" : ""}`}
-                                                    title={`${formatPlainDate(key)}: ${STATE_WORDS[state]}`}
-                                                >
-                                                    <span className={`hcard-dot ${state}`} />
-                                                    {letter}
-                                                </span>
-                                            );
-                                        })}
-                                    </span>
-                                    <button
-                                        className={`hcard-tick ${cellState(h, day, statusOn(h, day), day)}`}
-                                        onClick={() => setCheckin(h, day, statusOn(h, day) === "done" ? null : "done")}
-                                        aria-pressed={statusOn(h, day) === "done"}
-                                        aria-label={`${statusOn(h, day) === "done" ? "Undo" : "Check off"} ${h.name} ${dayWords}`}
-                                        title={statusOn(h, day) === "done" ? `Done ${dayWords}. Click to undo` : `Check off ${dayWords}`}
-                                    >
-                                        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-                                            <path
-                                                d="M2.5 8.5l3.5 3.5 7.5-8"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                strokeWidth="2.2"
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                            />
-                                        </svg>
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {selected && (
-                        <>
-                            <section className="habit-month" aria-label={`${selected.name} by month`}>
-                                <div className="habit-month-head">
-                                    <h2 className="habit-month-name">
-                                        <span className="nav-swatch" style={{ background: selectedColor }} />
-                                        {selected.name}
-                                    </h2>
-                                    <div className="habit-month-actions">
-                                        <button className="btn btn-quiet" onClick={() => setEditing(true)}>
-                                            Edit
+                                    <div className="hcard-row">
+                                        <button
+                                            className="hcard-name"
+                                            onClick={() => onSelect(open ? undefined : h.id)}
+                                            aria-expanded={open}
+                                            aria-controls={`habit-detail-${h.id}`}
+                                        >
+                                            <span className="hcard-title">
+                                                <span>{h.name}</span>
+                                                <svg className="hcard-chev" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                                                    <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                                                </svg>
+                                            </span>
+                                            <small>{cardLine(h)}</small>
                                         </button>
-                                        <button className="btn btn-quiet btn-quiet-danger" onClick={() => setDeleting(true)}>
-                                            Delete
-                                        </button>
-                                    </div>
-                                </div>
-                                <p className="habit-desc">
-                                    {describeFrequency(selected)}
-                                    {selected.description && <span>{selected.description}</span>}
-                                </p>
-
-                                <div className="habit-month-stats">
-                                    <div>
-                                        <b>{selected.stats.streak}</b>
-                                        {selected.stats.streakUnit} streak
-                                    </div>
-                                    <div>
-                                        <b>{selected.stats.bestStreak}</b>best
-                                    </div>
-                                    <div>
-                                        <b>{selected.stats.totalDone}</b>total days
-                                    </div>
-                                    <div>
-                                        <b>{selected.stats.rate === null ? "–" : `${Math.round(selected.stats.rate * 100)}%`}</b>last 4 weeks
-                                    </div>
-                                </div>
-
-                                <div className="habit-month-nav">
-                                    <button className="habit-step" onClick={() => setMonth(shiftMonthKey(month, -1))} aria-label="Previous month">
-                                        ←
-                                    </button>
-                                    <span className="habit-month-label">
-                                        {MONTH_NAMES[mm - 1]} {yy}
-                                        {(month !== today.slice(0, 7) || !isToday) && (
-                                            <button className="btn btn-quiet habit-today" onClick={goToday}>
-                                                Today
-                                            </button>
-                                        )}
-                                    </span>
-                                    <button
-                                        className="habit-step"
-                                        onClick={() => setMonth(shiftMonthKey(month, 1))}
-                                        disabled={month === today.slice(0, 7)}
-                                        aria-label="Next month"
-                                    >
-                                        →
-                                    </button>
-                                </div>
-
-                                <div className="habit-grid">
-                                    {WEEKDAY_HEADS.map((h, i) => (
-                                        <span key={i} className="habit-grid-head">
-                                            {h}
+                                        <span className="hcard-week" aria-hidden="true">
+                                            {week.map((key, j) => {
+                                                const state = cellState(h, key, statusOn(h, key), today);
+                                                return (
+                                                    <span key={key} className={`hcard-day${key === day ? " is-shown" : ""}`}>
+                                                        <span className={`hcard-dot ${state}`} />
+                                                        {WEEKDAY_HEADS[j]}
+                                                    </span>
+                                                );
+                                            })}
                                         </span>
-                                    ))}
-                                    {cells.map((cell, i) => {
-                                        if (cell === null) return <span key={`lead-${i}`} />;
-                                        const state = cellState(selected, cell.key, checkinOf(selected.id, cell.key)?.status, today);
-                                        return (
-                                            <button
-                                                key={cell.key}
-                                                type="button"
-                                                className={`habit-cell ${state}${cell.key === today ? " is-today" : ""}${cell.key === day ? " is-selected" : ""}`}
-                                                disabled={cell.key > today}
-                                                onClick={(e) => tapCell(cell.key, e.currentTarget)}
-                                                aria-pressed={cell.key === day}
-                                                aria-label={`${selected.name}, ${formatPlainDate(cell.key)}: ${STATE_WORDS[state]}`}
-                                                title="Tap twice to mark done"
-                                            >
-                                                {cell.n}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-
-                                <ul className="habit-legend" aria-hidden="true">
-                                    <li><span className="habit-cell is-done" /> Done</li>
-                                    <li><span className="habit-cell is-skipped" /> Skipped</li>
-                                    <li><span className="habit-cell is-missed" /> Missed</li>
-                                    <li><span className="habit-cell is-off" /> Not due</li>
-                                    <li className="habit-legend-hint">Tap a day twice to mark it done</li>
-                                </ul>
-                            </section>
-
-                            <section
-                                ref={dayPanel}
-                                className="habit-day"
-                                aria-label="Selected day"
-                                style={{ ["--card-c" as string]: selectedColor }}
-                            >
-                                <p className="habit-day-kicker">
-                                    {isToday ? "Today" : "Selected day"} · {STATE_WORDS[selState]}
-                                </p>
-                                <h3>{formatPlainDate(day)}</h3>
-                                <div className="habit-day-actions" role="group" aria-label="Check-in for this day">
-                                    <button
-                                        className={`btn ${sel?.status === "done" ? "btn-primary" : "btn-quiet"}`}
-                                        aria-pressed={sel?.status === "done"}
-                                        onClick={() => setCheckin(selected, day, sel?.status === "done" ? null : "done")}
-                                    >
-                                        Done
-                                    </button>
-                                    <button
-                                        className={`btn ${sel?.status === "skipped" ? "btn-primary" : "btn-quiet"}`}
-                                        aria-pressed={sel?.status === "skipped"}
-                                        onClick={() => setCheckin(selected, day, sel?.status === "skipped" ? null : "skipped")}
-                                    >
-                                        Skip
-                                    </button>
-                                    {sel && (
-                                        <button className="btn btn-quiet" onClick={() => setCheckin(selected, day, null)}>
-                                            Clear
+                                        <button
+                                            className={`hcard-tick ${cellState(h, day, status, day)}`}
+                                            onClick={() => setCheckin(h, day, done ? null : "done")}
+                                            aria-pressed={done}
+                                            aria-label={`${done ? "Undo" : "Check off"} ${h.name} ${dayWords}`}
+                                            title={done ? `Done ${dayWords}. Click to undo` : `Check off ${dayWords}`}
+                                        >
+                                            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                                                <path
+                                                    d="M2.5 8.5l3.5 3.5 7.5-8"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    strokeWidth="2.2"
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                />
+                                            </svg>
                                         </button>
+                                    </div>
+                                    {open && (
+                                        <HabitDetail
+                                            habit={h}
+                                            day={day}
+                                            today={today}
+                                            month={month}
+                                            onMonth={setMonth}
+                                            onPickDay={pickDay}
+                                            checkinOf={(key) => checkinOf(h.id, key)}
+                                            statusOn={(key) => statusOn(h, key)}
+                                            onCheckin={(status, note) => setCheckin(h, day, status, note)}
+                                            onEdit={() => setEditing(true)}
+                                            onDelete={() => setDeleting(true)}
+                                        />
                                     )}
                                 </div>
-                                <NoteField
-                                    // Re-mounting per habit, day and status keeps the draft from leaking between them.
-                                    key={`${selected.id}:${day}:${sel?.status ?? "none"}`}
-                                    initial={sel?.note ?? ""}
-                                    enabled={!!sel}
-                                    onCommit={(note) => {
-                                        if (sel && note !== sel.note) setCheckin(selected, day, sel.status, note);
-                                    }}
-                                />
-                            </section>
-                        </>
-                    )}
-                </div>
+                            );
+                        })}
+                    </div>
+                </>
             )}
 
             {editing && selected && (
@@ -459,6 +345,143 @@ export function HabitsView({ habits, today, revision, selectedId, onSelect, onCh
     );
 }
 
+interface DetailProps {
+    habit: HabitSummary;
+    day: string;
+    today: string;
+    month: string;
+    onMonth: (month: string) => void;
+    onPickDay: (key: string, from: HTMLElement) => void;
+    checkinOf: (key: string) => HabitDay | undefined;
+    statusOn: (key: string) => DayStatus | undefined;
+    onCheckin: (status: DayStatus | null, note?: string) => void;
+    onEdit: () => void;
+    onDelete: () => void;
+}
+
+/** An open card: what the habit is, how it's going, its month, and skip or note for the picked day. */
+function HabitDetail({ habit, day, today, month, onMonth, onPickDay, checkinOf, statusOn, onCheckin, onEdit, onDelete }: DetailProps) {
+    const [yy, mm] = month.split("-").map(Number);
+    const cells = useMemo(() => {
+        const lead = (weekday({ y: yy, m: mm, d: 1 }) + 6) % 7; // Monday-first
+        const out: ({ key: string; n: number } | null)[] = Array.from({ length: lead }, () => null);
+        for (let d = 1; d <= daysInMonth(yy, mm); d++) out.push({ key: civilKey({ y: yy, m: mm, d }), n: d });
+        return out;
+    }, [yy, mm]);
+    const sel = checkinOf(day);
+    const isToday = day === today;
+    const dayName = isToday ? "today" : formatPlainDate(day);
+    const skipped = sel?.status === "skipped";
+    const s = habit.stats;
+
+    return (
+        <div className="hcard-detail" id={`habit-detail-${habit.id}`}>
+            <p className="hcard-desc">
+                {describeFrequency(habit)}
+                {habit.description && <span>{habit.description}</span>}
+            </p>
+
+            <div className="hcard-stats">
+                <div>
+                    <b>{s.streak}</b>
+                    {s.streakUnit} streak
+                </div>
+                <div>
+                    <b>{s.bestStreak}</b>best
+                </div>
+                <div>
+                    <b>{s.totalDone}</b>total days
+                </div>
+                <div>
+                    <b>{s.rate === null ? "–" : `${Math.round(s.rate * 100)}%`}</b>last 4 weeks
+                </div>
+            </div>
+
+            <section className="hcard-month" aria-label={`${habit.name} by month`}>
+                <div className="hcard-month-nav">
+                    <button className="habit-step" onClick={() => onMonth(shiftMonth(month, -1))} aria-label="Previous month">
+                        ←
+                    </button>
+                    <span>
+                        {MONTH_NAMES[mm - 1]} {yy}
+                    </span>
+                    <button
+                        className="habit-step"
+                        onClick={() => onMonth(shiftMonth(month, 1))}
+                        disabled={month >= today.slice(0, 7)}
+                        aria-label="Next month"
+                    >
+                        →
+                    </button>
+                </div>
+                <div className="habit-grid">
+                    {WEEKDAY_HEADS.map((h, i) => (
+                        <span key={i} className="habit-grid-head">
+                            {h}
+                        </span>
+                    ))}
+                    {cells.map((cell, i) => {
+                        if (cell === null) return <span key={`lead-${i}`} />;
+                        const state = cellState(habit, cell.key, statusOn(cell.key), today);
+                        return (
+                            <button
+                                key={cell.key}
+                                type="button"
+                                className={`habit-cell ${state}${cell.key === today ? " is-today" : ""}${cell.key === day ? " is-selected" : ""}`}
+                                disabled={cell.key > today}
+                                onClick={(e) => onPickDay(cell.key, e.currentTarget)}
+                                aria-pressed={cell.key === day}
+                                aria-label={`Show ${formatPlainDate(cell.key)}: ${STATE_WORDS[state]}`}
+                            >
+                                {cell.n}
+                            </button>
+                        );
+                    })}
+                </div>
+                <ul className="habit-legend" aria-hidden="true">
+                    <li><span className="habit-cell is-done" /> Done</li>
+                    <li><span className="habit-cell is-skipped" /> Skipped</li>
+                    <li><span className="habit-cell is-missed" /> Missed</li>
+                </ul>
+            </section>
+
+            <section className="hcard-dayfoot" aria-label={`${habit.name} ${dayName}`}>
+                <div className="hcard-dayhead">
+                    <span>
+                        <b>{isToday ? "Today" : formatPlainDate(day)}</b> · {STATE_WORDS[cellState(habit, day, statusOn(day), today)]}
+                    </span>
+                    <button
+                        className={`btn ${skipped ? "btn-primary" : "btn-quiet"}`}
+                        aria-pressed={skipped}
+                        onClick={() => onCheckin(skipped ? null : "skipped")}
+                        title="A skipped day neither breaks nor extends the streak"
+                    >
+                        {skipped ? "Skipped" : `Skip ${isToday ? "today" : "this day"}`}
+                    </button>
+                </div>
+                <NoteField
+                    // Re-mounting per habit, day and status keeps the draft from leaking between them.
+                    key={`${habit.id}:${day}:${sel?.status ?? "none"}`}
+                    initial={sel?.note ?? ""}
+                    enabled={!!sel}
+                    onCommit={(note) => {
+                        if (sel && note !== sel.note) onCheckin(sel.status, note);
+                    }}
+                />
+            </section>
+
+            <div className="hcard-actions">
+                <button className="btn btn-quiet" onClick={onEdit}>
+                    Edit
+                </button>
+                <button className="btn btn-quiet btn-quiet-danger" onClick={onDelete}>
+                    Delete
+                </button>
+            </div>
+        </div>
+    );
+}
+
 const NOTE_WARN_AT = Math.floor(MAX_NOTE_LENGTH * 0.8);
 
 function NoteField({ initial, enabled, onCommit }: { initial: string; enabled: boolean; onCommit: (note: string) => void }) {
@@ -471,8 +494,8 @@ function NoteField({ initial, enabled, onCommit }: { initial: string; enabled: b
                 defaultValue={initial}
                 disabled={!enabled}
                 maxLength={MAX_NOTE_LENGTH}
-                rows={3}
-                placeholder={enabled ? "Add a note about this day" : "Mark the day done or skipped to add a note"}
+                rows={2}
+                placeholder={enabled ? "Add a note about this day" : "Tick or skip the day to add a note"}
                 aria-label="Note for this day"
                 onChange={(e) => setLength(e.target.value.length)}
                 onBlur={(e) => onCommit(e.target.value)}
