@@ -16,7 +16,7 @@ export function ParsedPills({ parsed, timeZone, isNewProject }: Props) {
                 <span className="pill pill-date">{formatDueLabel(parsed.due, timeZone)}</span>
             )}
             {parsed.deadline && (
-                <span className="pill pill-deadline">due {parsed.deadline}</span>
+                <span className="pill pill-deadline">deadline {parsed.deadline}</span>
             )}
             {parsed.durationMinutes && (
                 <span className="pill">{formatDuration(parsed.durationMinutes)}</span>

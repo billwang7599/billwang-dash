@@ -947,6 +947,8 @@ export function App({ initial, latest }: { initial: AppState; latest: Promise<Ap
                         projects={state.projects}
                         goals={state.goals}
                         colors={colors}
+                        timeZone={state.preferences.timeZone}
+                        dateFormat={state.preferences.dateFormat}
                         onSave={saveTask}
                         onDelete={() => {
                             setPendingTaskDelete(editing);
