@@ -2275,6 +2275,59 @@ html:has(.mnav.is-open) { overflow: hidden; }
 .modal-grid select:disabled { opacity: 0.45; cursor: not-allowed; }
 .modal-wide { grid-column: 1 / -1; }
 
+/* The one date most tasks need, up front; the rest fold under "More options". */
+.modal-finish { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.6rem 0.9rem; }
+.modal-finish-date { display: flex; flex-direction: column; gap: 0.25rem; }
+.modal-finish-date > label { font-size: 0.75rem; color: var(--ink-2); }
+.modal-finish-inputs { display: flex; gap: 0.35rem; }
+.modal-finish-text { width: 12rem; }
+/* Only the native picker's calendar button shows; the typed box carries the date. */
+.modal-finish-date .modal-finish-cal { width: 2.6rem; padding-inline: 0.5rem; color: transparent; }
+.modal-finish-cal::-webkit-datetime-edit { display: none; }
+.modal-finish-preview { width: 100%; min-height: 1.2rem; margin: -0.2rem 0 0; font-size: 0.75rem; color: var(--ink-3); }
+.modal-finish-date input {
+    font: inherit;
+    font-size: 0.95rem;
+    padding: 0.45rem 0.6rem;
+    border: 1px solid var(--rule-2);
+    border-radius: var(--r-sm);
+    background: var(--paper);
+    color: var(--ink);
+}
+.modal-finish-date input:focus { outline: none; border-color: var(--ink-3); }
+.modal-finish-picks { display: flex; flex-wrap: wrap; gap: 0.35rem; padding-bottom: 0.15rem; }
+
+.modal-more {
+    display: flex;
+    align-items: baseline;
+    gap: 0.45rem;
+    margin-top: 1rem;
+    padding: 0.2rem 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 0.82rem;
+    color: var(--ink-2);
+    cursor: pointer;
+}
+.modal-more:hover { color: var(--ink); }
+.modal-more:focus-visible { outline: 2px solid var(--ink-3); outline-offset: 2px; border-radius: var(--r-sm); }
+.modal-more-caret { display: inline-block; transition: transform 0.15s; }
+.modal-more[aria-expanded="true"] .modal-more-caret { transform: rotate(90deg); }
+.modal-more-hint { font-size: 0.75rem; color: var(--ink-3); }
+.modal-more-body { margin-top: 0.6rem; padding-left: 0.9rem; border-left: 1px solid var(--rule); }
+.modal-every { display: inline-flex; align-items: center; gap: 0.35rem; margin-left: 0.4rem; font-size: 0.8rem; color: var(--ink-2); }
+.modal-every input {
+    width: 3.2rem;
+    font: inherit;
+    font-size: 0.85rem;
+    padding: 0.25rem 0.4rem;
+    border: 1px solid var(--rule-2);
+    border-radius: var(--r-sm);
+    background: var(--paper);
+    color: var(--ink);
+}
+
 .modal-note {
     font-size: 0.78rem;
     color: var(--ink-3);
@@ -2509,6 +2562,8 @@ html:has(.mnav.is-open) { overflow: hidden; }
     .set-row-control select,
     .modal-grid input,
     .modal-grid select,
+    .modal-finish-date input,
+    .modal-every input,
     .modal-desc,
     .event-fields input,
     .goal-step-add input { font-size: 16px; }
