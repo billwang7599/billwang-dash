@@ -126,7 +126,16 @@ async function tokenRequest(
     });
 
     if (!res.ok) {
-        throw new Error(`Google token exchange failed (${res.status}): ${await res.text()}`);
+        // The OAuth error code ("invalid_grant": revoked or expired) decides whether a
+        // reconnect can help, so it travels as the reason.
+        const text = await res.text();
+        let reason: string | null = null;
+        try {
+            reason = (JSON.parse(text) as { error?: string }).error ?? null;
+        } catch {
+            // not JSON: no reason
+        }
+        throw new GoogleApiError(res.status, reason, `Google token exchange failed (${res.status}): ${text}`);
     }
 
     const json = await res.json<{

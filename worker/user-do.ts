@@ -445,8 +445,8 @@ export class UserDO extends DurableObject<Env> {
 
     // ---- Google ------------------------------------------------------------
 
-    beginGoogleAuth(): Promise<string> {
-        return this.google.beginAuth();
+    beginGoogleAuth(returnTo?: string): Promise<string> {
+        return this.google.beginAuth(returnTo);
     }
 
     consumeGoogleAuthState(state: string): Promise<boolean> {

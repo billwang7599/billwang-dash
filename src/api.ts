@@ -1,6 +1,7 @@
 import type {
     AppState,
     CalEvent,
+    CalendarGoogleState,
     CalendarItem,
     EventInput,
     GoogleAccountStatus,
@@ -214,7 +215,7 @@ export const api = {
         request<SearchResults>(`/api/search?q=${encodeURIComponent(q)}`, { signal }),
 
     calendar: (startISO: string, endISO: string) =>
-        request<{ items: CalendarItem[]; googleError: string | null }>(
+        request<{ items: CalendarItem[]; google: CalendarGoogleState | null }>(
             `/api/calendar?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}`,
         ),
 

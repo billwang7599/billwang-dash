@@ -13,6 +13,7 @@ import {
 } from "../../shared/civil.ts";
 import type { CalEvent, CalendarItem, EventInput } from "../../shared/types.ts";
 import { api } from "../api.ts";
+import { RECONNECT_URL, resyncOutcome, returnMessage, syncedLabel } from "../googleResync.ts";
 import { eventItem, optimistically, tempId } from "../optimistic.ts";
 import { useCalendarRange } from "../useCalendarRange.ts";
 import {
@@ -127,27 +128,62 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
     const [editor, setEditor] = useState<{ initial: EventInput; id: string | null } | null>(null);
     const [reload, setReload] = useState(0);
     // Cached ranges paint at once and revalidate behind; only a range never seen gets a spinner.
-    const { items, syncing, error, googleError, setError, removeItem, putItem } = useCalendarRange(
+    const { items, syncing, error, google, setError, removeItem, putItem } = useCalendarRange(
         rangeStart,
         dayCount,
         timeZone,
         `${revision}:${reload}`,
     );
     const [refreshing, setRefreshing] = useState(false);
+    // A short confirmation on the Resync button ("Synced", "Reconnected"), cleared after a moment.
+    const [syncNote, setSyncNote] = useState<string | null>(null);
+    useEffect(() => {
+        if (!syncNote) return;
+        const t = setTimeout(() => setSyncNote(null), 4000);
+        return () => clearTimeout(t);
+    }, [syncNote]);
 
-    /** Skips the cache: Google is asked again, then this range reloads. */
+    // Back from Google's sign-in (started by Reconnect here): say how it went, once. Kept
+    // apart from `error`, which the range load clears as soon as it lands.
+    const [signInError, setSignInError] = useState<string | null>(null);
+    useEffect(() => {
+        const result = new URLSearchParams(window.location.search).get("google");
+        if (!result) return;
+        const message = returnMessage(result);
+        if ("notice" in message) setSyncNote("Reconnected");
+        else setSignInError(message.error);
+        window.history.replaceState({}, "", window.location.pathname);
+    }, []);
+
+    /** Google's sign-in, then back here. Leaves the page, so the busy state stays on. */
+    function reconnect() {
+        setRefreshing(true);
+        window.location.assign(RECONNECT_URL);
+    }
+
+    /**
+     * Skips the cache: Google is asked again, then this range reloads. If Google says
+     * dash's sign-in is no longer valid, the same press goes straight to reconnecting.
+     */
     async function refresh() {
         setRefreshing(true);
+        setSyncNote(null);
+        setSignInError(null);
         setError(null);
         try {
-            await api.syncGoogle();
+            const outcome = resyncOutcome(await api.syncGoogle());
+            if (outcome === "reconnect") return reconnect();
             setReload((n) => n + 1);
+            if (outcome === "synced") setSyncNote("Synced");
+            // "stalled": the refetch brings the banner saying Google couldn't be reached.
         } catch (e) {
-            setError((e as Error).message);
-        } finally {
-            setRefreshing(false);
+            setError(`Couldn't sync: ${(e as Error).message}`);
         }
+        setRefreshing(false);
     }
+
+    const needsReconnect = google?.needsReconnect ?? false;
+    const syncedHint = google ? syncedLabel(google.lastSyncedAt) : null;
 
     const days = useMemo(
         () => Array.from({ length: dayCount }, (_, i) => addDays(rangeStart, i)),
@@ -549,12 +585,24 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
                         </button>
                     </div>
                     <div className="cal-actions">
+                        {syncedHint && !needsReconnect && (
+                            <span className="cal-synced" title={syncedHint}>
+                                {syncedHint}
+                            </span>
+                        )}
                         <button
-                            className={`cal-refresh${refreshing ? " is-spinning" : ""}`}
-                            onClick={refresh}
+                            className={`cal-refresh${google ? " has-label" : ""}${refreshing ? " is-spinning" : ""}${needsReconnect ? " is-warn" : ""}`}
+                            onClick={needsReconnect ? reconnect : refresh}
                             disabled={refreshing}
-                            aria-label="Sync with Google"
-                            title="Sync with Google"
+                            aria-busy={refreshing}
+                            title={
+                                needsReconnect
+                                    ? "Sign in to Google again so your events keep syncing"
+                                    : google
+                                      ? `Fetch your Google events again. ${syncedHint}.`
+                                      : "Reload the calendar"
+                            }
+                            aria-label={google ? undefined : "Reload the calendar"}
                         >
                             <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
                                 <path
@@ -566,7 +614,18 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
                                     strokeLinejoin="round"
                                 />
                             </svg>
+                            {google && (
+                                <span>
+                                    {refreshing
+                                        ? needsReconnect ? "Opening Google…" : "Syncing…"
+                                        : syncNote ?? (needsReconnect ? "Reconnect" : "Resync")}
+                                </span>
+                            )}
                         </button>
+                        {/* The button's own text changes too quietly for a screen reader. */}
+                        <span className="sr-only" role="status" aria-live="polite">
+                            {refreshing ? "Syncing with Google" : syncNote === "Synced" ? "Google Calendar synced" : syncNote ?? ""}
+                        </span>
                         <button className="cal-new" onClick={() => setEditor({ initial: newEventDefaults(), id: null })}>
                             <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
                                 <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
@@ -586,7 +645,28 @@ export function WeekCalendar({ timeZone, colors, revision, onOpenTask, jump }: P
             </header>
 
             {error && <p className="cal-error">{error}</p>}
-            {googleError && !error && <p className="cal-error" role="status">{googleError}</p>}
+            {signInError && !error && (
+                <p className="cal-error" role="alert">
+                    {signInError}
+                </p>
+            )}
+            {google?.error && !error && (
+                <div className={`cal-banner${needsReconnect ? " is-reconnect" : ""}`} role="status">
+                    <span>
+                        {needsReconnect
+                            ? "Google Calendar stopped syncing: Google needs you to sign in again. Events shown were saved earlier."
+                            : google.error}
+                    </span>
+                    <button
+                        type="button"
+                        className="cal-banner-btn"
+                        onClick={needsReconnect ? reconnect : refresh}
+                        disabled={refreshing}
+                    >
+                        {needsReconnect ? (refreshing ? "Opening Google…" : "Reconnect") : refreshing ? "Trying…" : "Try again"}
+                    </button>
+                </div>
+            )}
 
             <div className="cal-daybar">
                 <span className="cal-gutter" />

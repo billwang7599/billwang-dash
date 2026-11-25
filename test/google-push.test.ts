@@ -23,7 +23,8 @@ function fakeGoogle(opts: { eventsList?: unknown[]; calendarList?: unknown[] } =
         const url = new URL(String(input));
         const method = init?.method ?? "GET";
         const path = decodeURIComponent(url.pathname.replace("/calendar/v3", ""));
-        const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+        // The token endpoint takes a form, not JSON.
+        const body = init?.body && !(init.body instanceof URLSearchParams) ? JSON.parse(String(init.body)) : undefined;
         const call = { method, path, body };
         calls.push(call);
 
@@ -268,6 +269,25 @@ describe("google push: failures", () => {
         expect(push.enabled).toBe(false);
         expect(push.error).toMatch(/denied access/i);
         expect(push.pending).toBe(0);
+    });
+
+    it("keeps the queue when refreshing the access token only hiccups, and stops when the sign-in is dead", async () => {
+        const { g, stub } = await enabled("gp-refresh");
+        const expire = () =>
+            runInDurableObject(stub, (_i, state) => {
+                state.storage.sql.exec("UPDATE google_account SET expires_at = 0");
+            });
+        await expire();
+        g.failWith((c) => (c.path === "/token" ? { status: 503, body: { error: "backendError" } } : undefined));
+        await stub.createTask(timed("Blip"));
+        await runDurableObjectAlarm(stub);
+        expect((await stub.getGoogleStatus()).push).toMatchObject({ enabled: true, error: null, pending: 1 });
+
+        g.failWith((c) => (c.path === "/token" ? { status: 400, body: { error: "invalid_grant" } } : undefined));
+        await runDurableObjectAlarm(stub);
+        const { push } = await stub.getGoogleStatus();
+        expect(push.enabled).toBe(false);
+        expect(push.error).toMatch(/reconnected/i);
     });
 
     it("keeps trying, with backoff, through a rate limit", async () => {

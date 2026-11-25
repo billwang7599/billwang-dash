@@ -17,8 +17,9 @@ type Ctx = { Bindings: Env; Variables: { user: AuthedUser; cliStub: Stub } };
 const app = new Hono<Ctx>();
 
 const stub = (c: Context<Ctx>) => c.env.USER_DO.getByName(c.get("user").id);
-const settings = (c: Context<Ctx>, msg: string) =>
-    c.redirect(`/app/settings?google=${encodeURIComponent(msg)}`);
+/** Back from Google's sign-in, to the view it started from, with the outcome. */
+const backFromGoogle = (c: Context<Ctx>, { result, view }: { result: string; view: string }) =>
+    c.redirect(`/app/${view}?google=${encodeURIComponent(result)}`);
 
 /**
  * The only way a request body should reach the service layer or the DO. Both a
@@ -280,11 +281,11 @@ app.post("/api/ai/chat", async (c) => {
 app.get("/api/google/status", async (c) => c.json(await stub(c).getGoogleStatus()));
 
 app.get("/api/google/connect", async (c) =>
-    c.redirect(buildAuthUrl(c.env, await service.beginGoogleAuth(stub(c), c.env))),
+    c.redirect(buildAuthUrl(c.env, await service.beginGoogleAuth(stub(c), c.env, c.req.query("return")))),
 );
 
 app.get("/api/google/callback", async (c) =>
-    settings(c, await service.completeGoogleAuth(stub(c), c.env, c.req.query())),
+    backFromGoogle(c, await service.completeGoogleAuth(stub(c), c.env, c.req.query())),
 );
 
 app.post("/api/google/disconnect", async (c) =>

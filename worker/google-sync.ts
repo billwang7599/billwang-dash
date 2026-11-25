@@ -138,6 +138,16 @@ export function classifyError(err: unknown): ErrorKind {
     return "fatal";
 }
 
+/**
+ * Why refreshing the access token failed. Google answers 400/401 (invalid_grant and
+ * friends) when the refresh token itself is dead: revoked, or expired, which happens
+ * after 7 days while the OAuth app is in "Testing". Only signing in again fixes that.
+ * Anything else (network, 5xx, 429) is Google being unreachable for now.
+ */
+export function refreshFailureKind(err: unknown): "reauth" | "retry" {
+    return err instanceof GoogleApiError && (err.status === 400 || err.status === 401) ? "reauth" : "retry";
+}
+
 /** 1 min, 2, 4 ... capped at an hour. */
 export function backoffMs(attempts: number): number {
     return Math.min(60_000 * 2 ** attempts, 3_600_000);

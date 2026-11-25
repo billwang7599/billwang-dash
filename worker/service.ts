@@ -9,6 +9,7 @@ import type { AuthedUser } from "./auth.ts";
 import type {
     AppState,
     CalEvent,
+    CalendarGoogleState,
     CalendarItem,
     EventInput,
     GoogleAccountStatus,
@@ -311,12 +312,20 @@ export async function calendarItems(
     stub: Stub,
     start: string | undefined,
     end: string | undefined,
-): Promise<{ items: CalendarItem[]; googleError: string | null }> {
+): Promise<{ items: CalendarItem[]; googleError: string | null; google: CalendarGoogleState | null }> {
     if (!start || !end || Number.isNaN(Date.parse(start)) || Number.isNaN(Date.parse(end))) {
         throw new ServiceError(400, "start and end must be ISO timestamps");
     }
     const items = await stub.getCalendarItems(start, end);
-    return { items, googleError: (await stub.getGoogleStatus()).syncError };
+    const status = await stub.getGoogleStatus();
+    return {
+        items,
+        // Kept for clients loaded before `google` existed.
+        googleError: status.syncError,
+        google: status.connected
+            ? { error: status.syncError, needsReconnect: status.needsReconnect, lastSyncedAt: status.lastSyncedAt }
+            : null,
+    };
 }
 
 export const syncGoogleNow = (stub: Stub): Promise<GoogleAccountStatus> => stub.syncGoogleNow();
@@ -360,29 +369,39 @@ export async function setGooglePush(
     }
 }
 
-export async function beginGoogleAuth(stub: Stub, env: Env): Promise<string> {
+/** Where the OAuth callback may send the user back to; anything else goes to Settings. */
+export const GOOGLE_RETURN_VIEWS = ["calendar", "settings"] as const;
+export type GoogleReturnView = (typeof GOOGLE_RETURN_VIEWS)[number];
+
+const returnView = (value: string | undefined): GoogleReturnView =>
+    GOOGLE_RETURN_VIEWS.find((v) => v === value) ?? "settings";
+
+export async function beginGoogleAuth(stub: Stub, env: Env, returnTo?: string): Promise<string> {
     if (!env.GOOGLE_CLIENT_ID) throw new ServiceError(503, "Google is not configured");
-    return stub.beginGoogleAuth();
+    const view = returnView(returnTo);
+    return stub.beginGoogleAuth(view === "settings" ? undefined : view);
 }
 
 /**
- * Returns a status word for the /app/settings query string rather than
- * throwing, since every outcome ends as a redirect. `state` is CSRF defence.
+ * Returns a status word for the query string, and the view to show it on, rather
+ * than throwing, since every outcome ends as a redirect. `state` is CSRF defence,
+ * and carries the view the user started from (see GoogleSync.beginAuth).
  */
 export async function completeGoogleAuth(
     stub: Stub,
     env: Env,
     query: { code?: string; state?: string; error?: string },
-): Promise<string> {
-    if (query.error) return query.error;
-    if (!query.code || !query.state) return "missing_code";
-    if (!(await stub.consumeGoogleAuthState(query.state))) return "bad_state";
+): Promise<{ result: string; view: GoogleReturnView }> {
+    const view = returnView(query.state?.split(".")[1]);
+    if (query.error) return { result: query.error, view };
+    if (!query.code || !query.state) return { result: "missing_code", view };
+    if (!(await stub.consumeGoogleAuthState(query.state))) return { result: "bad_state", view: "settings" };
 
     try {
         await stub.connectGoogle(await exchangeCode(env, query.code));
-        return "connected";
+        return { result: "connected", view };
     } catch (err) {
         console.error("Google connect failed", err);
-        return (err as Error).message;
+        return { result: (err as Error).message, view };
     }
 }

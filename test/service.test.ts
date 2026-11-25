@@ -330,3 +330,32 @@ describe("adding to a project over HTTP", () => {
         expect(((await res.json()) as { task: { projectId: string } }).task.projectId).toBe(project.project.id);
     });
 });
+
+describe("google reconnect from the calendar", () => {
+    const google = { ...env, GOOGLE_CLIENT_ID: "client" } as Env;
+
+    it("sends the user back to the view they started from, and only to a known one", async () => {
+        const s = stub("gr1");
+        const fromCalendar = await service.beginGoogleAuth(s, google, "calendar");
+        expect(fromCalendar).toMatch(/\.calendar$/);
+        expect(await service.completeGoogleAuth(s, google, { state: fromCalendar, error: "access_denied" })).toEqual({
+            result: "access_denied",
+            view: "calendar",
+        });
+
+        expect(await service.beginGoogleAuth(s, google, "https://evil.example")).not.toContain(".");
+        expect(await service.beginGoogleAuth(s, google)).not.toContain(".");
+    });
+
+    it("lands on Settings when the state is unknown, whatever it claims", async () => {
+        expect(
+            await service.completeGoogleAuth(stub("gr2"), google, { state: "made-up.calendar", code: "c" }),
+        ).toEqual({ result: "bad_state", view: "settings" });
+    });
+
+    it("reports no Google state on the calendar when Google isn't connected", async () => {
+        const res = await service.calendarItems(stub("gr3"), "2026-08-03T00:00:00Z", "2026-08-10T00:00:00Z");
+        expect(res.google).toBeNull();
+        expect(res.googleError).toBeNull();
+    });
+});

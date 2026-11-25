@@ -15,6 +15,7 @@ import {
     backoffMs,
     classifyError,
     eventForCalEvent,
+    refreshFailureKind,
     eventForTask,
     eventIdForTask,
     fingerprint,
@@ -40,8 +41,13 @@ const PUSH_BATCH = 25;
 const hasWriteScope = (scope: string | null | undefined): boolean =>
     (scope ?? "").split(" ").includes(WRITE_SCOPE);
 
-const RECONNECT = "Google Calendar has stopped syncing. Reconnect it in Settings. Events shown were saved earlier.";
+export const RECONNECT = "Google Calendar stopped syncing: Google needs you to sign in again. Events shown were saved earlier.";
 const STALLED = "Couldn't reach Google Calendar. Events shown were saved earlier.";
+/** The wording before RECONNECT, still stored for accounts that stalled under it. */
+const LEGACY_RECONNECT = "Google Calendar has stopped syncing. Reconnect it in Settings. Events shown were saved earlier.";
+
+/** A usable access token, or why there isn't one. */
+type Token = { token: string } | { failed: "reauth" | "retry" };
 
 /**
  * Everything between one user's data and Google: the connected account and its
@@ -61,9 +67,13 @@ export class GoogleSync {
         return this.storage.sql;
     }
 
-    /** Single-use CSRF token, stored so the callback can consume it exactly once. */
-    async beginAuth(): Promise<string> {
-        const state = crypto.randomUUID();
+    /**
+     * Single-use CSRF token, stored so the callback can consume it exactly once. A
+     * return target ("calendar") rides along after a dot; it is stored as part of the
+     * state, so the callback can trust it.
+     */
+    async beginAuth(returnTo?: string): Promise<string> {
+        const state = returnTo ? `${crypto.randomUUID()}.${returnTo}` : crypto.randomUUID();
         const cutoff = Date.now() - 10 * 60_000;
         this.sql.exec("DELETE FROM oauth_state WHERE created_at < ?", cutoff);
         this.sql.exec(
@@ -115,6 +125,8 @@ export class GoogleSync {
         );
 
         await this.refreshCalendarList(tokens.accessToken);
+        // Whatever was cached may predate a stall: fetch it all again.
+        cache.forgetSync(this.sql);
         return this.status();
     }
 
@@ -150,6 +162,7 @@ export class GoogleSync {
                 connectedAt: null,
                 lastSyncedAt: null,
                 syncError: null,
+                needsReconnect: false,
                 calendars: [],
             };
         }
@@ -168,6 +181,7 @@ export class GoogleSync {
             connectedAt: toIso(rows[0].connected_at),
             lastSyncedAt: toIsoOrNull(rows[0].last_synced_at),
             syncError: rows[0].sync_error,
+            needsReconnect: rows[0].sync_error === RECONNECT || rows[0].sync_error === LEGACY_RECONNECT,
             calendars: this.storedCalendars(),
         };
     }
@@ -199,27 +213,40 @@ export class GoogleSync {
         const dayEnd = (key: string) =>
             new Date(zonedToUtcMs(addDays(civilFromKey(key)!, 1), 0, timeZone)).toISOString();
 
-        const stale = new Map(enabled.map((cal) => [cal.id, cache.staleDays(this.sql, cal.id, days, civilKey(today), now)]));
-        if ([...stale.values()].some((d) => d.length > 0)) {
-            const accessToken = await this.getValidAccessToken();
-            if (!accessToken) {
-                this.setSyncError(RECONNECT);
-            } else {
-                // One bad calendar shouldn't blank the whole view: it keeps its cache.
-                const results = await Promise.allSettled(
+        const stale = enabled.map((cal) => cache.staleDays(this.sql, cal.id, days, civilKey(today), now));
+        if (stale.some((d) => d.length > 0)) {
+            // One bad calendar shouldn't blank the whole view: it keeps its cache.
+            const fetchStale = (accessToken: string) =>
+                Promise.allSettled(
                     enabled.flatMap((cal) =>
-                        cache.runs(stale.get(cal.id)!).map(async ([first, last]) => {
-                            const from = dayStart(first);
-                            const to = dayEnd(last);
-                            const events = await listEvents(accessToken, cal.id, from, to);
-                            cache.replaceDays(this.sql, cal.id, first, last, from, to, events, now);
-                        }),
+                        cache.runs(cache.staleDays(this.sql, cal.id, days, civilKey(today), now)).map(
+                            async ([first, last]) => {
+                                const from = dayStart(first);
+                                const to = dayEnd(last);
+                                const events = await listEvents(accessToken, cal.id, from, to);
+                                cache.replaceDays(this.sql, cal.id, first, last, from, to, events, now);
+                            },
+                        ),
                     ),
                 );
+            const unauthorized = (r: PromiseSettledResult<void>) =>
+                r.status === "rejected" && r.reason instanceof GoogleApiError && r.reason.status === 401;
+
+            let token = await this.getValidAccessToken();
+            let results = "token" in token ? await fetchStale(token.token) : [];
+            // Google can drop an access token before it expires. That alone is no reason
+            // to ask the user to sign in: get a fresh one and try the failed days once more.
+            if (results.some(unauthorized)) {
+                token = await this.getValidAccessToken({ force: true });
+                results = "token" in token ? await fetchStale(token.token) : [];
+            }
+
+            if ("failed" in token) {
+                this.setSyncError(token.failed === "reauth" ? RECONNECT : STALLED);
+            } else {
                 const failed = results.find((r) => r.status === "rejected");
                 if (failed) {
-                    const reason = failed.reason;
-                    this.setSyncError(reason instanceof GoogleApiError && reason.status === 401 ? RECONNECT : STALLED);
+                    this.setSyncError(unauthorized(failed) ? RECONNECT : STALLED);
                 } else {
                     this.setSyncError(null);
                     this.sql.exec("UPDATE google_account SET last_synced_at = ? WHERE id = 1", now);
@@ -318,19 +345,20 @@ export class GoogleSync {
 
     /** Shared in-flight refresh: a fetch lets requests interleave, so a burst
      * of calendar loads on an expired token would otherwise each refresh. */
-    private refreshing: Promise<string | null> | null = null;
+    private refreshing: Promise<Token> | null = null;
 
-    private async getValidAccessToken(): Promise<string | null> {
+    /** `force` refreshes even if the stored token looks unexpired (Google rejected it). */
+    private async getValidAccessToken(options: { force?: boolean } = {}): Promise<Token> {
         const rows = this.sql
             .exec<{ refresh_token: string; access_token: string | null; expires_at: number }>(
                 "SELECT refresh_token, access_token, expires_at FROM google_account WHERE id = 1",
             )
             .toArray();
-        if (rows.length === 0) return null;
+        if (rows.length === 0) return { failed: "reauth" };
 
         const row = rows[0];
-        if (row.access_token && row.expires_at > Date.now() + 60_000) {
-            return row.access_token;
+        if (!options.force && row.access_token && row.expires_at > Date.now() + 60_000) {
+            return { token: row.access_token };
         }
 
         this.refreshing ??= this.doRefresh(row.refresh_token).finally(() => {
@@ -339,18 +367,19 @@ export class GoogleSync {
         return this.refreshing;
     }
 
-    private async doRefresh(refreshToken: string): Promise<string | null> {
+    private async doRefresh(refreshToken: string): Promise<Token> {
         try {
             const tokens = await refreshAccessToken(this.env, refreshToken);
             this.sql.exec(
                 "UPDATE google_account SET access_token = ?, expires_at = ? WHERE id = 1",
                 tokens.accessToken, tokens.expiresAt,
             );
-            return tokens.accessToken;
+            return { token: tokens.accessToken };
         } catch (err) {
-            // A revoked grant should read as "not connected", not 500 the calendar.
+            // A dead grant reads as "sign in again"; a blip as "couldn't reach Google".
+            // Neither should 500 the calendar.
             console.error("Google token refresh failed", err);
-            return null;
+            return { failed: refreshFailureKind(err) };
         }
     }
 
@@ -377,8 +406,13 @@ export class GoogleSync {
             throw new Error("Google is not connected with write access");
         }
 
-        const token = await this.getValidAccessToken();
-        if (!token) throw new Error("Google needs to be reconnected");
+        const auth = await this.getValidAccessToken();
+        if (!("token" in auth)) {
+            throw new Error(
+                auth.failed === "reauth" ? "Google needs to be reconnected" : "Couldn't reach Google. Try again in a minute.",
+            );
+        }
+        const token = auth.token;
 
         let calendarId = this.pushState().calendarId;
         if (!calendarId) {
@@ -456,11 +490,17 @@ export class GoogleSync {
             .toArray();
 
         if (batch.length > 0) {
-            const token = await this.getValidAccessToken();
-            if (!token) {
-                this.stopPush("Google needs to be reconnected. Reconnect, then turn syncing on again.");
+            const auth = await this.getValidAccessToken();
+            if (!("token" in auth)) {
+                if (auth.failed === "reauth") {
+                    this.stopPush("Google needs to be reconnected. Reconnect, then turn syncing on again.");
+                } else {
+                    // Google is unreachable for now: keep the queue and try again shortly.
+                    await this.scheduleAlarm(Date.now() + 60_000);
+                }
                 return;
             }
+            const token = auth.token;
             const { timeZone } = await this.getPreferences();
 
             for (const row of batch) {
@@ -595,8 +635,8 @@ export class GoogleSync {
         const { calendarId } = this.pushState();
         if (calendarId) {
             try {
-                const token = await this.getValidAccessToken();
-                if (token) await deleteCalendar(token, calendarId);
+                const auth = await this.getValidAccessToken();
+                if ("token" in auth) await deleteCalendar(auth.token, calendarId);
             } catch (err) {
                 // Already gone is fine; anything else leaves an orphan the user can delete in Google.
                 if (classifyError(err) !== "gone") console.error("Could not delete the dash calendar", err);
