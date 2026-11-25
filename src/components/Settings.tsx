@@ -244,7 +244,8 @@ export function Settings({ preferences, user, onUpdatePreferences, onOpenTrash }
                         </Row>
                         {google.syncError && (
                             <p className="banner banner-bad" role="alert">
-                                {google.syncError} <a href="/api/google/connect">Reconnect</a>
+                                {google.syncError}{" "}
+                                {google.needsReconnect && <a href="/api/google/connect">Reconnect</a>}
                             </p>
                         )}
 

@@ -1135,6 +1135,33 @@ html:has(.mnav.is-open) { overflow: hidden; }
 .cal-refresh:hover:not(:disabled) { border-color: var(--ink); }
 .cal-refresh:disabled { cursor: default; }
 .cal-refresh.is-spinning svg { animation: spin 0.8s linear infinite; }
+/* Connected to Google: the button says what it does, and turns into Reconnect when sign-in lapsed. */
+.cal-refresh.has-label {
+    display: inline-flex;
+    gap: 0.4rem;
+    width: auto;
+    padding: 0 0.85rem;
+    border-radius: 100px;
+    font: inherit;
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+.cal-refresh.is-warn { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.cal-refresh.is-warn:hover:not(:disabled) { border-color: var(--accent); background: none; }
+.cal-refresh:focus-visible,
+.cal-banner-btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.cal-synced { font-size: 0.78rem; color: var(--ink-3); white-space: nowrap; }
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+}
 .cal-modes,
 .cal-nav { display: flex; gap: 0.35rem; }
 .cal-modes button,
@@ -1172,6 +1199,33 @@ html:has(.mnav.is-open) { overflow: hidden; }
     color: var(--accent);
     background: var(--accent-soft);
 }
+
+/* Google's events may be out of date: say why, with the one button that fixes it. */
+.cal-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem 1rem;
+    flex-wrap: wrap;
+    padding: 0.6rem 1.1rem;
+    font-size: 0.82rem;
+    color: var(--amber);
+    background: var(--amber-soft);
+}
+.cal-banner.is-reconnect { color: var(--accent); background: var(--accent-soft); }
+.cal-banner-btn {
+    border: 1px solid currentColor;
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-weight: 500;
+    padding: 0.3rem 0.85rem;
+    border-radius: 100px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.cal-banner-btn:hover:not(:disabled) { background: var(--card); }
+.cal-banner-btn:disabled { opacity: 0.6; cursor: default; }
 
 /* Columns stay neutral: colour lives only on the events. Today is a faint shade, not a highlight. */
 .cal-daybar {
@@ -2599,6 +2653,7 @@ html:has(.mnav.is-open) { overflow: hidden; }
     /* Too narrow for three columns: wrap, with New event pushed right. */
     .cal-bar { display: flex; flex-wrap: wrap; }
     .cal-actions { margin-left: auto; }
+    .cal-synced { display: none; }
     /* Too narrow for the name, seven dots and the tick on one line: the name wraps. */
     .hcard-title { font-size: 1.2rem; }
     .hcard-title span { white-space: normal; }

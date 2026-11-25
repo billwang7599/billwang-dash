@@ -179,7 +179,17 @@ export interface GoogleAccountStatus {
     lastSyncedAt: string | null;
     /** Why the last fetch from Google failed, or null. The calendar then shows events saved earlier. */
     syncError: string | null;
+    /** Google refused dash's sign-in (revoked or expired): only reconnecting fixes it. */
+    needsReconnect: boolean;
     calendars: GoogleCalendarSummary[];
+}
+
+/** How the Google events in a calendar response stand, or null if Google isn't connected. */
+export interface CalendarGoogleState {
+    /** Why the Google events shown may be out of date, or null. */
+    error: string | null;
+    needsReconnect: boolean;
+    lastSyncedAt: string | null;
 }
 
 export interface GoogleCalendarSummary {

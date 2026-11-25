@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { addDays, civilKey, zonedToUtcMs, type Civil } from "../shared/civil.ts";
-import type { CalendarItem } from "../shared/types.ts";
+import type { CalendarGoogleState, CalendarItem } from "../shared/types.ts";
 import { api } from "./api.ts";
 import { getCachedRange, rangeCacheKey, setCachedRange } from "./calendarCache.ts";
 import { saveCalendar } from "./localCache.ts";
@@ -28,24 +28,24 @@ export function useCalendarRange(rangeStart: Civil, dayCount: number, timeZone: 
     const [data, setData] = useState<{ range: string | null; items: CalendarItem[] }>({ range: null, items: [] });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    // Why the Google events on screen may be out of date, as the last fetch saw it.
-    const [googleError, setGoogleError] = useState<string | null>(null);
+    // How the Google events on screen stand (stale? sign-in needed?), as the last fetch saw it.
+    const [google, setGoogle] = useState<CalendarGoogleState | null>(null);
 
     useEffect(() => {
         let cancelled = false;
         const fetchRange = async (start: Civil) => {
             const { startISO, endISO, key } = bounds(start, dayCount, timeZone);
-            const { items, googleError } = await api.calendar(startISO, endISO);
+            const { items, google } = await api.calendar(startISO, endISO);
             setCachedRange(key, stamp, items);
-            return { items, googleError, key };
+            return { items, google, key };
         };
 
         setLoading(true);
         fetchRange(rangeStart)
-            .then(({ items, googleError, key }) => {
+            .then(({ items, google, key }) => {
                 if (cancelled) return;
                 saveCalendar(key, items);
-                setGoogleError(googleError);
+                setGoogle(google);
                 // Same content as what is showing: keep the old array so nothing re-renders.
                 setData((prev) =>
                     prev.range === rangeKey && JSON.stringify(prev.items) === JSON.stringify(items)
@@ -94,7 +94,7 @@ export function useCalendarRange(rangeStart: Civil, dayCount: number, timeZone: 
         /** A fetch is in flight, whether or not something is already showing. */
         loading,
         error,
-        googleError,
+        google,
         setError,
         removeItem,
         putItem,

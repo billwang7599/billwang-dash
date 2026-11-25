@@ -4,16 +4,28 @@ import { addDays, civilFromDate, civilKey } from "../shared/civil.ts";
 import { isFresh, runs, TODAY_TTL_MS, futureTtlMs } from "../worker/do/gcal-cache.ts";
 import { WRITE_SCOPE } from "../worker/google.ts";
 
-/** A Google that only lists events, recording each list request's window. */
+/**
+ * A Google that lists events, recording each list request's window, and refreshes
+ * access tokens ("tok2", "tok3", ...). Access tokens in `revoked` get a 401.
+ */
 function fakeGoogle() {
     const lists: { timeMin: string; timeMax: string }[] = [];
     let events: unknown[] = [];
     let failList: number | null = null;
+    let tokenFailure: { status: number; body: unknown } | null = null;
+    let issued = 1;
+    const revoked = new Set<string>();
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
         const url = new URL(String(input));
         const path = decodeURIComponent(url.pathname.replace("/calendar/v3", ""));
-        const reply = (json: unknown) => new Response(JSON.stringify(json), { status: 200 });
+        const reply = (json: unknown, status = 200) => new Response(JSON.stringify(json), { status });
+        if (url.hostname === "oauth2.googleapis.com" && path === "/token") {
+            if (tokenFailure) return reply(tokenFailure.body, tokenFailure.status);
+            return reply({ access_token: `tok${++issued}`, expires_in: 3600 });
+        }
         if ((init?.method ?? "GET") !== "GET") return new Response(null, { status: 204 });
+        const bearer = String((init?.headers as Record<string, string> | undefined)?.authorization ?? "").replace("Bearer ", "");
+        if (revoked.has(bearer)) return reply({ error: { code: 401 } }, 401);
         if (path === "/users/me/calendarList") {
             return reply({ items: [{ id: "me@example.com", summary: "Me", primary: true }] });
         }
@@ -24,7 +36,14 @@ function fakeGoogle() {
         }
         return new Response(null, { status: 404 });
     });
-    return { lists, setEvents: (e: unknown[]) => (events = e), failListWith: (status: number | null) => (failList = status) };
+    return {
+        lists,
+        setEvents: (e: unknown[]) => (events = e),
+        failListWith: (status: number | null) => (failList = status),
+        /** Every token refresh answers this, e.g. 400 invalid_grant for a dead grant. */
+        failTokenWith: (failure: { status: number; body: unknown } | null) => (tokenFailure = failure),
+        revoke: (token: string) => revoked.add(token),
+    };
 }
 
 /** Days relative to today in UTC (the tests set the user's zone to UTC). */
@@ -170,15 +189,76 @@ describe("google event cache", () => {
         g.failListWith(401);
         await age(stub, futureTtlMs(1));
         expect(titles(await stub.getCalendarItems(at(0), at(3)))).toEqual(["Lunch"]);
-        expect((await stub.getGoogleStatus()).syncError).toMatch(/Reconnect/);
+        // Still 401 with a freshly refreshed token: only signing in again helps.
+        expect(await stub.getGoogleStatus()).toMatchObject({ needsReconnect: true, syncError: expect.stringMatching(/sign in again/) });
 
         g.failListWith(500);
         await stub.getCalendarItems(at(0), at(3));
-        expect((await stub.getGoogleStatus()).syncError).toMatch(/Couldn't reach/);
+        expect(await stub.getGoogleStatus()).toMatchObject({ needsReconnect: false, syncError: expect.stringMatching(/Couldn't reach/) });
 
         g.failListWith(null);
         await stub.getCalendarItems(at(0), at(3));
         expect((await stub.getGoogleStatus()).syncError).toBeNull();
+    });
+
+    it("gets a fresh access token when Google drops the old one early, instead of asking to reconnect", async () => {
+        const g = fakeGoogle();
+        g.setEvents([timedEvent("Lunch", 1)]);
+        const stub = await connected("gc-early-401");
+        g.revoke("tok");
+        expect(titles(await stub.getCalendarItems(at(0), at(3)))).toEqual(["Lunch"]);
+        const status = await stub.getGoogleStatus();
+        expect(status).toMatchObject({ syncError: null, needsReconnect: false });
+        expect(status.lastSyncedAt).not.toBeNull();
+    });
+
+    it("asks to reconnect when Google says the sign-in is dead, and keeps the saved events", async () => {
+        const g = fakeGoogle();
+        g.setEvents([timedEvent("Lunch", 1)]);
+        const stub = await connected("gc-dead-grant");
+        await stub.getCalendarItems(at(0), at(3));
+
+        g.revoke("tok");
+        g.failTokenWith({ status: 400, body: { error: "invalid_grant", error_description: "Token has been expired or revoked." } });
+        const status = await stub.syncGoogleNow();
+        expect(status).toMatchObject({ connected: true, needsReconnect: true, syncError: expect.stringMatching(/sign in again/) });
+        expect(titles(await stub.getCalendarItems(at(0), at(3)))).toEqual(["Lunch"]);
+
+        // Reconnecting clears it and refetches.
+        g.failTokenWith(null);
+        g.setEvents([timedEvent("Dinner", 1)]);
+        await stub.connectGoogle({
+            accessToken: "fresh",
+            refreshToken: "refresh2",
+            expiresAt: Date.now() + 3_600_000,
+            email: "me@example.com",
+            scope: `https://www.googleapis.com/auth/calendar.readonly ${WRITE_SCOPE} openid email`,
+        });
+        expect(titles(await stub.getCalendarItems(at(0), at(3)))).toEqual(["Dinner"]);
+        expect(await stub.getGoogleStatus()).toMatchObject({ syncError: null, needsReconnect: false });
+    });
+
+    it("says Google couldn't be reached, not reconnect, when refreshing the token only hiccups", async () => {
+        const g = fakeGoogle();
+        const stub = await connected("gc-refresh-blip");
+        await runInDurableObject(stub, (_i, state) => {
+            state.storage.sql.exec("UPDATE google_account SET expires_at = 0");
+        });
+        g.failTokenWith({ status: 503, body: { error: "backendError" } });
+        const status = await stub.syncGoogleNow();
+        expect(status).toMatchObject({ needsReconnect: false, syncError: expect.stringMatching(/Couldn't reach/) });
+    });
+
+    it("still offers a reconnect to an account that stalled under the old wording", async () => {
+        fakeGoogle();
+        const stub = await connected("gc-legacy");
+        await runInDurableObject(stub, (_i, state) => {
+            state.storage.sql.exec(
+                "UPDATE google_account SET sync_error = ?",
+                "Google Calendar has stopped syncing. Reconnect it in Settings. Events shown were saved earlier.",
+            );
+        });
+        expect((await stub.getGoogleStatus()).needsReconnect).toBe(true);
     });
 
     it("keeps an all-day event on its own date", async () => {
